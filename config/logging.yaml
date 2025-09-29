@@ -1,0 +1,73 @@
+# Configuration du système de logging pour Comfy_Img_to_Loop
+
+logging:
+  # Configuration par défaut
+  default_level: "INFO"
+  
+  # Configuration console
+  console:
+    enabled: true
+    level: "INFO"
+    format: "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> | <level>{message}</level>"
+    colorize: true
+  
+  # Configuration fichier principal
+  file:
+    enabled: true
+    path: "logs/comfy_img_to_loop.log"
+    level: "DEBUG"
+    format: "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name} | {function} | {line} | {message}"
+    rotation: "10 MB"
+    retention: "7 days"
+    compression: "zip"
+  
+  # Configuration fichier d'erreurs
+  error_file:
+    enabled: true
+    path: "logs/errors.log"
+    level: "ERROR"
+    format: "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name} | {function} | {line} | {message} | {exception}"
+    rotation: "5 MB"
+    retention: "30 days"
+
+# Configuration spécifique par module
+modules:
+  web_interface:
+    level: "INFO"
+    log_file: "web_interface"
+  
+  model_download:
+    level: "DEBUG"
+    log_file: "downloads"
+  
+  cinemagraph_generation:
+    level: "INFO" 
+    log_file: "generation"
+  
+  api:
+    level: "INFO"
+    log_file: "api_requests"
+
+# Configuration par environnement
+environments:
+  development:
+    console:
+      level: "DEBUG"
+    file:
+      level: "DEBUG"
+      retention: "3 days"
+  
+  production:
+    console:
+      enabled: false
+    file:
+      level: "INFO"
+      rotation: "50 MB"
+      retention: "30 days"
+  
+  runpod:
+    console:
+      level: "INFO"
+    file:
+      rotation: "20 MB"
+      retention: "3 days"

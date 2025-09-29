@@ -11,12 +11,13 @@
 - **Sauvegarde automatique** : Intégration OwnCloud sécurisée  
 - **Déploiement cloud** : Template RunPod optimisé
 - **Upscaling intelligent** : Pyramid Flow pour la haute résolution
+- **Les modèles AI ne sont pas versionnés dans Git en raison de leur taille (>100GB)**
 
 ## 📋 Prérequis
 
 - **Python** : 3.11.13
 - **Docker** : Version récente
-- **GPU** : Recommandé 24GB+ VRAM (A100, H100, RTX 6000 Ada)
+- **GPU** : Recommandé 24GB+ VRAM (B200, H200, A100, H100, RTX 6000 Ada)
 - **RunPod** : Compte avec crédits
 - **OwnCloud** : Serveur pour la sauvegarde (optionnel)
 
@@ -31,14 +32,15 @@ cd Comfy_Img_to_Loop
 
 ### 2. Configuration de l'environnement
 
+
 ```bash
 # Créer l'environnement virtuel
-
 python3.11 -m venv .venv
 source .venv/bin/activate
+```
 
+```bash
 # Installer les dépendances
-
 pip install -r requirements.txt
 ```
 
@@ -66,6 +68,42 @@ rm -rf models/wan2.2-i2v-a14b/low_noise_model/
 ./build.sh all
 ```
 
+## Template pour utilisation du fichier logger configuré avec loguru
+
+```python
+"""
+Description du fichier
+"""
+
+import sys
+from pathlib import Path
+
+# Import du système de logging centralisé
+sys.path.append(str(Path(__file__).parent.parent))
+from src.logger import get_logger, setup_logger
+
+# Configuration du logger pour ce script
+logger = get_logger("nom_du_module")
+
+def main():
+    """Fonction principale"""
+    logger.info("🚀 Démarrage du script")
+    
+    # Votre code ici
+    
+    logger.success("✅ Script terminé avec succès")
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.warning("Script interrompu par l'utilisateur")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Erreur inattendue: {e}")
+        sys.exit(1)
+```
+
 ## 🎯 Utilisation rapide
 
 ### Déploiement local
@@ -86,7 +124,6 @@ Accès : http://localhost:5000
 - [💡 Guide d'utilisation](docs/USAGE.md)
 - [🔌 API Documentation](docs/API.md)
 - [☁️ Configuration RunPod](docs/RUNPOD_SETUP.md)
-- [💡 Les modèles AI ne sont **pas versionnés dans Git** en raison de leur taille (>100GB)]
 
 ## 🏗 Architecture
 
