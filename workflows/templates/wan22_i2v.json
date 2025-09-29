@@ -1,0 +1,104 @@
+{
+  "name": "WAN 2.2 Image-to-Video",
+  "description": "Template pour génération de cinemagraphs avec WAN 2.2",
+  "version": "1.0.0",
+  "parameters": {
+    "input_image": {
+      "type": "string",
+      "required": true,
+      "description": "Nom du fichier image d'entrée"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Description textuelle de l'animation souhaitée"
+    },
+    "steps": {
+      "type": "integer",
+      "default": 20,
+      "min": 1,
+      "max": 50,
+      "description": "Nombre de steps de dénoising"
+    },
+    "cfg_scale": {
+      "type": "float",
+      "default": 7.5,
+      "min": 1.0,
+      "max": 20.0,
+      "description": "Échelle de guidance CFG"
+    },
+    "seed": {
+      "type": "integer",
+      "default": null,
+      "description": "Seed pour reproductibilité (aléatoire si null)"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 16,
+      "min": 8,
+      "max": 32,
+      "description": "Nombre de frames de la vidéo"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 24,
+      "description": "Frames par seconde"
+    },
+    "noise_level": {
+      "type": "string",
+      "default": "high",
+      "enum": ["high", "low"],
+      "description": "Niveau de bruit (high pour dynamique, low pour subtil)"
+    }
+  },
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "{input_image}"
+      }
+    },
+    "2": {
+      "class_type": "WAN22_DiffusionModelLoader",
+      "inputs": {
+        "model_path": "models/wan2.2-i2v-a14b/{noise_level}_noise_model/diffusion_pytorch_model-00001-of-00006.safetensors"
+      }
+    },
+    "3": {
+      "class_type": "WAN22_VAELoader",
+      "inputs": {
+        "vae_path": "models/wan2.2-i2v-a14b/Wan2.1_VAE.pth"
+      }
+    },
+    "4": {
+      "class_type": "WAN22_TextEncoder",
+      "inputs": {
+        "text_encoder_path": "models/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth",
+        "prompt": "{prompt}"
+      }
+    },
+    "5": {
+      "class_type": "WAN22_I2V_Sampler",
+      "inputs": {
+        "model": ["2", 0],
+        "vae": ["3", 0],
+        "text_encoder": ["4", 0],
+        "image": ["1", 0],
+        "steps": "{steps}",
+        "cfg_scale": "{cfg_scale}",
+        "seed": "{seed}",
+        "frames": "{frames}",
+        "fps": "{fps}"
+      }
+    },
+    "6": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": ["5", 0],
+        "filename_prefix": "wan22_cinemagraph_{timestamp}"
+      }
+    }
+  }
+}
