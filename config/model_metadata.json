@@ -1,0 +1,141 @@
+{
+  "metadata_version": "1.0.0",
+  "generated_date": "2025-09-19",
+  "project": "Comfy_Img_to_Loop",
+  "models": {
+    "wan_2_2_i2v_14b": {
+      "full_name": "WAN 2.2 Image-to-Video 14B",
+      "developer": "Wan-AI Team",
+      "release_date": "2025-08-24",
+      "license": "Apache-2.0",
+      "paper_url": "https://arxiv.org/abs/2408.15532",
+      "demo_url": "https://huggingface.co/spaces/Wan-AI/Wan2.2-I2V",
+      "technical_specs": {
+        "parameters": "14B",
+        "architecture": "Mixture of Experts (MoE)",
+        "active_parameters": "14B per step",
+        "total_parameters": "27B",
+        "training_data": "WebVid-10M + Custom datasets",
+        "training_steps": "500K+",
+        "precision": "fp16/bf16"
+      },
+      "performance": {
+        "inference_speed": "30-120s per 5s video",
+        "memory_usage": "24GB+ VRAM",
+        "optimal_batch_size": 1,
+        "max_video_length": "10 seconds",
+        "temporal_consistency": "High"
+      },
+      "use_cases": [
+        "Cinemagraph generation",
+        "Product animation",
+        "Nature scene animation",
+        "Portrait animation",
+        "Architectural visualization"
+      ],
+      "limitations": [
+        "Requires high-end GPU",
+        "Limited to 10 seconds",
+        "Works best with static scenes",
+        "May struggle with complex motions"
+      ]
+    },
+    "pyramid_flow_sd3_768p": {
+      "full_name": "Pyramid Flow SD3 768p",
+      "developer": "Pyramid Flow Team",
+      "release_date": "2024-10-09",
+      "license": "MIT",
+      "repository_url": "https://github.com/jy0205/Pyramid-Flow",
+      "technical_specs": {
+        "architecture": "Pyramid Transformer",
+        "input_resolution": "384p/480p",
+        "output_resolution": "768p",
+        "upscaling_factor": "2x",
+        "temporal_modeling": "3D convolutions"
+      },
+      "performance": {
+        "inference_speed": "15-45s per video",
+        "memory_usage": "8GB+ VRAM",
+        "quality_improvement": "Significant",
+        "artifacts_reduction": "High"
+      },
+      "use_cases": [
+        "Video upscaling",
+        "Quality enhancement",
+        "Temporal consistency improvement",
+        "Post-processing optimization"
+      ]
+    }
+  },
+  "custom_nodes": {
+    "wan_video_wrapper": {
+      "full_name": "ComfyUI WAN Video Wrapper",
+      "developer": "Kijai",
+      "repository": "https://github.com/kijai/ComfyUI-WanVideoWrapper",
+      "compatibility": {
+        "comfyui_version": ">=0.2.0",
+        "python_version": ">=3.10",
+        "torch_version": ">=2.0.0"
+      },
+      "features": [
+        "WAN 2.1/2.2 integration",
+        "Text-to-Video generation",
+        "Image-to-Video conversion",
+        "Batch processing",
+        "Memory optimization"
+      ],
+      "installation_notes": "Requires manual installation of WAN dependencies"
+    },
+    "pyramid_flow_wrapper": {
+      "full_name": "ComfyUI Pyramid Flow Wrapper",
+      "developer": "Kijai", 
+      "repository": "https://github.com/kijai/ComfyUI-PyramidFlowWrapper",
+      "compatibility": {
+        "comfyui_version": ">=0.2.0",
+        "python_version": ">=3.10",
+        "torch_version": ">=2.0.0"
+      },
+      "features": [
+        "Pyramid Flow integration",
+        "Multi-resolution support",
+        "Long video generation",
+        "Quality upscaling",
+        "Temporal consistency"
+      ],
+      "installation_notes": "Auto-downloads models on first use"
+    }
+  },
+  "system_requirements": {
+    "minimum": {
+      "gpu": "RTX 3090 (24GB VRAM)",
+      "ram": "32GB",
+      "storage": "100GB free space",
+      "python": "3.10+"
+    },
+    "recommended": {
+      "gpu": "A100 (80GB VRAM) or H100",
+      "ram": "64GB+", 
+      "storage": "200GB+ SSD",
+      "python": "3.11"
+    },
+    "optimal": {
+      "gpu": "H100 (80GB VRAM)",
+      "ram": "128GB+",
+      "storage": "500GB+ NVMe SSD",
+      "python": "3.11.13"
+    }
+  },
+  "download_estimates": {
+    "total_size_gb": 32.5,
+    "download_time_estimates": {
+      "100_mbps": "45 minutes",
+      "500_mbps": "9 minutes", 
+      "1_gbps": "5 minutes"
+    },
+    "storage_breakdown": {
+      "wan_2_2_models": "29.5 GB",
+      "pyramid_flow": "3.6 GB",
+      "custom_nodes": "50 MB"
+    }
+  }
+}

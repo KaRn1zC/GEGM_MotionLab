@@ -1,0 +1,156 @@
+# =============================================================================
+# Comfy_Img_to_Loop - GitIgnore Configuration (MODÈLES EXCLUS)
+# =============================================================================
+
+# Python
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+# ========================================
+.venv/
+venv/
+ENV/
+env/
+.env
+.venv
+
+# IDE et Éditeurs
+# ========================================
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/.ropeproject
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+# ========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Logs et Données Temporaires
+# ========================================
+logs/*.log
+*.log
+logs/
+temp/
+tmp/
+
+# ========================================
+# MODÈLES AI - EXCLUSION COMPLÈTE (CRITIQUE)
+# ========================================
+models/
+!models/.gitkeep
+!models/README.md
+
+# Tous les formats de modèles (patterns étendus)
+*.safetensors
+*.ckpt
+*.bin
+*.pth
+*.pt
+*.onnx
+*.tflite
+
+# ComfyUI téléchargé (sera téléchargé automatiquement)
+# ========================================
+comfyui/
+!comfyui/.gitkeep
+
+# Données de production
+# ========================================
+outputs/
+!outputs/.gitkeep
+uploads/
+!uploads/.gitkeep
+
+# Configuration locale et secrets
+# ========================================
+config/local_config.yaml
+config/secrets.yaml
+.env.local
+.env.production
+
+# Docker
+# ========================================
+.dockerignore
+
+# Cache et fichiers temporaires
+# ========================================
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter Notebooks
+# ========================================
+.ipynb_checkpoints/
+
+# Base de données locales
+# ========================================
+*.sqlite
+*.sqlite3
+*.db
+
+# Fichiers de sauvegarde
+# ========================================
+*.bak
+*.backup
+*.old
+
+# Certificats et clés (sécurité)
+# ========================================
+*.key
+*.pem
+*.crt
+*.p12
+
+# Fichiers système volumineux
+# ========================================
+*.iso
+*.img
+*.dmg
+*.zip
+*.tar.gz
+*.7z
+
+# Fichiers temporaires spécifiques au projet
+# ========================================
+nohup.out
+.cache/
