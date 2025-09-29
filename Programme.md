@@ -29,7 +29,8 @@
 
 ### Étape 2.2 : Script de téléchargement intelligent
 
-- Développer `scripts/download_models.py` optimisé
+- Développer `scripts/setup_wan22_native.sh` optimisé qui :
+- Télécharge les modèles localement
 - Script de nettoyage et mise à jour
 - Validation d'intégrité des modèles
 - Système de versioning local
