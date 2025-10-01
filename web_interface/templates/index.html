@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">Générateur de Cinemagraph</h3>
+            </div>
+            <div class="card-body">
+                <form id="generateForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="imageInput" class="form-label">Image d'entrée</label>
+                        <input type="file" class="form-control" id="imageInput" name="image" accept="image/*" required>
+                        <small class="form-text text-muted">Formats acceptés: PNG, JPG, JPEG, WEBP (max 100MB)</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="promptInput" class="form-label">Prompt</label>
+                        <textarea class="form-control" id="promptInput" name="prompt" rows="3" 
+                                  placeholder="Décrivez l'animation souhaitée..."></textarea>
+                        <small class="form-text text-muted">Exemple: gentle water ripples, subtle movement</small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="stepsInput" class="form-label">Steps</label>
+                            <input type="number" class="form-control" id="stepsInput" value="20" min="1" max="50">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cfgInput" class="form-label">CFG Scale</label>
+                            <input type="number" class="form-control" id="cfgInput" value="7.5" min="1" max="20" step="0.5">
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="framesInput" class="form-label">Frames</label>
+                            <input type="number" class="form-control" id="framesInput" value="16" min="8" max="32">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fpsInput" class="form-label">FPS</label>
+                            <input type="number" class="form-control" id="fpsInput" value="8" min="4" max="24">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg mt-4 w-100">
+                        🚀 Générer Cinemagraph
+                    </button>
+                </form>
+
+                <div id="statusMessage" class="mt-3" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div id="jobsList" class="mt-4">
+            <h4>Jobs récents</h4>
+            <div id="jobsContainer"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('generateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    
+    // Ajouter les paramètres
+    const parameters = {
+        steps: parseInt(document.getElementById('stepsInput').value),
+        cfg_scale: parseFloat(document.getElementById('cfgInput').value),
+        frames: parseInt(document.getElementById('framesInput').value),
+        fps: parseInt(document.getElementById('fpsInput').value),
+        noise_level: 'high'
+    };
+    
+    formData.append('parameters', JSON.stringify(parameters));
+    
+    try {
+        const response = await fetch('/api/generate', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showStatus('success', `Job créé: ${data.job_id}`);
+            monitorJob(data.job_id);
+        } else {
+            showStatus('error', data.error || 'Erreur lors de la création du job');
+        }
+    } catch (error) {
+        showStatus('error', 'Erreur de connexion au serveur');
+    }
+});
+
+function showStatus(type, message) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
+    statusDiv.textContent = message;
+    statusDiv.style.display = 'block';
+}
+
+async function monitorJob(jobId) {
+    const interval = setInterval(async () => {
+        const response = await fetch(`/api/jobs/${jobId}`);
+        const job = await response.json();
+        
+        showStatus('info', `Status: ${job.status} - ${job.current_step || ''} (${Math.round(job.progress * 100)}%)`);
+        
+        if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+            clearInterval(interval);
+            
+            if (job.status === 'completed') {
+                showStatus('success', 'Génération terminée! ' + 
+                    (job.owncloud_link ? `<a href="${job.owncloud_link}" target="_blank">Voir sur OwnCloud</a>` : ''));
+            } else {
+                showStatus('error', job.error_message || 'Job échoué');
+            }
+            
+            loadJobs();
+        }
+    }, 2000);
+}
+
+async function loadJobs() {
+    const response = await fetch('/api/jobs?limit=10');
+    const data = await response.json();
+    
+    const container = document.getElementById('jobsContainer');
+    container.innerHTML = data.jobs.map(job => `
+        <div class="card mb-2">
+            <div class="card-body">
+                <strong>${job.job_id.substring(0, 8)}</strong> - 
+                ${job.status} - 
+                ${new Date(job.created_at).toLocaleString()}
+                ${job.status === 'completed' ? `<a href="/api/jobs/${job.job_id}/download" class="btn btn-sm btn-primary float-end">Download</a>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+// Charger les jobs au démarrage
+loadJobs();
+setInterval(loadJobs, 10000); // Refresh toutes les 10s
+</script>
+{% endblock %}
