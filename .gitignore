@@ -154,3 +154,9 @@ htmlcov/
 # ========================================
 nohup.out
 .cache/
+
+# Environment variables (NEVER COMMIT!)
+.env
+.env.local
+.env.*.local
+.env.production
