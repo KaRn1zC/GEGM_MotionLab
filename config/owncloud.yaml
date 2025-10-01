@@ -1,0 +1,51 @@
+# Configuration OwnCloud - Paramètres techniques UNIQUEMENT
+# Les identifiants sensibles sont dans .env (non versionné)
+
+owncloud:
+  # Profil par défaut
+  default:
+    # Paramètres techniques (PAS d'identifiants ici!)
+    chunk_size: 8192
+    timeout: 300
+    max_retries: 3
+    retry_delay: 1.0
+  
+  # Profil développement
+  development:
+    chunk_size: 4096
+    timeout: 60
+    max_retries: 2
+  
+  # Profil production
+  production:
+    chunk_size: 16384
+    timeout: 600
+    max_retries: 5
+    retry_delay: 2.0
+  
+  # Profil RunPod
+  runpod:
+    chunk_size: 32768
+    timeout: 900
+    max_retries: 5
+    retry_delay: 3.0
+
+# Configuration des partages
+sharing:
+  default_expire_days: 365
+  default_permissions: 1
+  password_protection: false
+  folder_structure: "{year}/{month}"
+  filename_template: "{name}_wf{workflow_id}_{timestamp}{ext}"
+
+# Configuration des métadonnées
+metadata:
+  include_generation_params: true
+  include_model_info: true
+  include_prompt: true
+  save_separate_json: true
+  custom_fields:
+    project: "Comfy_Img_to_Loop"
+    generator: "WAN 2.2"
+    type: "Cinemagraph"
+    company: "GEGM"
