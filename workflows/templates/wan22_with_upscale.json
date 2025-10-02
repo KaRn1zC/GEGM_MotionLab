@@ -1,0 +1,176 @@
+{
+  "name": "WAN 2.2 + Pyramid Upscale",
+  "description": "Pipeline complet : génération + upscaling haute qualité",
+  "version": "1.0.0",
+  "author": "Comfy_Img_to_Loop",
+  "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
+  
+  "parameters": {
+    "input_image": {
+      "type": "string",
+      "required": true,
+      "description": "Image d'entrée"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Prompt de génération"
+    },
+    "steps_generation": {
+      "type": "integer",
+      "default": 20,
+      "min": 10,
+      "max": 50,
+      "description": "Steps pour la génération"
+    },
+    "steps_upscale": {
+      "type": "integer",
+      "default": 15,
+      "min": 5,
+      "max": 30,
+      "description": "Steps pour l'upscaling"
+    },
+    "cfg_scale": {
+      "type": "float",
+      "default": 7.5,
+      "min": 1.0,
+      "max": 20.0,
+      "description": "CFG scale"
+    },
+    "scale_factor": {
+      "type": "float",
+      "default": 2.0,
+      "min": 1.5,
+      "max": 4.0,
+      "description": "Facteur d'upscaling"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 16,
+      "min": 8,
+      "max": 32,
+      "description": "Nombre de frames"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 24,
+      "description": "FPS de sortie"
+    },
+    "noise_level": {
+      "type": "string",
+      "default": "high",
+      "enum": ["high", "low"],
+      "description": "Niveau de bruit"
+    }
+  },
+  
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "{input_image}"
+      }
+    },
+    "2": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "wan2.2-i2v-a14b/{noise_level}_noise_model.safetensors"
+      }
+    },
+    "3": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{prompt}",
+        "clip": ["2", 1]
+      }
+    },
+    "4": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "static, frozen, blurry",
+        "clip": ["2", 1]
+      }
+    },
+    "5": {
+      "class_type": "VAEEncode",
+      "inputs": {
+        "pixels": ["1", 0],
+        "vae": ["2", 2]
+      }
+    },
+    "6": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": -1,
+        "steps": "{steps_generation}",
+        "cfg": "{cfg_scale}",
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1.0,
+        "model": ["2", 0],
+        "positive": ["3", 0],
+        "negative": ["4", 0],
+        "latent_image": ["5", 0]
+      }
+    },
+    "7": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["6", 0],
+        "vae": ["2", 2]
+      }
+    },
+    "8": {
+      "class_type": "UpscaleModelLoader",
+      "inputs": {
+        "model_name": "RealESRGAN_x4plus.pth"
+      }
+    },
+    "9": {
+      "class_type": "VideoUpscale",
+      "inputs": {
+        "upscale_model": ["8", 0],
+        "images": ["7", 0],
+        "scale_by": "{scale_factor}"
+      }
+    },
+    "10": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": "{fps}",
+        "loop_count": 0,
+        "filename_prefix": "wan22_upscaled",
+        "format": "video/h264-mp4",
+        "pingpong": false,
+        "save_output": true,
+        "images": ["9", 0]
+      }
+    }
+  },
+  
+  "outputs": {
+    "video": {
+      "node": "10",
+      "output": 0,
+      "description": "Cinemagraph upscalé"
+    }
+  },
+  
+  "metadata": {
+    "comfyui_version": ">=0.2.0",
+    "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
+    "required_nodes": [
+      "LoadImage",
+      "CheckpointLoaderSimple",
+      "CLIPTextEncode",
+      "VAEEncode",
+      "VAEDecode",
+      "KSampler",
+      "UpscaleModelLoader",
+      "VideoUpscale",
+      "VHS_VideoCombine"
+    ]
+  }
+}
