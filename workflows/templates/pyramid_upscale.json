@@ -1,0 +1,187 @@
+{
+  "name": "Pyramid Upscale",
+  "description": "Upscaling vidéo haute qualité avec Pyramid Flow",
+  "version": "1.0.0",
+  "author": "Comfy_Img_to_Loop",
+  "tags": ["upscale", "pyramid", "video", "quality"],
+  
+  "parameters": {
+    "input_video": {
+      "type": "string",
+      "required": true,
+      "description": "Nom du fichier vidéo d'entrée"
+    },
+    "scale_factor": {
+      "type": "float",
+      "default": 2.0,
+      "min": 1.5,
+      "max": 4.0,
+      "description": "Facteur d'agrandissement (2.0 = double la résolution)"
+    },
+    "steps": {
+      "type": "integer",
+      "default": 20,
+      "min": 10,
+      "max": 50,
+      "description": "Nombre de steps de dénoising"
+    },
+    "denoise_strength": {
+      "type": "float",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 1.0,
+      "description": "Force du denoising (0=aucun, 1=maximum)"
+    },
+    "guidance_scale": {
+      "type": "float",
+      "default": 7.5,
+      "min": 1.0,
+      "max": 15.0,
+      "description": "Échelle de guidance"
+    },
+    "tile_size": {
+      "type": "integer",
+      "default": 512,
+      "enum": [256, 512, 768, 1024],
+      "description": "Taille des tuiles pour le traitement"
+    },
+    "tile_overlap": {
+      "type": "integer",
+      "default": 64,
+      "min": 32,
+      "max": 128,
+      "description": "Chevauchement des tuiles (pixels)"
+    },
+    "enhance_details": {
+      "type": "boolean",
+      "default": true,
+      "description": "Améliorer les détails fins"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 30,
+      "description": "FPS de sortie"
+    }
+  },
+  
+  "workflow": {
+    "1": {
+      "class_type": "VHS_LoadVideo",
+      "inputs": {
+        "video": "{input_video}",
+        "force_rate": 0,
+        "force_size": "Disabled",
+        "custom_width": 512,
+        "custom_height": 512,
+        "frame_load_cap": 0,
+        "skip_first_frames": 0,
+        "select_every_nth": 1
+      }
+    },
+    "2": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "pyramid_flow/pyramid_upscale.safetensors"
+      }
+    },
+    "3": {
+      "class_type": "UpscaleModelLoader",
+      "inputs": {
+        "model_name": "RealESRGAN_x4plus.pth"
+      }
+    },
+    "4": {
+      "class_type": "VideoUpscale",
+      "inputs": {
+        "upscale_model": ["3", 0],
+        "images": ["1", 0],
+        "scale_by": "{scale_factor}"
+      }
+    },
+    "5": {
+      "class_type": "VAEEncode",
+      "inputs": {
+        "pixels": ["4", 0],
+        "vae": ["2", 2]
+      }
+    },
+    "6": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": -1,
+        "steps": "{steps}",
+        "cfg": "{guidance_scale}",
+        "sampler_name": "euler_ancestral",
+        "scheduler": "karras",
+        "denoise": "{denoise_strength}",
+        "model": ["2", 0],
+        "positive": ["7", 0],
+        "negative": ["8", 0],
+        "latent_image": ["5", 0]
+      }
+    },
+    "7": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "high quality, sharp details, clear, professional",
+        "clip": ["2", 1]
+      }
+    },
+    "8": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "blurry, low quality, pixelated, compressed, artifacts",
+        "clip": ["2", 1]
+      }
+    },
+    "9": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["6", 0],
+        "vae": ["2", 2]
+      }
+    },
+    "10": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": "{fps}",
+        "loop_count": 0,
+        "filename_prefix": "upscaled_cinemagraph",
+        "format": "video/h264-mp4",
+        "pingpong": false,
+        "save_output": true,
+        "images": ["9", 0]
+      }
+    }
+  },
+  
+  "outputs": {
+    "video": {
+      "node": "10",
+      "output": 0,
+      "description": "Vidéo upscalée"
+    }
+  },
+  
+  "metadata": {
+    "comfyui_version": ">=0.2.0",
+    "tags": ["upscale", "pyramid", "video", "quality"],
+    "required_nodes": [
+      "VHS_LoadVideo",
+      "VHS_VideoCombine",
+      "CheckpointLoaderSimple",
+      "UpscaleModelLoader",
+      "VideoUpscale",
+      "VAEEncode",
+      "VAEDecode",
+      "KSampler",
+      "CLIPTextEncode"
+    ],
+    "required_models": [
+      "pyramid_flow/pyramid_upscale.safetensors",
+      "RealESRGAN_x4plus.pth"
+    ]
+  }
+}

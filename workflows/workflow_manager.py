@@ -28,6 +28,7 @@ class WorkflowTemplate:
         self.version = template_data.get("version", "1.0.0")
         self.parameters = template_data.get("parameters", {})
         self.workflow = template_data.get("workflow", {})
+        self.metadata = template_data.get("metadata", {})
 
         logger.debug(f"Template chargé: {self.name} v{self.version}")
 
@@ -47,25 +48,51 @@ class WorkflowTemplate:
         # Cloner le workflow pour éviter les modifications
         workflow = copy.deepcopy(self.workflow)
 
-        # Remplacer les placeholders
-        workflow_str = json.dumps(workflow)
-
-        for param_name, param_value in validated_params.items():
-            placeholder = f"{{{param_name}}}"
-            if placeholder in workflow_str:
-                workflow_str = workflow_str.replace(placeholder, str(param_value))
+        # Remplacer les placeholders EN GARDANT LES TYPES
+        workflow = self._substitute_params_recursive(workflow, validated_params)
 
         # Remplacements spéciaux
-        workflow_str = workflow_str.replace(
-            "{timestamp}", datetime.now().strftime("%Y%m%d_%H%M%S")
-        )
-
-        final_workflow = json.loads(workflow_str)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        workflow = self._substitute_params_recursive(workflow, {"timestamp": timestamp})
 
         logger.info(
             f"Workflow {self.name} préparé avec {len(validated_params)} paramètres"
         )
-        return final_workflow
+        return workflow
+
+    def _substitute_params_recursive(self, obj: Any, params: Dict[str, Any]) -> Any:
+        """
+        Substitue les paramètres de manière récursive EN GARDANT LES TYPES
+
+        Args:
+            obj: Objet à traiter
+            params: Paramètres de substitution
+
+        Returns:
+            Objet avec paramètres substitués
+        """
+        if isinstance(obj, dict):
+            return {
+                k: self._substitute_params_recursive(v, params) for k, v in obj.items()
+            }
+        elif isinstance(obj, list):
+            return [self._substitute_params_recursive(item, params) for item in obj]
+        elif isinstance(obj, str):
+            # Si c'est exactement un placeholder, retourner la valeur avec son type
+            for param_name, param_value in params.items():
+                placeholder = f"{{{param_name}}}"
+                if obj == placeholder:
+                    return param_value
+
+            # Sinon, substituer dans la string
+            result = obj
+            for param_name, param_value in params.items():
+                placeholder = f"{{{param_name}}}"
+                if placeholder in result:
+                    result = result.replace(placeholder, str(param_value))
+            return result
+        else:
+            return obj
 
     def _validate_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Valide et normalise les paramètres selon les règles du template"""
@@ -218,6 +245,165 @@ class WorkflowManager:
                 validation_report[param_name] = "using_default"
 
         return validation_report
+
+    def validate_workflow(self, workflow_id: str) -> Dict[str, Any]:
+        """
+        Valide un workflow et retourne un rapport
+
+        Args:
+            workflow_id: ID du workflow à valider
+
+        Returns:
+            Dict: Rapport de validation
+        """
+        template = self.get_template(workflow_id)
+
+        if not template:
+            return {"valid": False, "errors": [f"Template {workflow_id} non trouvé"]}
+
+        report = {
+            "valid": True,
+            "warnings": [],
+            "errors": [],
+            "info": {
+                "name": template.name,
+                "version": template.version,
+                "node_count": len(template.workflow),
+                "parameter_count": len(template.parameters),
+            },
+        }
+
+        # Vérifier les nœuds
+        for node_id, node in template.workflow.items():
+            if "class_type" not in node:
+                report["errors"].append(f"Nœud {node_id}: class_type manquant")
+                report["valid"] = False
+
+            if "inputs" not in node:
+                report["warnings"].append(f"Nœud {node_id}: aucun input défini")
+
+        # Vérifier les paramètres
+        for param_name, param_config in template.parameters.items():
+            if "type" not in param_config:
+                report["errors"].append(f"Paramètre {param_name}: type manquant")
+                report["valid"] = False
+
+        return report
+
+    def get_workflow_info(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retourne les informations détaillées d'un workflow
+
+        Args:
+            workflow_id: ID du workflow
+
+        Returns:
+            Dict: Informations du workflow
+        """
+        template = self.get_template(workflow_id)
+
+        if not template:
+            return None
+
+        return {
+            "id": workflow_id,
+            "name": template.name,
+            "description": template.description,
+            "version": template.version,
+            "parameters": {
+                name: {
+                    "type": config.get("type"),
+                    "default": config.get("default"),
+                    "required": config.get("required", False),
+                    "description": config.get("description", ""),
+                    "min": config.get("min"),
+                    "max": config.get("max"),
+                    "enum": config.get("enum"),
+                }
+                for name, config in template.parameters.items()
+            },
+            "metadata": template.metadata,
+            "node_count": len(template.workflow),
+            "tags": template.metadata.get("tags", []),
+        }
+
+    def list_workflows_by_tag(self, tag: str) -> List[Dict[str, str]]:
+        """
+        Liste les workflows par tag
+
+        Args:
+            tag: Tag à filtrer
+
+        Returns:
+            List: Workflows correspondants
+        """
+        workflows = []
+
+        for workflow_id, template in self.templates.items():
+            tags = template.metadata.get("tags", [])
+            if tag in tags:
+                workflows.append(
+                    {
+                        "id": workflow_id,
+                        "name": template.name,
+                        "description": template.description,
+                    }
+                )
+
+        return workflows
+
+    def get_parameter_schema(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retourne le schéma JSON des paramètres d'un workflow
+
+        Args:
+            workflow_id: ID du workflow
+
+        Returns:
+            Dict: Schéma JSON des paramètres
+        """
+        template = self.get_template(workflow_id)
+
+        if not template:
+            return None
+
+        schema = {"type": "object", "properties": {}, "required": []}
+
+        for param_name, param_config in template.parameters.items():
+            param_type = param_config.get("type", "string")
+
+            # Mapper types Python vers JSON Schema
+            type_mapping = {
+                "string": "string",
+                "integer": "integer",
+                "float": "number",
+                "boolean": "boolean",
+            }
+
+            json_type = type_mapping.get(param_type, "string")
+
+            param_schema = {
+                "type": json_type,
+                "description": param_config.get("description", ""),
+            }
+
+            # Ajouter contraintes
+            if "min" in param_config:
+                param_schema["minimum"] = param_config["min"]
+            if "max" in param_config:
+                param_schema["maximum"] = param_config["max"]
+            if "enum" in param_config:
+                param_schema["enum"] = param_config["enum"]
+            if "default" in param_config:
+                param_schema["default"] = param_config["default"]
+
+            schema["properties"][param_name] = param_schema
+
+            # Ajouter aux required si nécessaire
+            if param_config.get("required", False):
+                schema["required"].append(param_name)
+
+        return schema
 
 
 # Instance globale du gestionnaire
