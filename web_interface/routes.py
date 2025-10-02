@@ -407,3 +407,20 @@ def check_owncloud():
             "upload_folder": current_app.owncloud_config.upload_folder,
         }
     )
+
+
+@api_bp.route("/jobs/<job_id>/thumbnail", methods=["GET"])
+def get_thumbnail(job_id):
+    """Retourne une miniature du résultat (placeholder pour l'instant)"""
+    # TODO: Générer vraie miniature avec PIL
+    from flask import send_file
+    import io
+    from PIL import Image
+
+    # Placeholder image
+    img = Image.new("RGB", (400, 300), color="#667eea")
+    img_io = io.BytesIO()
+    img.save(img_io, "JPEG")
+    img_io.seek(0)
+
+    return send_file(img_io, mimetype="image/jpeg")
