@@ -119,8 +119,8 @@ pydantic-settings==2.10.1
 pydantic_core==2.33.2
 pyflakes==3.4.0
 Pygments==2.19.2
-pyobjc-core==11.1
-pyobjc-framework-Cocoa==11.1
+pyobjc-core==11.1; sys_platform == 'darwin'             # install only on macOS
+pyobjc-framework-Cocoa==11.1; sys_platform == 'darwin'  # install only on macOS
 pyparsing==3.2.4
 pyperclip==1.10.0
 pytest==8.4.2
@@ -151,6 +151,9 @@ sqlparse==0.5.3
 sse-starlette==3.0.2
 starlette==0.48.0
 threadpoolctl==3.6.0
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0
 tqdm==4.67.1
 typing-inspection==0.4.1
 typing_extensions==4.15.0

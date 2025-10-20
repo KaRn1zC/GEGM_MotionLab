@@ -70,7 +70,7 @@ class OwnCloudConfigManager:
         server_url = os.getenv("OWNCLOUD_SERVER_URL", "").rstrip("/")
         username = os.getenv("OWNCLOUD_USERNAME", "")
         password = os.getenv("OWNCLOUD_PASSWORD", "")
-        upload_folder = os.getenv("OWNCLOUD_UPLOAD_FOLDER", "/Cinemagraphs")
+        upload_folder = os.getenv("OWNCLOUD_MODEL_FOLDER", "/Cinemagraphs")
 
         # 2. Récupérer paramètres techniques depuis YAML
         owncloud_configs = self.configs.get("owncloud", {})
@@ -144,7 +144,7 @@ class OwnCloudConfigManager:
             "OWNCLOUD_SERVER_URL": os.getenv("OWNCLOUD_SERVER_URL"),
             "OWNCLOUD_USERNAME": os.getenv("OWNCLOUD_USERNAME"),
             "OWNCLOUD_PASSWORD": os.getenv("OWNCLOUD_PASSWORD"),
-            "OWNCLOUD_UPLOAD_FOLDER": os.getenv("OWNCLOUD_UPLOAD_FOLDER"),
+            "OWNCLOUD_MODEL_FOLDER": os.getenv("OWNCLOUD_MODEL_FOLDER"),
         }
 
         for key, value in credentials.items():

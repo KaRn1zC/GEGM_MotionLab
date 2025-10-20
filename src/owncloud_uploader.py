@@ -175,10 +175,16 @@ class OwnCloudUploader:
     async def connect(self):
         """Établit la connexion HTTP"""
         if not self.session:
-            connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+            # Configuration TCP keep-alive
+            connector = aiohttp.TCPConnector(
+                limit=10, limit_per_host=5, keepalive_timeout=60, force_close=False
+            )
+
             self.session = aiohttp.ClientSession(
                 connector=connector,
-                timeout=aiohttp.ClientTimeout(total=self.config.timeout),
+                timeout=aiohttp.ClientTimeout(
+                    total=self.config.timeout, sock_connect=30, sock_read=300
+                ),
                 auth=aiohttp.BasicAuth(self.config.username, self.config.password),
             )
 
@@ -267,7 +273,10 @@ class OwnCloudUploader:
         progress_callback: Optional[callable] = None,
     ) -> UploadResult:
         """
-        Upload un fichier vers OwnCloud
+        Upload un fichier vers OwnCloud (version standard, sans chunking)
+
+        Note: Votre serveur OwnCloud ne supporte pas Content-Range chunking.
+        On utilise un timeout élevé à la place.
 
         Args:
             file_data: Données du fichier (bytes, Path ou file object)
@@ -285,14 +294,17 @@ class OwnCloudUploader:
             if isinstance(file_data, Path):
                 file_size = file_data.stat().st_size
                 file_obj = open(file_data, "rb")
+                close_file = True
             elif isinstance(file_data, bytes):
                 file_size = len(file_data)
                 file_obj = io.BytesIO(file_data)
+                close_file = False
             else:
                 file_obj = file_data
                 file_obj.seek(0, 2)  # Aller à la fin
                 file_size = file_obj.tell()
                 file_obj.seek(0)  # Retourner au début
+                close_file = False
 
             logger.info(
                 f"Début upload: {remote_path} ({file_size / (1024 * 1024):.2f} MB)"
@@ -310,15 +322,33 @@ class OwnCloudUploader:
 
             # Upload avec suivi de progression
             uploaded_bytes = 0
+            last_log_time = datetime.now()
+            LOG_INTERVAL = 10  # Log toutes les 10 secondes
 
             async def upload_generator():
-                nonlocal uploaded_bytes
+                nonlocal uploaded_bytes, last_log_time
                 while True:
                     chunk = file_obj.read(self.config.chunk_size)
                     if not chunk:
                         break
 
                     uploaded_bytes += len(chunk)
+
+                    # Log progression toutes les 10 secondes
+                    now = datetime.now()
+                    if (now - last_log_time).total_seconds() >= LOG_INTERVAL:
+                        progress = (uploaded_bytes / file_size) * 100
+                        speed = (
+                            uploaded_bytes
+                            / (now - start_time).total_seconds()
+                            / (1024 * 1024)
+                        )
+                        logger.info(
+                            f"   📤 Progression: {progress:.1f}% "
+                            f"({uploaded_bytes / (1024 * 1024):.1f}/{file_size / (1024 * 1024):.1f} MB) "
+                            f"@ {speed:.2f} MB/s"
+                        )
+                        last_log_time = now
 
                     # Callback de progression
                     if progress_callback:
@@ -327,21 +357,36 @@ class OwnCloudUploader:
 
                     yield chunk
 
-            # Effectuer l'upload
+            # Effectuer l'upload avec timeout prolongé pour gros fichiers
+            # Formule: timeout = taille_MB / (vitesse_minimum_MB_s) + buffer
+            # Minimum 1MB/s + 300s de buffer
+            upload_timeout = max(
+                self.config.timeout,
+                int(file_size / (1024 * 1024) / 1) + 300,  # 1 MB/s minimum
+            )
+
+            logger.info(
+                f"   Timeout configuré: {upload_timeout}s ({upload_timeout / 60:.1f} min)"
+            )
+
             async with self.session.put(
                 upload_url,
                 data=upload_generator(),
                 headers={"Content-Length": str(file_size)},
+                timeout=aiohttp.ClientTimeout(total=upload_timeout),
             ) as response:
                 if response.status in [200, 201, 204]:
                     upload_duration = datetime.now() - start_time
 
                     # Fermer le fichier si on l'a ouvert
-                    if isinstance(file_data, Path):
+                    if close_file:
                         file_obj.close()
 
                     logger.success(f"✅ Upload réussi: {remote_path}")
                     logger.info(f"Durée: {upload_duration.total_seconds():.2f}s")
+                    logger.info(
+                        f"Vitesse: {file_size / upload_duration.total_seconds() / (1024 * 1024):.2f} MB/s"
+                    )
 
                     # Créer le résultat
                     result = UploadResult(
@@ -377,6 +422,61 @@ class OwnCloudUploader:
                 file_path=remote_path,
                 file_size=file_size if "file_size" in locals() else 0,
                 error_message=str(e),
+            )
+
+    async def upload_to_folder(
+        self,
+        file_data: Union[Path, str, bytes],
+        remote_path: str,
+        folder_type: str = "output",
+        metadata: Optional[VideoMetadata] = None,
+        create_share: bool = False,
+    ) -> UploadResult:
+        """
+        Upload un fichier vers un dossier spécifique (output ou model)
+
+        Args:
+            file_data: Données du fichier (Path, str ou bytes)
+            remote_path: Chemin relatif du fichier
+            folder_type: "output" (OWNCLOUD_OUTPUT_FOLDER) ou "model" (OWNCLOUD_MODEL_FOLDER)
+            metadata: Métadonnées optionnelles
+            create_share: Créer un lien de partage
+
+        Returns:
+            UploadResult
+        """
+        try:
+            # Déterminer le dossier de base selon le type
+            if folder_type == "model":
+                import os
+
+                base_folder = os.getenv("OWNCLOUD_MODEL_FOLDER", "/GEGM_ComfyUI/Models")
+            else:
+                base_folder = (
+                    self.config.upload_folder
+                )  # Utilise OWNCLOUD_OUTPUT_FOLDER
+
+            # Construire le chemin complet
+            full_remote_path = f"{base_folder.rstrip('/')}/{remote_path.lstrip('/')}"
+
+            logger.info(f"📤 Upload vers {folder_type}: {full_remote_path}")
+
+            # Utiliser la méthode upload_file existante
+            result = await self.upload_file(
+                file_data=file_data, remote_path=full_remote_path, metadata=metadata
+            )
+
+            # Créer un lien de partage si demandé
+            if result.success and create_share:
+                share_url = await self.create_share_link(full_remote_path)
+                result.share_link = share_url
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Erreur upload vers {folder_type}: {e}")
+            return UploadResult(
+                success=False, file_path=remote_path, file_size=0, error_message=str(e)
             )
 
     async def save_metadata(self, file_path: str, metadata: VideoMetadata):

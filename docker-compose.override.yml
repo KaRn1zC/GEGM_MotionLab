@@ -1,0 +1,19 @@
+# Configuration pour le développement local
+# Ce fichier override docker-compose.yml automatiquement
+
+services:
+  comfy_img_to_loop:
+    # Mode debug activé
+    environment:
+      - FLASK_DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+    # Hot reload du code
+    volumes:
+      - ./src:/app/src
+      - ./web_interface:/app/web_interface
+      - ./workflows:/app/workflows
+      - ./scripts:/app/scripts
+
+    # Pas de restart en dev
+    restart: "no"

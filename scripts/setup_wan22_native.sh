@@ -1,6 +1,8 @@
 #!/bin/bash
-
 set -e
+
+# Argument: nom du modèle spécifique ou "all" (défaut)
+MODEL="${1:-all}"
 
 echo "🎬 Setup WAN 2.2 avec support natif ComfyUI"
 echo "=============================================="
@@ -15,12 +17,11 @@ echo "✅ Environnement virtuel: $VIRTUAL_ENV"
 
 # Étape 1: Installer huggingface-cli
 echo "📦 Installation huggingface-cli..."
-pip install "huggingface_hub[cli]"
+pip install -q "huggingface_hub[cli]"
 
 # Étape 2: Créer les dossiers modèles
 echo "📁 Création des dossiers de modèles..."
-mkdir -p models/{wan2.2-i2v-a14b,wan2.2-ti2v-5b,pyramid-flow}
-mkdir -p models/{diffusion_models,vae,text_encoders,checkpoints}
+mkdir -p models/{wan2.2-i2v-a14b,wan2.2-ti2v-5b}
 
 # Étape 3: Test de connexion Hugging Face
 echo "🔗 Test de connexion Hugging Face..."
@@ -30,67 +31,55 @@ else
     echo "ℹ️  Pas connecté à HF (modèles publics OK)"
 fi
 
-# Étape 4: Choix du modèle à télécharger
-echo ""
-echo "🤖 Quel modèle WAN 2.2 voulez-vous télécharger ?"
-echo "1. WAN 2.2 TI2V 5B (Recommandé - 9.4GB, 12GB+ VRAM)"
-echo "2. WAN 2.2 I2V 14B (Avancé - 27.8GB, 24GB+ VRAM)"
-echo "3. Les deux modèles"
-echo "4. Aucun (setup seulement)"
-echo ""
-
-read -p "Votre choix [1-4]: " choice
-
-case $choice in
-    1)
-        echo "📥 Téléchargement WAN 2.2 TI2V 5B..."
-        hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b
-        echo "✅ WAN 2.2 5B téléchargé"
-        ;;
-    2)
-        echo "📥 Téléchargement WAN 2.2 I2V 14B (peut prendre 30+ minutes)..."
-        hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
-        echo "✅ WAN 2.2 14B téléchargé"
-        ;;
-    3)
-        echo "📥 Téléchargement des deux modèles..."
-        hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b &
-        hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
-        wait
-        echo "✅ Tous les modèles téléchargés"
-        ;;
-    4)
-        echo "⚠️ Aucun modèle téléchargé - setup uniquement"
-        ;;
-    *)
-        echo "❌ Choix invalide"
-        exit 1
-        ;;
-esac
+# Étape 4: Téléchargement selon le modèle demandé
+if [ "$MODEL" = "all" ]; then
+    echo ""
+    echo "📥 Téléchargement des deux modèles..."
+    echo ""
+    
+    echo "📦 Modèle 1/2: WAN 2.2 TI2V 5B (9.4GB)..."
+    hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b
+    echo "✅ WAN 2.2 5B téléchargé"
+    
+    echo ""
+    echo "📦 Modèle 2/2: WAN 2.2 I2V 14B (27.8GB)..."
+    hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
+    echo "✅ WAN 2.2 14B téléchargé"
+    
+elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
+    echo ""
+    echo "📥 Téléchargement WAN 2.2 I2V 14B (27.8GB)..."
+    hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
+    echo "✅ WAN 2.2 14B téléchargé"
+    
+elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
+    echo ""
+    echo "📥 Téléchargement WAN 2.2 TI2V 5B (9.4GB)..."
+    hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b
+    echo "✅ WAN 2.2 5B téléchargé"
+    
+else
+    echo "❌ Modèle invalide: $MODEL"
+    echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"
+    exit 1
+fi
 
 # Étape 5: Vérification des téléchargements
 echo ""
 echo "🔍 Vérification des modèles téléchargés..."
-find models/ -name "*.safetensors" -o -name "*.bin" | while read file; do
-    size=$(du -h "$file" | cut -f1)
-    echo "✅ $file ($size)"
-done
+if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
+    if [ -d "models/wan2.2-i2v-a14b" ]; then
+        size=$(du -sh models/wan2.2-i2v-a14b | cut -f1)
+        echo "✅ wan2.2-i2v-a14b ($size)"
+    fi
+fi
 
-# Étape 6: Instructions finales
-echo ""
-echo "🎉 Setup WAN 2.2 terminé !"
-echo ""
-echo "📋 Prochaines étapes:"
-echo "1. Démarrer ComfyUI avec: cd comfyui && python main.py"
-echo "2. Installer ComfyUI Manager depuis l'interface"
-echo "3. Installer les custom nodes via Manager"
-echo "4. Utiliser les nodes natifs WAN 2.2"
-echo ""
-echo "🔧 Nodes WAN 2.2 natifs dans ComfyUI:"
-echo "   • WAN Diffusion Model Loader"
-echo "   • WAN Sampler"
-echo "   • WAN Text Encoder"
-echo "   • WAN VAE"
-echo ""
-echo "📖 Documentation: https://docs.comfy.org/tutorials/video/wan/wan2_2"
+if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
+    if [ -d "models/wan2.2-ti2v-5b" ]; then
+        size=$(du -sh models/wan2.2-ti2v-5b | cut -f1)
+        echo "✅ wan2.2-ti2v-5b ($size)"
+    fi
+fi
 
+echo ""
+echo "✅ Setup WAN 2.2 terminé !"

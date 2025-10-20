@@ -1,0 +1,98 @@
+services:
+  comfy_img_to_loop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comfy_img_to_loop
+    image: arnaudboy/comfy_img_to_loop:latest
+
+    # Ports
+    ports:
+      - "5000:5000" # Flask web interface
+
+    # Variables d'environnement
+    environment:
+      # Flask
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      - FLASK_DEBUG=false
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # ComfyUI
+      - COMFYUI_HOST=${COMFYUI_HOST:-comfyui}
+      - COMFYUI_PORT=${COMFYUI_PORT:-8188}
+
+      # OwnCloud (chargées depuis .env)
+      - OWNCLOUD_SERVER_URL=${OWNCLOUD_SERVER_URL}
+      - OWNCLOUD_USERNAME=${OWNCLOUD_USERNAME}
+      - OWNCLOUD_PASSWORD=${OWNCLOUD_PASSWORD}
+      - OWNCLOUD_MODEL_FOLDER=${OWNCLOUD_MODEL_FOLDER:-/Cinemagraphs}
+      - OWNCLOUD_PROFILE=${OWNCLOUD_PROFILE:-default}
+
+    # Volumes
+    volumes:
+      # Logs persistants
+      - ./logs:/app/logs
+
+      # Uploads persistants
+      - ./web_interface/uploads:/app/web_interface/uploads
+
+      # Configuration (optionnel, si vous voulez modifier sans rebuild)
+      - ./config:/app/config:ro
+
+      # Workflows (optionnel, si vous voulez modifier sans rebuild)
+      - ./workflows/templates:/app/workflows/templates:ro
+
+      # Monter .env si besoin (alternative aux env vars ci-dessus)
+      # - ./.env:/app/.env:ro
+
+    # Réseau
+    networks:
+      - comfy-network
+
+    # Healthcheck (défini dans Dockerfile, mais peut être overridé)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Dépendances (si ComfyUI est dans le même docker-compose)
+    # depends_on:
+    #   - comfyui
+
+  # Service ComfyUI (OPTIONNEL - à décommenter si vous voulez ComfyUI en Docker)
+  # comfyui:
+  #   image: comfyanonymous/comfyui:latest
+  #   container_name: comfyui
+  #   ports:
+  #     - "8188:8188"
+  #   volumes:
+  #     - ./comfyui_models:/app/models
+  #     - ./comfyui_output:/app/output
+  #     - ./comfyui_input:/app/input
+  #   networks:
+  #     - comfy-network
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+
+networks:
+  comfy-network:
+    driver: bridge
+# Volumes nommés (optionnel, alternative aux bind mounts)
+# volumes:
+#   logs:
+#   uploads:

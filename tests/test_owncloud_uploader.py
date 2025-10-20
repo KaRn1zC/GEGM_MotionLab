@@ -271,7 +271,7 @@ class TestOwnCloudConfigManager:
             "OWNCLOUD_SERVER_URL": "https://test-server.com",
             "OWNCLOUD_USERNAME": "test-user",
             "OWNCLOUD_PASSWORD": "test-pass",
-            "OWNCLOUD_UPLOAD_FOLDER": "/TestFolder",
+            "OWNCLOUD_MODEL_FOLDER": "/TestFolder",
         },
     )
     def test_config_from_env(self):

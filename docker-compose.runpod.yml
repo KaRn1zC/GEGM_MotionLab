@@ -1,0 +1,56 @@
+# Configuration pour tester localement avec GPU (si disponible)
+# Simule l'environnement RunPod
+
+services:
+  comfy-runpod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comfy_runpod_test
+    image: arnaudboy/comfy_img_to_loop:runpod
+    
+    # Configuration GPU NVIDIA
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
+    
+    # Ports RunPod
+    ports:
+      - "5000:5000"  # Web interface
+      - "8188:8188"  # ComfyUI
+    
+    # Variables d'environnement
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      - COMFYUI_HOST=127.0.0.1
+      - COMFYUI_PORT=8188
+      - LOG_LEVEL=INFO
+      
+      # OwnCloud (charger depuis .env)
+      - OWNCLOUD_SERVER_URL=${OWNCLOUD_SERVER_URL}
+      - OWNCLOUD_USERNAME=${OWNCLOUD_USERNAME}
+      - OWNCLOUD_PASSWORD=${OWNCLOUD_PASSWORD}
+      - OWNCLOUD_MODEL_FOLDER=${OWNCLOUD_MODEL_FOLDER:-/Cinemagraphs}
+    
+    # Volumes (simulant RunPod /workspace)
+    volumes:
+      - ./logs:/workspace/logs
+      - ./web_interface/uploads:/workspace/web_interface/uploads
+      # Volume pour les modèles (persistent)
+      - runpod-models:/workspace/comfyui/ComfyUI/models
+    
+    restart: unless-stopped
+    
+    # Allouer plus de mémoire partagée pour PyTorch
+    shm_size: '8gb'
+
+volumes:
+  runpod-models:
+    driver: local
