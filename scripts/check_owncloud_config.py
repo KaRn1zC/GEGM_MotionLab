@@ -29,7 +29,7 @@ def main():
         logger.info("      OWNCLOUD_SERVER_URL=https://www.cloud-gegm.com")
         logger.info("      OWNCLOUD_USERNAME=arnaud.boy@gegmgroup.com")
         logger.info("      OWNCLOUD_PASSWORD=votre_mot_de_passe")
-        logger.info("      OWNCLOUD_UPLOAD_FOLDER=/GEGM_ComfyUI")
+        logger.info("      OWNCLOUD_MODEL_FOLDER=/GEGM_ComfyUI/Models")
         return 1
 
     # Tester la création de config
