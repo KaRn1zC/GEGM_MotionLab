@@ -73,7 +73,7 @@ git clone https://github.com/KaRn1zC/GEGM_MotionLab.git
 cd GEGM_MotionLab
 ```
 
-### 2. Configuration de l'Environnement
+### 2. Configuration de l'Environnement Virtuel .venv
 
 ```bash
 
@@ -88,6 +88,11 @@ source .venv/bin/activate # Linux/Mac
 
 pip install -r requirements.txt
 ```
+
+### 3. Création du fichier de variables d'environnement .env
+
+Créer un fichier de variables d'environnements `.env` à la racine.
+Se baser sur le contenu du fichier `.env.example` et remplacer les valeurs par ses propres informations.
 
 ---
 
@@ -273,20 +278,6 @@ Voir la section **"🐳 Préparation de l'Image Docker pour RunPod"** ci-dessus 
 - Téléchargement des modèles
 - Upload sur OwnCloud via rclone
 - Build et push de l'image Docker
-
-### 4. Configuration OwnCloud
-
-Créez \`config/owncloud.yaml\` :
-
-```yaml
-server_url: "https://www.cloud-gegm.com"
-username: "votre-username"
-password: "votre-password"
-model_folder: "/GEGM_ComfyUI/Models"
-cinemagraph_folder: "/GEGM_ComfyUI/Cinemagraphs"
-create_folders: true
-timeout: 30
-```
 
 ---
 
