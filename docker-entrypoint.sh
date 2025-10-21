@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting Comfy_Img_to_Loop on RunPod B200/H200..."
+echo "🚀 Starting Comfy_Img_to_Loop on RunPod..."
 echo "======================================================="
 
 # Détecter le GPU
@@ -30,48 +30,66 @@ fi
 # TÉLÉCHARGEMENT DES MODÈLES DEPUIS OWNCLOUD
 # ============================================
 
-MODEL_DIR="/workspace/comfyui/ComfyUI/models/diffusion_models/wan2.2-i2v-a14b"
+# Utiliser OWNCLOUD_MODEL_NAME ou par défaut wan2.2-ti2v-5b
+MODEL_NAME="${OWNCLOUD_MODEL_NAME:-wan2.2-ti2v-5b}"
+MODEL_DIR="/workspace/comfyui/ComfyUI/models/diffusion_models/${MODEL_NAME}"
+
+echo ""
+echo "📦 Modèle configuré: $MODEL_NAME"
 
 if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
     echo ""
-    echo "📥 Téléchargement des modèles depuis OwnCloud..."
+    echo "📥 Téléchargement du modèle depuis OwnCloud..."
     echo "   Ceci peut prendre 5-15 minutes..."
     
     python /workspace/scripts/download_models_from_owncloud.py \
-        --model wan2.2-i2v-a14b \
+        --model "$MODEL_NAME" \
         --target-dir /workspace/comfyui/ComfyUI/models/diffusion_models
     
     if [ $? -eq 0 ]; then
-        echo "✅ Modèles téléchargés"
+        echo "✅ Modèle téléchargé"
+        
+        # ============================================
+        # RECONSTITUTION DES FICHIERS DÉCOUPÉS
+        # ============================================
+        
+        CHUNKS_DIR="$MODEL_DIR/chunks"
+        if [ -d "$CHUNKS_DIR" ] && [ -f "$CHUNKS_DIR/mapping.txt" ]; then
+            echo ""
+            echo "🔧 Reconstitution des fichiers découpés..."
+            
+            # Télécharger le script de reconstitution
+            echo "📥 Téléchargement du script de reconstitution..."
+            rclone copy owncloud:/GEGM_ComfyUI/scripts/reassemble_models.sh /tmp/
+            chmod +x /tmp/reassemble_models.sh
+            
+            # Exécuter la reconstitution
+            /tmp/reassemble_models.sh "$MODEL_DIR"
+            
+            if [ $? -eq 0 ]; then
+                echo "✅ Fichiers reconstitués"
+            else
+                echo "❌ Échec de la reconstitution"
+                exit 1
+            fi
+        else
+            echo "   Pas de chunks à reconstituer"
+        fi
     else
         echo "❌ Échec téléchargement modèles"
+        echo "⚠️  Vérifiez les credentials OwnCloud"
         exit 1
     fi
-    
-    # ============================================
-    # RECONSTITUTION DES FICHIERS DÉCOUPÉS
-    # ============================================
-    
-    echo ""
-    echo "🔧 Reconstitution des fichiers découpés..."
-    
-    # Télécharger le script
-    rclone copy owncloud:/GEGM_ComfyUI/scripts/reassemble_models.sh /workspace/
-    chmod +x /workspace/reassemble_models.sh
-    
-    # Exécuter
-    /workspace/reassemble_models.sh /workspace/comfyui/ComfyUI/models/diffusion_models
-    
-    echo "✅ Reconstitution terminée"
 else
     echo ""
-    echo "✅ Modèles déjà présents"
-    du -sh $MODEL_DIR
+    echo "✅ Modèle déjà présent: $MODEL_NAME"
+    du -sh "$MODEL_DIR"
 fi
 
 # ============================================
+# COMFYUI
+# ============================================
 
-# ComfyUI
 if [ ! -d "/workspace/comfyui/ComfyUI" ]; then
     echo ""
     echo "📦 Installing ComfyUI..."

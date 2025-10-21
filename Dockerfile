@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     wget \
     curl \
+    rclone \
     ffmpeg \
     libavcodec-extra \
     libjpeg-dev \
