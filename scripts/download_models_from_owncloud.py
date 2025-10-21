@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Téléchargement des modèles depuis OwnCloud
+Téléchargement des modèles depuis OwnCloud avec rclone
 Utilisé au démarrage des conteneurs RunPod
-Utilise webdavclient3 pour la simplicité
 """
 
 import os
 import sys
-import time
+import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -15,11 +14,53 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
-from webdav3.client import Client
 
 # Configuration du logger
 setup_logger(level="INFO")
-logger = get_logger("download_models")
+logger = get_logger(__name__)
+
+
+def setup_rclone_config() -> bool:
+    """Configure rclone pour OwnCloud"""
+    server_url = os.getenv("OWNCLOUD_SERVER_URL", "").rstrip("/")
+    username = os.getenv("OWNCLOUD_USERNAME", "")
+    password = os.getenv("OWNCLOUD_PASSWORD", "")
+
+    if not all([server_url, username, password]):
+        logger.error("❌ Variables d'environnement OwnCloud manquantes")
+        return False
+
+    # Créer le fichier de configuration rclone
+    rclone_config_dir = Path.home() / ".config" / "rclone"
+    rclone_config_dir.mkdir(parents=True, exist_ok=True)
+
+    rclone_config = rclone_config_dir / "rclone.conf"
+
+    # Obscurcir le mot de passe avec rclone
+    try:
+        result = subprocess.run(
+            ["rclone", "obscure", password], capture_output=True, text=True, check=True
+        )
+        obscured_password = result.stdout.strip()
+    except Exception as e:
+        logger.warning(f"⚠️ Mot de passe non obscurci: {e}")
+        obscured_password = password
+
+    # Configuration WebDAV pour OwnCloud
+    config_content = f"""[owncloud]
+type = webdav
+url = {server_url}/remote.php/webdav/
+vendor = owncloud
+user = {username}
+pass = {obscured_password}
+"""
+
+    # Écrire la configuration
+    with open(rclone_config, "w") as f:
+        f.write(config_content)
+
+    logger.info("✅ Configuration rclone créée")
+    return True
 
 
 def download_model_from_owncloud(
@@ -27,7 +68,7 @@ def download_model_from_owncloud(
     target_dir: Path = Path("/workspace/comfyui/ComfyUI/models/diffusion_models"),
 ) -> Tuple[bool, Optional[str]]:
     """
-    Télécharge un modèle depuis OwnCloud
+    Télécharge un modèle depuis OwnCloud avec rclone
 
     Args:
         model_name: Nom du modèle
@@ -43,78 +84,73 @@ def download_model_from_owncloud(
     model_target.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Configuration WebDAV
-        options = {
-            "webdav_hostname": os.getenv("OWNCLOUD_SERVER_URL"),
-            "webdav_login": os.getenv("OWNCLOUD_USERNAME"),
-            "webdav_password": os.getenv("OWNCLOUD_PASSWORD"),
-            "webdav_timeout": int(os.getenv("OWNCLOUD_TIMEOUT", "300")),
-        }
+        # Configurer rclone
+        if not setup_rclone_config():
+            return False, "Configuration rclone échouée"
 
-        client = Client(options)
-
-        # Obtenir le chemin distant
+        # Chemin distant
         model_folder = os.getenv("OWNCLOUD_MODEL_FOLDER", "/GEGM_ComfyUI/Models")
-        remote_path = f"{model_folder}/{model_name}/"
+        remote_path = f"owncloud:{model_folder}/{model_name}/"
 
-        logger.info(f"📂 Chemin distant: {remote_path}")
-        logger.info(f"📂 Chemin local: {model_target}")
+        logger.info(f"📂 Source: {remote_path}")
+        logger.info(f"📂 Destination: {model_target}")
 
-        # Lister les fichiers distants
-        logger.info("🔍 Listage des fichiers distants...")
-        files_list = client.list(remote_path, get_info=True)
+        # Commande rclone copy
+        cmd = [
+            "rclone",
+            "copy",
+            remote_path,
+            str(model_target),
+            "--progress",
+            "--transfers",
+            "4",
+            "--retries",
+            "10",
+            "--low-level-retries",
+            "10",
+            "--timeout",
+            "1h",
+            "--contimeout",
+            "60s",
+            "--stats",
+            "30s",
+            "-v",
+        ]
 
-        # Filtrer seulement les fichiers
-        files = [f for f in files_list if not f["isdir"]]
-        total_files = len(files)
+        logger.info("🚀 Lancement du téléchargement...")
 
-        logger.info(f"📦 {total_files} fichiers à télécharger")
+        # Exécuter rclone
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
 
-        # Télécharger chaque fichier
-        downloaded = 0
-        failed = []
+        # Afficher la sortie en temps réel
+        for line in process.stdout:
+            line = line.strip()
+            if line:
+                # Filtrer les lignes importantes
+                if any(
+                    keyword in line
+                    for keyword in ["Transferred:", "Errors:", "Checks:", "ETA"]
+                ):
+                    print(f"   {line}")
+                elif "ERROR" in line:
+                    logger.error(f"   {line}")
 
-        start_time = time.time()
+        process.wait()
 
-        for idx, file_info in enumerate(files, 1):
-            remote_file = f"{remote_path}{file_info['name']}"
-            local_file = model_target / file_info["name"]
+        if process.returncode == 0:
+            logger.info(f"✅ Modèle {model_name} téléchargé !")
 
-            # Créer les sous-dossiers si nécessaire
-            local_file.parent.mkdir(parents=True, exist_ok=True)
+            # Vérifier la taille
+            total_size = sum(
+                f.stat().st_size for f in model_target.rglob("*") if f.is_file()
+            )
+            logger.info(f"📊 Taille totale: {total_size / 1024**3:.2f} GB")
 
-            # Skip si déjà téléchargé et même taille
-            if local_file.exists() and local_file.stat().st_size == file_info["size"]:
-                logger.debug(
-                    f"⏭️  [{idx}/{total_files}] Déjà téléchargé: {file_info['name']}"
-                )
-                downloaded += 1
-                continue
-
-            logger.info(f"📥 [{idx}/{total_files}] {file_info['name']}")
-
-            try:
-                client.download_file(remote_file, str(local_file))
-                downloaded += 1
-                logger.success("   ✅ Téléchargé")
-            except Exception as e:
-                failed.append(file_info["name"])
-                logger.error(f"   ❌ Échec: {e}")
-
-        elapsed = time.time() - start_time
-
-        # Résumé
-        logger.info("=" * 60)
-        logger.info("📊 Résumé:")
-        logger.info(f"   Réussis: {downloaded}/{total_files}")
-        logger.info(f"   Échecs: {len(failed)}")
-        logger.info(f"   Durée: {elapsed:.1f}s")
-
-        if len(failed) == 0:
-            logger.success(f"✅ Modèle {model_name} téléchargé !")
             return True, None
         else:
-            return False, f"{len(failed)} fichiers échoués"
+            return False, f"rclone failed with code {process.returncode}"
 
     except Exception as e:
         logger.error(f"❌ Erreur: {e}")
