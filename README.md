@@ -145,12 +145,14 @@ Configurer rclone
 rclone config
 ```
 
+```
 Name: owncloud
 Type: webdav
 URL: https://www.cloud-gegm.com/remote.php/dav
 Vendor: owncloud
 User: votre-username
 Password: votre-password
+```
 
 Tester
 ```
