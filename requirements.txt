@@ -119,8 +119,8 @@ pydantic-settings==2.10.1
 pydantic_core==2.33.2
 pyflakes==3.4.0
 Pygments==2.19.2
-pyobjc-core==11.1
-pyobjc-framework-Cocoa==11.1
+pyobjc-core==11.1; sys_platform == 'darwin'
+pyobjc-framework-Cocoa==11.1; sys_platform == 'darwin'
 pyparsing==3.2.4
 pyperclip==1.10.0
 pytest==8.4.2
