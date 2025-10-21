@@ -147,10 +147,20 @@ Comfy_Img_to_Loop/
 | **Container** | Docker multi-stage |
 | **Cloud** | RunPod, OwnCloud |
 
+## 🧠 Recommandations GPU
+
+- **WAN 2.2 5B** :
+    **RTX 6000 Ada 48Gb** pour meilleur rapport performance prix
+    **H100 SXM 80Gb** pour gagner en vitesse en conservant un coût raisonnable
+    
+- **WAN 2.2 14B** :
+    **H100 SXM 80Gb** pour meilleur rapport performance prix
+    **H200 SXM 141Gb** pour gagner en vitesse en conservant un coût raisonnable
+
 ## 📊 Performance
 
-- **Temps de génération** : 30-120s selon résolution
-- **Qualités supportées** : 1080p à 4K
+- **Temps de génération** : 30-600s selon résolution
+- **Qualités supportées** : de 720p jusqu'à 4K
 - **Formats** : MP4, GIF, WebM
 - **Durée** : 3-10 secondes par boucle
 

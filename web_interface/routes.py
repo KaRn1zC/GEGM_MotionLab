@@ -18,6 +18,43 @@ from src.owncloud_uploader import OwnCloudUploader, upload_cinemagraph
 from workflows.workflow_manager import workflow_manager
 from web_interface.jobs import JobStatus
 
+from PIL import Image
+import math
+
+
+def calculate_optimal_resolution(
+    source_width: int, source_height: int, target_width: int, target_height: int
+) -> tuple:
+    """
+    Calcule la résolution optimale en conservant le ratio
+
+    Args:
+        source_width, source_height: Résolution source
+        target_width, target_height: Résolution demandée
+
+    Returns:
+        (final_width, final_height): Résolution ajustée (multiple de 8)
+    """
+    # Ratio de l'image source
+    source_ratio = source_width / source_height
+
+    # Arrondir à un multiple de 8 (requis par les modèles de diffusion)
+    def round_to_multiple(value, multiple=8):
+        return int(math.ceil(value / multiple) * multiple)
+
+    # Calculer selon le ratio source
+    if target_width / target_height > source_ratio:
+        # Limité par la hauteur
+        final_height = round_to_multiple(target_height)
+        final_width = round_to_multiple(final_height * source_ratio)
+    else:
+        # Limité par la largeur
+        final_width = round_to_multiple(target_width)
+        final_height = round_to_multiple(final_width / source_ratio)
+
+    return final_width, final_height
+
+
 logger = get_logger("flask_routes")
 
 # Blueprints
@@ -116,31 +153,7 @@ async def process_cinemagraph_generation(job_id: str):
 
             job_manager.update_job(job_id, output_video=output_path)
 
-            # 3. Upload sur OwnCloud si configuré
-            if current_app.owncloud_config:
-                job_manager.update_job(
-                    job_id,
-                    status=JobStatus.UPLOADING_RESULT,
-                    current_step="Upload sur OwnCloud",
-                    progress=0.9,
-                )
-
-                async with OwnCloudUploader(current_app.owncloud_config) as uploader:
-                    upload_result = await upload_cinemagraph(
-                        uploader=uploader,
-                        video_file=Path(output_path),
-                        workflow_id=workflow_id,
-                        prompt=job.prompt,
-                        generation_params=job.parameters,
-                        create_share=True,
-                    )
-
-                    if upload_result.success and upload_result.share_link:
-                        job_manager.update_job(
-                            job_id, owncloud_link=upload_result.share_link
-                        )
-
-        # 4. Terminer
+        # 3. Terminer (upload OwnCloud manuel via l'interface)
         job_manager.update_job(
             job_id, status=JobStatus.COMPLETED, progress=1.0, current_step="Terminé"
         )
@@ -164,30 +177,106 @@ def index():
 # === ROUTES API ===
 
 
+@api_bp.route("/analyze-image", methods=["POST"])
+def analyze_image():
+    """
+    Analyse une image uploadée et retourne ses dimensions
+
+    Body:
+        - image: Fichier image
+
+    Returns:
+        JSON avec dimensions source
+    """
+    if "image" not in request.files:
+        return jsonify({"error": "Aucune image fournie"}), 400
+
+    file = request.files["image"]
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Type de fichier non autorisé"}), 400
+
+    try:
+        # Ouvrir l'image avec PIL
+        img = Image.open(file.stream)
+        width, height = img.size
+
+        return jsonify(
+            {
+                "width": width,
+                "height": height,
+                "ratio": round(width / height, 2),
+                "format": img.format,
+                "mode": img.mode,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur analyse image: {e}")
+        return jsonify({"error": f"Erreur analyse image: {str(e)}"}), 400
+
+
+@api_bp.route("/calculate-resolution", methods=["POST"])
+def calc_resolution():
+    """
+    Calcule la résolution optimale
+
+    Body JSON:
+        - source_width, source_height: Dimensions source
+        - target_width, target_height: Dimensions demandées
+
+    Returns:
+        JSON avec résolution finale
+    """
+    data = request.get_json()
+
+    try:
+        # Validation des données avec valeurs par défaut
+        source_w = int(data.get("source_width") or 1920)
+        source_h = int(data.get("source_height") or 1080)
+        target_w = int(data.get("target_width") or source_w)
+        target_h = int(data.get("target_height") or source_h)
+
+        # Vérifier que les valeurs sont positives
+        if source_w <= 0 or source_h <= 0 or target_w <= 0 or target_h <= 0:
+            return jsonify({"error": "Les dimensions doivent être positives"}), 400
+
+        final_w, final_h = calculate_optimal_resolution(
+            source_w, source_h, target_w, target_h
+        )
+
+        return jsonify(
+            {
+                "final_width": final_w,
+                "final_height": final_h,
+                "ratio": round(final_w / final_h, 2),
+                "adjusted": (final_w != target_w or final_h != target_h),
+            }
+        )
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": f"Paramètres invalides: {str(e)}"}), 400
+
+
 @api_bp.route("/generate", methods=["POST"])
 def generate_cinemagraph():
     """
     Crée un job de génération de cinemagraph
 
     Body:
-        - image: Fichier image (multipart/form-data)
+        - image: Fichier image
         - prompt: Prompt de génération
-        - parameters: Paramètres JSON (steps, cfg_scale, etc.)
-
-    Returns:
-        JSON avec job_id
+        - negative_prompt: Negative prompt (optionnel)
+        - target_width, target_height: Résolution demandée
+        - duration: Durée en secondes
+        - fps: Images par seconde
+        - parameters: Autres paramètres JSON
     """
     # Vérifier l'image
     if "image" not in request.files:
         return jsonify({"error": "Aucune image fournie"}), 400
 
     file = request.files["image"]
-
-    if file.filename == "":
-        return jsonify({"error": "Nom de fichier vide"}), 400
-
-    if not allowed_file(file.filename):
-        return jsonify({"error": "Type de fichier non autorisé"}), 400
+    if file.filename == "" or not allowed_file(file.filename):
+        return jsonify({"error": "Fichier invalide"}), 400
 
     # Sauvegarder l'image
     filename = secure_filename(file.filename)
@@ -196,30 +285,61 @@ def generate_cinemagraph():
     filepath = get_file_path(filename)
     file.save(filepath)
 
+    # Analyser l'image pour obtenir les dimensions source
+    try:
+        with Image.open(filepath) as img:
+            source_width, source_height = img.size
+    except Exception as e:
+        return jsonify({"error": f"Erreur lecture image: {e}"}), 400
+
     # Récupérer les paramètres
     prompt = request.form.get("prompt", "")
+    negative_prompt = request.form.get("negative_prompt", "")
 
+    # Résolution
+    target_width = int(request.form.get("target_width", source_width))
+    target_height = int(request.form.get("target_height", source_height))
+
+    final_width, final_height = calculate_optimal_resolution(
+        source_width, source_height, target_width, target_height
+    )
+
+    # Paramètres temporels
+    duration = float(request.form.get("duration", 5.0))  # secondes
+    fps = int(request.form.get("fps", 24))
+    frames = int(duration * fps)
+
+    # Autres paramètres
     try:
         import json
 
         parameters = json.loads(request.form.get("parameters", "{}"))
-    except (json.JSONDecodeError, TypeError, ValueError) as e:
-        logger.warning(f"Paramètres JSON invalides: {e}")
+    except (json.JSONDecodeError, TypeError, ValueError):
         parameters = {}
 
     # Paramètres par défaut
     parameters.setdefault("steps", 20)
     parameters.setdefault("cfg_scale", 7.5)
-    parameters.setdefault("frames", 16)
-    parameters.setdefault("fps", 8)
     parameters.setdefault("noise_level", "high")
+
+    # Ajouter les nouveaux paramètres
+    parameters.update(
+        {
+            "width": final_width,
+            "height": final_height,
+            "frames": frames,
+            "fps": fps,
+            "duration": duration,
+            "negative_prompt": negative_prompt,
+        }
+    )
 
     # Créer le job
     job = current_app.job_manager.create_job(
         input_image=filepath, prompt=prompt, parameters=parameters
     )
 
-    # Lancer la génération en arrière-plan
+    # Lancer la génération
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -232,12 +352,22 @@ def generate_cinemagraph():
     thread.start()
 
     logger.info(f"Génération lancée pour job: {job.job_id}")
+    logger.info(
+        f"   Résolution: {final_width}x{final_height} ({frames} frames @ {fps}fps)"
+    )
 
     return jsonify(
         {
             "job_id": job.job_id,
             "status": job.status.value,
             "message": "Génération lancée",
+            "resolution": {
+                "source": f"{source_width}x{source_height}",
+                "final": f"{final_width}x{final_height}",
+                "frames": frames,
+                "fps": fps,
+                "duration": duration,
+            },
         }
     ), 202
 
@@ -338,6 +468,83 @@ def download_result(job_id):
         as_attachment=True,
         download_name=f"cinemagraph_{job_id}.mp4",
     )
+
+
+@api_bp.route("/jobs/<job_id>/upload-owncloud", methods=["POST"])
+def manual_upload_to_owncloud(job_id):
+    """
+    Upload manuel d'un cinemagraph vers OwnCloud
+
+    Args:
+        job_id: ID du job
+
+    Returns:
+        JSON avec résultat de l'upload
+    """
+    job = current_app.job_manager.get_job(job_id)
+
+    if not job:
+        return jsonify({"error": "Job non trouvé"}), 404
+
+    if job.status != JobStatus.COMPLETED:
+        return jsonify({"error": "Job non terminé"}), 400
+
+    if not job.output_video or not os.path.exists(job.output_video):
+        return jsonify({"error": "Fichier de sortie introuvable"}), 404
+
+    if not current_app.owncloud_config:
+        return jsonify({"error": "OwnCloud non configuré"}), 503
+
+    # Si déjà uploadé
+    if job.owncloud_link:
+        return jsonify(
+            {
+                "success": True,
+                "message": "Déjà uploadé",
+                "share_link": job.owncloud_link,
+            }
+        )
+
+    try:
+        # Upload synchrone
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def do_upload():
+            async with OwnCloudUploader(current_app.owncloud_config) as uploader:
+                result = await upload_cinemagraph(
+                    uploader=uploader,
+                    video_file=Path(job.output_video),
+                    workflow_id=job.workflow_id or job.job_id,
+                    prompt=job.prompt,
+                    generation_params=job.parameters,
+                    create_share=True,
+                )
+                return result
+
+        upload_result = loop.run_until_complete(do_upload())
+
+        if upload_result.success:
+            # Mettre à jour le job
+            current_app.job_manager.update_job(
+                job_id, owncloud_link=upload_result.share_link
+            )
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Upload réussi",
+                    "share_link": upload_result.share_link,
+                }
+            )
+        else:
+            return jsonify(
+                {"success": False, "error": upload_result.error or "Upload échoué"}
+            ), 500
+
+    except Exception as e:
+        logger.error(f"Erreur upload manuel OwnCloud: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @api_bp.route("/statistics", methods=["GET"])
