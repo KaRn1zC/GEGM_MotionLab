@@ -3,346 +3,1278 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comfy_Img_to_Loop - Générateur de Cinemagraphs</title>
-    
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>GEGM MotionLab - Générateur de Cinemagraphs par IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .dropzone {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s;
+        }
+        .dropzone.dragover {
+            border-color: #667eea;
+            background-color: #f7fafc;
+            transform: scale(1.02);
+        }
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-slow {
+            animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
 </head>
-<body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-gradient">
-        <div class="container-fluid">
-            <a class="navbar-brand d-flex align-items-center" href="/">
-                <i class="bi bi-film me-2 fs-3"></i>
-                <span class="brand-text">Comfy_Img_to_Loop</span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#generator">
-                            <i class="bi bi-magic me-1"></i> Générateur
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#gallery">
-                            <i class="bi bi-grid me-1"></i> Galerie
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#monitor">
-                            <i class="bi bi-activity me-1"></i> Monitoring
-                        </a>
-                    </li>
-                </ul>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        
+        <!-- Header -->
+        <div class="gradient-bg rounded-2xl shadow-2xl p-8 mb-8 text-white">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-4xl font-bold mb-2 flex items-center">
+                        🎬 GEGM MotionLab 🔬
+                    </h1>
+                    <p class="text-purple-100 text-lg">
+                        Studio de création vos images en cinemagraphs avec l'IA WAN 2.2
+                    </p>
+                </div>
+                <div class="hidden md:block">
+                    <div class="bg-white bg-opacity-20 backdrop-blur rounded-lg px-6 py-3">
+                        <p class="text-sm font-semibold">Modèle</p>
+                        <p class="text-2xl font-bold">WAN 2.2</p>
+                    </div>
+                </div>
             </div>
         </div>
-    </nav>
 
-    <!-- Hero Section -->
-    <div class="hero-section text-center text-white">
-        <div class="container">
-            <h1 class="display-4 fw-bold mb-3">
-                <i class="bi bi-stars"></i> Générateur de Cinemagraphs
-            </h1>
-            <p class="lead mb-4">
-                Transformez vos images en cinemagraphs magiques avec l'IA WAN 2.2
-            </p>
-            <div class="hero-badges">
-                <span class="badge bg-success me-2">
-                    <i class="bi bi-check-circle"></i> ComfyUI Ready
-                </span>
-                <span class="badge bg-info me-2">
-                    <i class="bi bi-cloud-check"></i> OwnCloud Sync
-                </span>
-                <span class="badge bg-warning">
-                    <i class="bi bi-lightning-charge"></i> IA WAN 2.2
-                </span>
-            </div>
-        </div>
-    </div>
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left Column: Form -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Image Upload -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">📤 Image Source</h2>
+                    
+                    <div id="dropzone" class="dropzone rounded-xl p-12 text-center cursor-pointer bg-gradient-to-br from-gray-50 to-gray-100">
+                        <svg class="mx-auto h-16 w-16 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <p class="text-xl font-semibold text-gray-700 mb-2">
+                            Glissez-déposez une image
+                        </p>
+                        <p class="text-gray-500 mb-1">ou cliquez pour parcourir</p>
+                        <p class="text-sm text-gray-400">
+                            Formats: JPG, PNG, WEBP (max 100MB)
+                        </p>
+                    </div>
+                    
+                    <input type="file" id="imageInput" accept="image/*" class="hidden">
+                    
+                    <div id="imagePreview" class="mt-6 hidden">
+                        <div class="relative">
+                            <img id="previewImg" class="preview-image mx-auto rounded-lg shadow-md" alt="Preview">
+                            <button id="removeImage" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="mt-3 bg-blue-50 rounded-lg p-3">
+                            <p id="imageInfo" class="text-sm text-blue-800 font-medium"></p>
+                        </div>
+                    </div>
+                </div>
 
-    <div class="container my-5">
-        <!-- Generator Section -->
-        <div id="generator" class="section-card mb-5">
-            <div class="section-header">
-                <h2>
-                    <i class="bi bi-magic"></i> Générateur de Cinemagraph
-                </h2>
-                <p class="text-muted">Uploadez une image et définissez les paramètres d'animation</p>
-            </div>
+                <!-- Resolution Settings -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">📐 Résolution de Sortie</h2>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                Largeur (Width)
+                            </label>
+                            <input type="number" id="targetWidth" value="1920" min="256" max="7680" step="8"
+                                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                Hauteur (Height)
+                            </label>
+                            <input type="number" id="targetHeight" value="1080" min="256" max="4320" step="8"
+                                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+                        </div>
+                    </div>
+                    
+                    <div id="finalResolution" class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-semibold text-blue-900 mb-1">
+                                    📊 Résolution finale
+                                </p>
+                                <p id="finalRes" class="text-2xl font-bold text-blue-700 font-mono">-</p>
+                            </div>
+                            <svg class="w-12 h-12 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                        </div>
+                        <p id="ratioWarning" class="text-xs text-blue-600 mt-2 hidden">
+                            ⚠️ Résolution ajustée pour conserver le ratio d'origine
+                        </p>
+                    </div>
+                </div>
 
-            <div class="row">
-                <!-- Left Column: Image Upload -->
-                <div class="col-lg-5 mb-4">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-body">
-                            <h5 class="card-title mb-3">
-                                <i class="bi bi-image"></i> Image d'entrée
-                            </h5>
+                <!-- Temporal Parameters -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">⏱️ Paramètres Temporels</h2>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                Durée (secondes)
+                            </label>
+                            <input type="number" id="duration" value="5" min="1" max="30" step="0.5"
+                                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                FPS (images/sec)
+                            </label>
+                            <select id="fps" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                <option value="8">8 FPS</option>
+                                <option value="12">12 FPS</option>
+                                <option value="16">16 FPS</option>
+                                <option value="24" selected>24 FPS (Recommandé)</option>
+                                <option value="30">30 FPS</option>
+                                <option value="60">60 FPS</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                        <p class="text-sm text-purple-700">
+                            → Total: <span id="totalFrames" class="font-mono font-bold text-lg">120</span> frames
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Prompts -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">✍️ Description de l'Animation</h2>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Prompt
+                        </label>
+                        <textarea id="prompt" rows="3" 
+                                  placeholder="Ex: gentle water flowing naturally with subtle current, smooth animation, realistic movement"
+                                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Negative Prompt (À éviter) 
+                            <span class="text-gray-400 font-normal">- Optionnel</span>
+                        </label>
+                        <textarea id="negativePrompt" rows="2" 
+                                  placeholder="Ex: static, frozen, distorted, artifacts, glitches, unnatural movement, flickering"
+                                  class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"></textarea>
+                        <p class="text-xs text-gray-500 mt-1">
+                            💡 Décrivez ce que vous ne voulez PAS dans l'animation
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Advanced Parameters -->
+                <details class="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <summary class="px-6 py-4 cursor-pointer font-bold text-gray-700 hover:bg-gray-50 transition flex items-center justify-between">
+                        <span>🎛️ Paramètres Avancés</span>
+                        <svg class="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    
+                    <div class="px-6 pb-6 pt-2 bg-gradient-to-br from-gray-50 to-gray-100 space-y-6">
+                        
+                        <!-- Section 1: Diffusion Settings -->
+                        <div class="bg-white rounded-lg p-4 border-2 border-gray-200">
+                            <h4 class="font-bold text-gray-800 mb-4 flex items-center">
+                                <span class="text-2xl mr-2">⚙️</span>
+                                Paramètres de Diffusion
+                            </h4>
                             
-                            <!-- Drag & Drop Zone -->
-                            <div id="dropZone" class="drop-zone">
-                                <div class="drop-zone-content">
-                                    <i class="bi bi-cloud-upload display-1 text-primary"></i>
-                                    <h5 class="mt-3">Glissez-déposez une image</h5>
-                                    <p class="text-muted">ou cliquez pour parcourir</p>
-                                    <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('fileInput').click()">
-                                        <i class="bi bi-folder2-open"></i> Choisir un fichier
-                                    </button>
-                                    <small class="d-block mt-2 text-muted">
-                                        Formats: JPG, PNG, WEBP (max 100MB)
-                                    </small>
-                                </div>
-                                <input type="file" id="fileInput" accept="image/*" style="display: none;">
-                            </div>
-
-                            <!-- Image Preview -->
-                            <div id="imagePreview" class="image-preview" style="display: none;">
-                                <div class="preview-header">
-                                    <span class="preview-filename"></span>
-                                    <button class="btn btn-sm btn-danger" onclick="clearImage()">
-                                        <i class="bi bi-x-circle"></i>
-                                    </button>
-                                </div>
-                                <img id="previewImg" src="" alt="Preview" class="img-fluid rounded">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right Column: Parameters -->
-                <div class="col-lg-7">
-                    <div class="card shadow-sm">
-                        <div class="card-body">
-                            <h5 class="card-title mb-4">
-                                <i class="bi bi-sliders"></i> Paramètres de génération
-                            </h5>
-
-                            <!-- Prompt -->
-                            <div class="mb-4">
-                                <label class="form-label fw-bold">
-                                    <i class="bi bi-chat-left-text"></i> Prompt
-                                </label>
-                                <textarea id="promptInput" class="form-control" rows="3" 
-                                    placeholder="Décrivez l'animation souhaitée... (ex: gentle water ripples, subtle wind in hair)"></textarea>
-                                <div class="form-text">
-                                    💡 Laissez vide pour une animation automatique
-                                </div>
-                            </div>
-
-                            <!-- Steps -->
-                            <div class="mb-4">
-                                <label class="form-label fw-bold d-flex justify-content-between">
-                                    <span><i class="bi bi-layers"></i> Steps</span>
-                                    <span class="text-primary" id="stepsValue">20</span>
-                                </label>
-                                <input type="range" class="form-range" id="stepsInput" 
-                                    min="10" max="50" value="20" step="5">
-                                <div class="d-flex justify-content-between text-muted small">
-                                    <span>Rapide (10)</span>
-                                    <span>Qualité (50)</span>
-                                </div>
-                            </div>
-
-                            <!-- CFG Scale -->
-                            <div class="mb-4">
-                                <label class="form-label fw-bold d-flex justify-content-between">
-                                    <span><i class="bi bi-speedometer"></i> CFG Scale</span>
-                                    <span class="text-primary" id="cfgValue">7.5</span>
-                                </label>
-                                <input type="range" class="form-range" id="cfgInput" 
-                                    min="1" max="15" value="7.5" step="0.5">
-                                <div class="d-flex justify-content-between text-muted small">
-                                    <span>Créatif (1)</span>
-                                    <span>Précis (15)</span>
-                                </div>
-                            </div>
-
-                            <!-- Frames & FPS -->
-                            <div class="row mb-4">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold d-flex justify-content-between">
-                                        <span><i class="bi bi-collection"></i> Frames</span>
-                                        <span class="text-primary" id="framesValue">16</span>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                
+                                <!-- Steps -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Steps
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
                                     </label>
-                                    <input type="range" class="form-range" id="framesInput" 
-                                        min="8" max="32" value="16" step="4">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold d-flex justify-content-between">
-                                        <span><i class="bi bi-camera-video"></i> FPS</span>
-                                        <span class="text-primary" id="fpsValue">8</span>
-                                    </label>
-                                    <input type="range" class="form-range" id="fpsInput" 
-                                        min="4" max="24" value="8" step="4">
-                                </div>
-                            </div>
-
-                            <!-- Noise Level -->
-                            <div class="mb-4">
-                                <label class="form-label fw-bold">
-                                    <i class="bi bi-soundwave"></i> Niveau d'animation
-                                </label>
-                                <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="noiseLevel" id="noiseLow" value="low">
-                                    <label class="btn btn-outline-primary" for="noiseLow">
-                                        <i class="bi bi-droplet"></i> Subtil
-                                    </label>
+                                    <input type="number" id="steps" value="20" min="5" max="100" step="5"
+                                        class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                                     
-                                    <input type="radio" class="btn-check" name="noiseLevel" id="noiseHigh" value="high" checked>
-                                    <label class="btn btn-outline-primary" for="noiseHigh">
-                                        <i class="bi bi-droplet-fill"></i> Dynamique
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Nombre d'itérations de diffusion</p>
+                                        <p class="mb-2">Plus de steps = meilleure qualité mais plus lent</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>10-15:</strong> Test rapide</p>
+                                            <p>• <strong>20-25:</strong> Production normale ✅</p>
+                                            <p>• <strong>30+:</strong> Qualité premium</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- CFG Scale -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        CFG Scale
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
                                     </label>
+                                    <input type="number" id="cfgScale" value="7.5" min="1" max="20" step="0.5"
+                                        class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Adhérence au prompt</p>
+                                        <p class="mb-2">Contrôle à quel point le modèle suit votre description</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>5-6:</strong> Créatif, naturel</p>
+                                            <p>• <strong>7-8:</strong> Équilibré ✅</p>
+                                            <p>• <strong>10+:</strong> Strict, peut créer artifacts</p>
+                                        </div>
+                                    </div>
                                 </div>
+                                
+                                <!-- Denoise Strength -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Denoise: <span id="denoiseValue" class="ml-1 text-purple-600">75%</span>
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <input type="range" id="denoise" min="0" max="100" value="75" step="5"
+                                        class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                                        oninput="document.getElementById('denoiseValue').textContent = this.value + '%'">
+                                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>Image source</span>
+                                        <span>Nouvelle génération</span>
+                                    </div>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Force de transformation</p>
+                                        <p class="mb-2">Balance entre conserver l'image source et générer du nouveau</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>30-50%:</strong> Très fidèle à l'image</p>
+                                            <p>• <strong>60-80%:</strong> Équilibré ✅</p>
+                                            <p>• <strong>90%+:</strong> Presque nouvelle image</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                             </div>
+                        </div>
 
-                            <!-- Generate Button -->
-                            <button id="generateBtn" class="btn btn-primary btn-lg w-100 mt-3" onclick="startGeneration()">
-                                <i class="bi bi-stars"></i> Générer le Cinemagraph
+                        <!-- Section 2: Motion Settings -->
+                        <div class="bg-white rounded-lg p-4 border-2 border-purple-200">
+                            <h4 class="font-bold text-gray-800 mb-4 flex items-center">
+                                <span class="text-2xl mr-2">🌊</span>
+                                Paramètres de Mouvement
+                            </h4>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                
+                                <!-- Motion Intensity -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Motion Intensity
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <select id="motionIntensity" class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                        <option value="subtle">Subtil (5-15%)</option>
+                                        <option value="moderate" selected>Modéré (15-35%) ⭐</option>
+                                        <option value="strong">Fort (35-60%)</option>
+                                        <option value="extreme">Extrême (60%+)</option>
+                                    </select>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Amplitude du mouvement</p>
+                                        <p class="mb-2">Contrôle l'intensité de l'animation</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>Subtil:</strong> Reflets, fumée légère</p>
+                                            <p>• <strong>Modéré:</strong> Eau, feuillage ✅</p>
+                                            <p>• <strong>Fort:</strong> Cascades, océan</p>
+                                            <p>• <strong>Extrême:</strong> Feu, tempête</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Noise Level -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Noise Level
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <select id="noiseLevel" class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                        <option value="low">Low (conservateur)</option>
+                                        <option value="medium">Medium (équilibré)</option>
+                                        <option value="high" selected>High (dynamique) ⭐</option>
+                                    </select>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Bruit initial de génération</p>
+                                        <p class="mb-2">Détermine la liberté créative du modèle</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>Low:</strong> Très fidèle à l'image</p>
+                                            <p>• <strong>Medium:</strong> Bon compromis</p>
+                                            <p>• <strong>High:</strong> Animations naturelles ✅</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Loop Smoothness -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Loop Smoothness
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <select id="loopSmooth" class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                        <option value="none">Aucune (rapide)</option>
+                                        <option value="basic" selected>Basique (blend) ⭐</option>
+                                        <option value="advanced">Avancée (interpolation)</option>
+                                    </select>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Qualité de la boucle</p>
+                                        <p class="mb-2">Améliore la transition entre fin et début</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>None:</strong> Peut saccader</p>
+                                            <p>• <strong>Basic:</strong> Transition lissée ✅</p>
+                                            <p>• <strong>Advanced:</strong> Boucle parfaite (lent)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Temporal Consistency -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Consistency: <span id="consistencyValue" class="ml-1 text-purple-600">80%</span>
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <input type="range" id="consistency" min="0" max="100" value="80" step="10"
+                                        class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                                        oninput="document.getElementById('consistencyValue').textContent = this.value + '%'">
+                                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>Créatif</span>
+                                        <span>Stable</span>
+                                    </div>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Cohérence temporelle</p>
+                                        <p class="mb-2">Maintient la cohérence entre frames (évite le flickering)</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>40-60%:</strong> Plus créatif, risque flicker</p>
+                                            <p>• <strong>70-90%:</strong> Équilibré ✅</p>
+                                            <p>• <strong>95%+:</strong> Très stable, moins naturel</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                        </div>
+
+                        <!-- Section 3: Expert Settings -->
+                        <div class="bg-white rounded-lg p-4 border-2 border-indigo-200">
+                            <h4 class="font-bold text-gray-800 mb-4 flex items-center">
+                                <span class="text-2xl mr-2">🔬</span>
+                                Paramètres Experts
+                            </h4>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                
+                                <!-- Seed -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Seed (Graine aléatoire)
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <div class="flex gap-2">
+                                        <input type="number" id="seed" value="-1" min="-1" max="4294967295"
+                                            class="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            placeholder="-1 (aléatoire)">
+                                        <button type="button" onclick="document.getElementById('seed').value = Math.floor(Math.random() * 4294967295)"
+                                                class="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition"
+                                                title="Générer un seed aléatoire">
+                                            🎲
+                                        </button>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-1">-1 = différent à chaque fois | Nombre fixe = résultat reproductible</p>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-80 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-2 text-yellow-300">🎲 Seed : Reproductibilité des résultats</p>
+                                        
+                                        <div class="space-y-2 mb-2">
+                                            <div class="bg-gray-800 rounded p-2">
+                                                <p class="font-semibold text-green-400">Seed = -1 (défaut)</p>
+                                                <p class="text-gray-300">→ Résultat différent à chaque fois</p>
+                                                <p class="text-xs text-gray-400">Utilisez pour explorer des variations</p>
+                                            </div>
+                                            
+                                            <div class="bg-gray-800 rounded p-2">
+                                                <p class="font-semibold text-blue-400">Seed = 123456 (fixe)</p>
+                                                <p class="text-gray-300">→ Résultat identique à chaque fois</p>
+                                                <p class="text-xs text-gray-400">Mêmes paramètres = même animation</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="border-t border-gray-700 pt-2">
+                                            <p class="font-semibold text-purple-300 mb-1">💡 Cas d'usage :</p>
+                                            <ul class="text-xs space-y-1">
+                                                <li>• Génération réussie ? <span class="text-yellow-300">Notez le seed</span></li>
+                                                <li>• Besoin d'une variation ? <span class="text-green-300">Réutilisez ce seed</span></li>
+                                                <li>• Changez juste le prompt/FPS pour tester</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <div class="mt-2 bg-yellow-900 bg-opacity-30 border border-yellow-600 rounded p-2">
+                                            <p class="text-yellow-200 text-xs">
+                                                <strong>⚠️ Important :</strong> Le seed ne garantit pas un résultat identique si vous changez le modèle IA (WAN 2.2 5B vs 14B) ou la résolution.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Motion Area -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Motion Area
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <select id="motionArea" class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                        <option value="full" selected>Image complète ⭐</option>
+                                        <option value="center">Centre uniquement</option>
+                                        <option value="edges">Bordures uniquement</option>
+                                        <option value="bottom">Moitié inférieure</option>
+                                        <option value="top">Moitié supérieure</option>
+                                    </select>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Zone de mouvement</p>
+                                        <p class="mb-2">Définit quelle partie de l'image doit bouger</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>Full:</strong> Toute l'image ✅</p>
+                                            <p>• <strong>Center:</strong> Sujet central (portrait)</p>
+                                            <p>• <strong>Edges:</strong> Arrière-plan (décor)</p>
+                                            <p>• <strong>Bottom:</strong> Eau, sol</p>
+                                            <p>• <strong>Top:</strong> Ciel, nuages</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Color Preservation -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Color Preservation: <span id="colorPres" class="ml-1 text-purple-600">70%</span>
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <input type="range" id="colorPreservation" min="0" max="100" value="70" step="10"
+                                        class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                                        oninput="document.getElementById('colorPres').textContent = this.value + '%'">
+                                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>Créatif</span>
+                                        <span>Fidèle</span>
+                                    </div>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Conservation des couleurs</p>
+                                        <p class="mb-2">Maintient les teintes de l'image source</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>30-50%:</strong> Peut changer couleurs</p>
+                                            <p>• <strong>60-80%:</strong> Conserve teintes ✅</p>
+                                            <p>• <strong>90%+:</strong> Couleurs identiques</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Frame Blending -->
+                                <div class="relative group">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                                        Frame Blending: <span id="blendValue" class="ml-1 text-purple-600">3</span> frames
+                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
+                                    </label>
+                                    <input type="range" id="frameBlending" min="1" max="7" value="3" step="2"
+                                        class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                                        oninput="document.getElementById('blendValue').textContent = this.value">
+                                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                        <span>Rapide</span>
+                                        <span>Fluide</span>
+                                    </div>
+                                    
+                                    <!-- Tooltip -->
+                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
+                                        <p class="font-semibold mb-1">Interpolation temporelle</p>
+                                        <p class="mb-2">Nombre de frames utilisées pour lisser le mouvement</p>
+                                        <div class="bg-gray-800 rounded p-2 text-xs">
+                                            <p>• <strong>1:</strong> Aucun lissage (rapide)</p>
+                                            <p>• <strong>3:</strong> Fluide standard ✅</p>
+                                            <p>• <strong>5-7:</strong> Très fluide (slow-mo)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                        </div>
+
+                        <!-- Preset Buttons -->
+                        <div class="bg-gradient-to-r from-purple-100 to-indigo-100 rounded-lg p-4 border-2 border-purple-300">
+                            <h4 class="font-bold text-gray-800 mb-3 flex items-center">
+                                <span class="text-2xl mr-2">⚡</span>
+                                Presets Rapides
+                            </h4>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <button type="button" id="preset-quality" onclick="applyPreset('quality')"
+                                        class="preset-btn px-4 py-2 bg-white border-2 border-purple-300 rounded-lg hover:bg-purple-50 transition font-semibold text-sm">
+                                    💎 Qualité Max
+                                </button>
+                                <button type="button" id="preset-balanced" onclick="applyPreset('balanced')"
+                                        class="preset-btn preset-active px-4 py-2 bg-purple-600 text-white rounded-lg transition font-semibold text-sm">
+                                    ⚖️ Équilibré
+                                </button>
+                                <button type="button" id="preset-fast" onclick="applyPreset('fast')"
+                                        class="preset-btn px-4 py-2 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition font-semibold text-sm">
+                                    ⚡ Rapide
+                                </button>
+                                <button type="button" id="preset-natural" onclick="applyPreset('natural')"
+                                        class="preset-btn px-4 py-2 bg-white border-2 border-green-300 rounded-lg hover:bg-green-50 transition font-semibold text-sm">
+                                    🍃 Naturel
+                                </button>
+                            </div>
+                            <div class="mt-3 bg-white rounded-lg p-3 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div>
+                                    <p class="font-semibold text-purple-700">💎 Qualité Max</p>
+                                    <p>30 steps, détails fins</p>
+                                    <p class="text-purple-600">⏱️ ~8 min</p>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-purple-700">⚖️ Équilibré</p>
+                                    <p>Bon compromis</p>
+                                    <p class="text-purple-600">⏱️ ~5 min</p>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-700">⚡ Rapide</p>
+                                    <p>15 steps, test rapide</p>
+                                    <p class="text-gray-600">⏱️ ~3 min</p>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-green-700">🍃 Naturel</p>
+                                    <p>Mouvement subtil, couleurs fidèles</p>
+                                    <p class="text-green-600">⏱️ ~5 min</p>
+                                </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Submit Button -->
+                <button type="button" id="generateBtn" disabled
+                        class="w-full gradient-bg text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+                    🚀 Générer l'Animation
+                </button>
+
+            </div>
+
+            <!-- Right Column: Status & History -->
+            <div class="space-y-6">
+                
+                <!-- Progress Card -->
+                <div id="progressCard" class="bg-white rounded-xl shadow-lg p-6 hidden">
+                    <h3 class="text-xl font-bold mb-4 text-gray-800">⏳ Génération en cours...</h3>
+                    
+                    <div class="relative pt-1">
+                        <div class="flex mb-2 items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-purple-600 bg-purple-200">
+                                    Progression
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span id="progressPercent" class="text-xs font-semibold inline-block text-purple-600">
+                                    0%
+                                </span>
+                            </div>
+                        </div>
+                        <div class="overflow-hidden h-3 mb-4 text-xs flex rounded-full bg-purple-200">
+                            <div id="progressBar" class="gradient-bg shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-lg p-3 mt-3">
+                        <p id="progressText" class="text-sm text-gray-700 pulse-slow">
+                            Initialisation...
+                        </p>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-center">
+                        <svg class="animate-spin h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Result Card -->
+                <div id="resultCard" class="bg-white rounded-xl shadow-lg p-6 hidden">
+                    <h3 class="text-xl font-bold mb-4 text-green-700">✅ Génération terminée !</h3>
+                    
+                    <video id="resultVideo" controls class="w-full rounded-lg shadow-md mb-4"></video>
+                    
+                    <!-- OwnCloud Upload Status -->
+                    <div id="owncloudStatus" class="mb-4 hidden">
+                        <div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
+                            <p class="text-sm font-semibold text-blue-900 flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                                </svg>
+                                <span id="owncloudStatusText">Upload OwnCloud en cours...</span>
+                            </p>
+                            <a id="owncloudLink" href="#" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 underline mt-1 hidden"></a>
+                        </div>
+                    </div>
+                    
+                    <!-- Seed Info -->
+                    <div id="seedInfo" class="mb-4 bg-gray-100 rounded-lg p-3 text-sm font-mono text-gray-700"></div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <a id="downloadBtn" href="#" download
+                            class="flex items-center justify-center bg-green-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-green-700 text-center transition">
+                                ⬇️ Télécharger
+                            </a>
+                            <button id="saveToOwnCloudBtn" onclick="manualUploadToOwnCloud()" class="hidden flex items-center justify-center bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition">
+                                ☁️ Sauvegarder
+                            </button>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="deleteBtn" onclick="deleteCurrentJob()" 
+                                    class="flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-red-700 transition">
+                                🗑️ Supprimer
+                            </button>
+                            <button id="newBtn" onclick="location.reload()"
+                                    class="flex items-center justify-center bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-gray-700 transition">
+                                🔄 Nouvelle
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- Storage Warning -->
+                    <div class="mt-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3">
+                        <p class="text-xs text-yellow-800">
+                            <strong>⚠️ Important :</strong> Les fichiers non sauvegardés sur OwnCloud seront perdus à la fermeture du Pod RunPod.
+                        </p>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Monitor Section -->
-        <div id="monitor" class="section-card mb-5">
-            <div class="section-header">
-                <h2>
-                    <i class="bi bi-activity"></i> Monitoring
-                </h2>
-                <p class="text-muted">Suivi en temps réel de la génération</p>
-            </div>
+                <!-- Info Card -->
+                <div class="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl shadow-lg p-6 border-2 border-purple-200">
+                    <h3 class="text-lg font-bold mb-3 text-purple-900">💡 Conseils</h3>
+                    <ul class="space-y-2 text-sm text-gray-700">
+                        <li class="flex items-start">
+                            <span class="text-purple-600 mr-2">•</span>
+                            <span>Utilisez des images avec des éléments naturellement animables (eau, feuillage, cheveux)</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-purple-600 mr-2">•</span>
+                            <span>Décrivez précisément le mouvement souhaité dans le prompt</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-purple-600 mr-2">•</span>
+                            <span>24 FPS est idéal pour un rendu fluide et naturel</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-purple-600 mr-2">•</span>
+                            <span>Les boucles de 3-5 secondes donnent les meilleurs résultats</span>
+                        </li>
+                    </ul>
+                </div>
 
-            <!-- Current Job -->
-            <div id="currentJob" style="display: none;">
-                <div class="card shadow-sm border-primary">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-hourglass-split text-primary"></i>
-                                <span id="currentJobStatus">Génération en cours...</span>
-                            </h5>
-                            <button class="btn btn-sm btn-outline-danger" onclick="cancelJob()">
-                                <i class="bi bi-x-circle"></i> Annuler
-                            </button>
+                <!-- Stats Card -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-bold mb-3 text-gray-800">📊 Statistiques</h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Générations aujourd'hui</span>
+                            <span class="font-bold text-purple-600">0</span>
                         </div>
-
-                        <!-- Progress Bar -->
-                        <div class="progress mb-3" style="height: 30px;">
-                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                                role="progressbar" style="width: 0%">
-                                <span id="progressText">0%</span>
-                            </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Temps moyen</span>
+                            <span class="font-bold text-purple-600">~5 min</span>
                         </div>
-
-                        <div class="row text-center">
-                            <div class="col-md-3">
-                                <div class="stat-box">
-                                    <i class="bi bi-clock-history text-muted"></i>
-                                    <div class="stat-value" id="elapsedTime">0s</div>
-                                    <div class="stat-label">Temps écoulé</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="stat-box">
-                                    <i class="bi bi-gear-wide-connected text-primary"></i>
-                                    <div class="stat-value" id="currentStep">-</div>
-                                    <div class="stat-label">Étape</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="stat-box">
-                                    <i class="bi bi-collection text-success"></i>
-                                    <div class="stat-value" id="jobFrames">16</div>
-                                    <div class="stat-label">Frames</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="stat-box">
-                                    <i class="bi bi-cpu text-warning"></i>
-                                    <div class="stat-value" id="jobSteps">20</div>
-                                    <div class="stat-label">Steps</div>
-                                </div>
-                            </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Modèle actif</span>
+                            <span class="font-bold text-purple-600">WAN 2.2 5B</span>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Result Section -->
-            <div id="resultSection" style="display: none;">
-                <div class="alert alert-success shadow-sm" role="alert">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill fs-3 me-3"></i>
-                        <div class="flex-grow-1">
-                            <h5 class="alert-heading mb-1">Génération terminée !</h5>
-                            <p class="mb-2">Votre cinemagraph est prêt</p>
-                            <div class="btn-group">
-                                <a id="downloadLink" class="btn btn-sm btn-success" download>
-                                    <i class="bi bi-download"></i> Télécharger
-                                </a>
-                                <a id="owncloudLink" class="btn btn-sm btn-info" target="_blank" style="display: none;">
-                                    <i class="bi bi-cloud"></i> Voir sur OwnCloud
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
-        <!-- Gallery Section -->
-        <div id="gallery" class="section-card">
-            <div class="section-header">
-                <h2>
-                    <i class="bi bi-grid"></i> Galerie
-                </h2>
-                <p class="text-muted">Historique des générations</p>
-            </div>
-
-            <div id="galleryGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-                <!-- Jobs dynamiques injectés ici -->
-            </div>
-
-            <div id="emptyGallery" class="text-center py-5 text-muted">
-                <i class="bi bi-images display-1"></i>
-                <p class="mt-3">Aucune génération pour le moment</p>
-            </div>
-        </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer mt-5 py-4 bg-dark text-white">
-        <div class="container text-center">
-            <p class="mb-2">
-                <strong>Comfy_Img_to_Loop</strong> v1.0.0 - Générateur de Cinemagraphs IA
-            </p>
-            <p class="text-muted mb-0">
-                Powered by <span class="text-primary">WAN 2.2</span> • 
-                <span class="text-info">ComfyUI</span> • 
-                <span class="text-success">OwnCloud</span>
-            </p>
-            <p class="mt-2 mb-0">
-                <small>© 2025 GEGM - Tous droits réservés</small>
-            </p>
-        </div>
-    </footer>
+    <script>
+        // ============================================
+        // VARIABLES GLOBALES
+        // ============================================
+        let sourceWidth = 0;
+        let sourceHeight = 0;
+        let selectedFile = null;
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+        // Elements DOM
+        const dropzone = document.getElementById('dropzone');
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImg');
+        const imageInfo = document.getElementById('imageInfo');
+        const removeImage = document.getElementById('removeImage');
+        const targetWidth = document.getElementById('targetWidth');
+        const targetHeight = document.getElementById('targetHeight');
+        const finalRes = document.getElementById('finalRes');
+        const ratioWarning = document.getElementById('ratioWarning');
+        const duration = document.getElementById('duration');
+        const fps = document.getElementById('fps');
+        const totalFrames = document.getElementById('totalFrames');
+        const generateBtn = document.getElementById('generateBtn');
+        const progressCard = document.getElementById('progressCard');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressText = document.getElementById('progressText');
+        const resultCard = document.getElementById('resultCard');
+
+        // ============================================
+        // IMAGE UPLOAD (Drag & Drop)
+        // ============================================
+        
+        dropzone.addEventListener('click', () => imageInput.click());
+        
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleImageSelect(files[0]);
+            }
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleImageSelect(e.target.files[0]);
+            }
+        });
+
+        removeImage.addEventListener('click', () => {
+            selectedFile = null;
+            imagePreview.classList.add('hidden');
+            generateBtn.disabled = true;
+            imageInput.value = '';
+        });
+
+        // ============================================
+        // HANDLE IMAGE SELECTION
+        // ============================================
+        
+        async function handleImageSelect(file) {
+            selectedFile = file;
+            
+            // Preview local
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                imagePreview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+
+            // Analyze image
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch('/api/analyze-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Erreur analyse');
+                
+                const data = await response.json();
+                
+                sourceWidth = data.width;
+                sourceHeight = data.height;
+                
+                imageInfo.textContent = `📏 ${data.width}x${data.height} (ratio ${data.ratio}) - ${data.format}`;
+                
+                // Update target resolution
+                targetWidth.value = data.width;
+                targetHeight.value = data.height;
+                
+                calculateResolution();
+                generateBtn.disabled = false;
+                
+            } catch (error) {
+                alert('Erreur lors de l\'analyse de l\'image: ' + error.message);
+            }
+        }
+
+        // ============================================
+        // CALCULATE RESOLUTION
+        // ============================================
+        
+        targetWidth.addEventListener('input', calculateResolution);
+        targetHeight.addEventListener('input', calculateResolution);
+
+        async function calculateResolution() {
+            if (!sourceWidth || !sourceHeight) return;
+
+            try {
+                const response = await fetch('/api/calculate-resolution', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        source_width: sourceWidth,
+                        source_height: sourceHeight,
+                        target_width: parseInt(targetWidth.value),
+                        target_height: parseInt(targetHeight.value)
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Erreur calcul');
+                
+                const data = await response.json();
+                
+                finalRes.textContent = `${data.final_width}x${data.final_height} (ratio ${data.ratio})`;
+                ratioWarning.classList.toggle('hidden', !data.adjusted);
+                
+            } catch (error) {
+                console.error('Erreur calcul résolution:', error);
+            }
+        }
+
+        // ============================================
+        // CALCULATE TOTAL FRAMES
+        // ============================================
+        
+        duration.addEventListener('input', updateFrames);
+        fps.addEventListener('change', updateFrames);
+
+        function updateFrames() {
+            const frames = Math.round(parseFloat(duration.value) * parseInt(fps.value));
+            totalFrames.textContent = frames;
+        }
+
+        // ============================================
+        // FORM SUBMISSION
+        // ============================================
+        
+        generateBtn.addEventListener('click', async () => {
+            if (!selectedFile) {
+                alert('Veuillez sélectionner une image');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+            formData.append('prompt', document.getElementById('prompt').value);
+            formData.append('negative_prompt', document.getElementById('negativePrompt').value);
+            formData.append('target_width', targetWidth.value);
+            formData.append('target_height', targetHeight.value);
+            formData.append('duration', duration.value);
+            formData.append('fps', fps.value);
+            formData.append('parameters', JSON.stringify({
+                steps: parseInt(document.getElementById('steps').value),
+                cfg_scale: parseFloat(document.getElementById('cfgScale').value),
+                denoise: parseInt(document.getElementById('denoise').value),
+                motion_intensity: document.getElementById('motionIntensity').value,
+                noise_level: document.getElementById('noiseLevel').value,
+                loop_smooth: document.getElementById('loopSmooth').value,
+                consistency: parseInt(document.getElementById('consistency').value),
+                seed: parseInt(document.getElementById('seed').value),
+                motion_area: document.getElementById('motionArea').value,
+                color_preservation: parseInt(document.getElementById('colorPreservation').value),
+                frame_blending: parseInt(document.getElementById('frameBlending').value)
+            }));
+
+            // Show progress
+            progressCard.classList.remove('hidden');
+            resultCard.classList.add('hidden');
+            generateBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Erreur serveur');
+                
+                const data = await response.json();
+
+                if (data.job_id) {
+                    pollJobStatus(data.job_id);
+                } else {
+                    throw new Error(data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+                progressCard.classList.add('hidden');
+                generateBtn.disabled = false;
+            }
+        });
+
+        // ============================================
+        // POLL JOB STATUS
+        // ============================================
+        
+        async function pollJobStatus(jobId) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/jobs/${jobId}`);
+                    if (!response.ok) throw new Error('Erreur statut');
+                    
+                    const job = await response.json();
+
+                    const progress = Math.round(job.progress * 100);
+                    progressBar.style.width = progress + '%';
+                    progressPercent.textContent = progress + '%';
+                    progressText.textContent = job.current_step || 'En cours...';
+
+                    if (job.status === 'completed') {
+                        clearInterval(interval);
+                        progressCard.classList.add('hidden');
+                        showResult(jobId);
+                        generateBtn.disabled = false;
+                    } else if (job.status === 'failed') {
+                        clearInterval(interval);
+                        alert('Erreur: ' + (job.error_message || 'Génération échouée'));
+                        progressCard.classList.add('hidden');
+                        generateBtn.disabled = false;
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    alert('Erreur lors de la vérification du statut');
+                    progressCard.classList.add('hidden');
+                    generateBtn.disabled = false;
+                }
+            }, 2000);
+        }
+
+        // ============================================
+        // SHOW RESULT
+        // ============================================
+        
+        async function showResult(jobId) {
+            const videoUrl = `/api/jobs/${jobId}/download`;
+            document.getElementById('resultVideo').src = videoUrl;
+            document.getElementById('downloadBtn').href = videoUrl;
+            
+            // Récupérer les infos du job pour afficher le seed
+            try {
+                const response = await fetch(`/api/jobs/${jobId}`);
+                const job = await response.json();
+                
+                // Afficher le seed utilisé
+                const seedUsed = job.parameters?.seed || 'N/A';
+                const seedInfo = document.getElementById('seedInfo');
+                if (seedInfo) {
+                    seedInfo.textContent = `Seed utilisé: ${seedUsed}`;
+                    if (seedUsed !== -1) {
+                        seedInfo.innerHTML += ` <button onclick="document.getElementById('seed').value = ${seedUsed}; alert('Seed copié dans les paramètres!')" class="ml-2 text-xs bg-purple-500 text-white px-2 py-1 rounded hover:bg-purple-600">📋 Réutiliser</button>`;
+                    }
+                }
+            } catch (error) {
+                console.error('Erreur récupération seed:', error);
+            }
+            
+            resultCard.classList.remove('hidden');
+        }
+
+        // ============================================
+        // INITIALIZE
+        // ============================================
+        
+        updateFrames();
+
+        // ============================================
+        // FONCTION PRESETS
+        // ============================================
+        function applyPreset(preset) {
+            const presets = {
+                quality: {
+                    steps: 30,
+                    cfgScale: 8,
+                    denoise: 80,
+                    motionIntensity: 'moderate',
+                    noiseLevel: 'high',
+                    loopSmooth: 'advanced',
+                    consistency: 90,
+                    seed: -1,
+                    motionArea: 'full',
+                    colorPreservation: 80,
+                    frameBlending: 5
+                },
+                balanced: {
+                    steps: 20,
+                    cfgScale: 7.5,
+                    denoise: 75,
+                    motionIntensity: 'moderate',
+                    noiseLevel: 'high',
+                    loopSmooth: 'basic',
+                    consistency: 80,
+                    seed: -1,
+                    motionArea: 'full',
+                    colorPreservation: 70,
+                    frameBlending: 3
+                },
+                fast: {
+                    steps: 15,
+                    cfgScale: 7,
+                    denoise: 70,
+                    motionIntensity: 'moderate',
+                    noiseLevel: 'medium',
+                    loopSmooth: 'basic',
+                    consistency: 70,
+                    seed: -1,
+                    motionArea: 'full',
+                    colorPreservation: 60,
+                    frameBlending: 1
+                },
+                natural: {
+                    steps: 20,
+                    cfgScale: 6,
+                    denoise: 65,
+                    motionIntensity: 'subtle',
+                    noiseLevel: 'high',
+                    loopSmooth: 'advanced',
+                    consistency: 85,
+                    seed: -1,
+                    motionArea: 'full',
+                    colorPreservation: 90,
+                    frameBlending: 3
+                }
+            };
+            
+            const p = presets[preset];
+            document.getElementById('steps').value = p.steps;
+            document.getElementById('cfgScale').value = p.cfgScale;
+            document.getElementById('denoise').value = p.denoise;
+            document.getElementById('denoiseValue').textContent = p.denoise + '%';
+            document.getElementById('motionIntensity').value = p.motionIntensity;
+            document.getElementById('noiseLevel').value = p.noiseLevel;
+            document.getElementById('loopSmooth').value = p.loopSmooth;
+            document.getElementById('consistency').value = p.consistency;
+            document.getElementById('consistencyValue').textContent = p.consistency + '%';
+            document.getElementById('seed').value = p.seed;
+            document.getElementById('motionArea').value = p.motionArea;
+            document.getElementById('colorPreservation').value = p.colorPreservation;
+            document.getElementById('colorPres').textContent = p.colorPreservation + '%';
+            document.getElementById('frameBlending').value = p.frameBlending;
+            document.getElementById('blendValue').textContent = p.frameBlending;
+            
+            // Mettre à jour l'état visuel des boutons
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('preset-active', 'bg-purple-600', 'text-white');
+                btn.classList.add('bg-white');
+            });
+            
+            const activeBtn = document.getElementById('preset-' + preset);
+            activeBtn.classList.add('preset-active', 'bg-purple-600', 'text-white');
+            activeBtn.classList.remove('bg-white');
+            
+            // Animation visuelle
+            const details = document.querySelector('details');
+            details.classList.add('ring-4', 'ring-purple-400');
+            setTimeout(() => details.classList.remove('ring-4', 'ring-purple-400'), 500);
+        }
+
+        // ============================================
+        // GESTION DES RÉSULTATS
+        // ============================================
+
+        let currentJobId = null;
+
+        // Fonction améliorée pour afficher le résultat
+        async function showResult(jobId) {
+            currentJobId = jobId;
+            
+            const videoUrl = `/api/jobs/${jobId}/download`;
+            document.getElementById('resultVideo').src = videoUrl;
+            document.getElementById('downloadBtn').href = videoUrl;
+            
+            // Récupérer les infos du job
+            try {
+                const response = await fetch(`/api/jobs/${jobId}`);
+                const job = await response.json();
+                
+                // Afficher le seed utilisé
+                const seedUsed = job.parameters?.seed || 'N/A';
+                const seedInfo = document.getElementById('seedInfo');
+                if (seedInfo) {
+                    seedInfo.innerHTML = `🎲 Seed utilisé: <strong>${seedUsed}</strong>`;
+                    if (seedUsed !== -1 && seedUsed !== 'N/A') {
+                        seedInfo.innerHTML += ` <button onclick="document.getElementById('seed').value = ${seedUsed}; alert('✅ Seed copié dans les paramètres avancés!')" class="ml-2 text-xs bg-purple-500 text-white px-2 py-1 rounded hover:bg-purple-600">📋 Réutiliser</button>`;
+                    }
+                }
+                
+                // Gérer le statut OwnCloud
+                const owncloudStatus = document.getElementById('owncloudStatus');
+                const owncloudStatusText = document.getElementById('owncloudStatusText');
+                const owncloudLink = document.getElementById('owncloudLink');
+                const saveBtn = document.getElementById('saveToOwnCloudBtn');
+                
+                if (job.owncloud_link) {
+                    // Déjà uploadé sur OwnCloud
+                    owncloudStatus.classList.remove('hidden');
+                    owncloudStatusText.innerHTML = `
+                        <svg class="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Sauvegardé sur OwnCloud ✅
+                    `;
+                    owncloudLink.href = job.owncloud_link;
+                    owncloudLink.textContent = '🔗 Ouvrir dans OwnCloud';
+                    owncloudLink.classList.remove('hidden');
+                    saveBtn.classList.add('hidden');
+                } else {
+                    // Pas encore uploadé - afficher le bouton
+                    saveBtn.classList.remove('hidden');
+                }
+                
+            } catch (error) {
+                console.error('Erreur récupération infos job:', error);
+            }
+            
+            resultCard.classList.remove('hidden');
+        }
+
+        // ============================================
+        // UPLOAD MANUEL SUR OWNCLOUD
+        // ============================================
+
+        async function manualUploadToOwnCloud() {
+            if (!currentJobId) {
+                alert('❌ Aucun job actif');
+                return;
+            }
+            
+            const btn = document.getElementById('saveToOwnCloudBtn');
+            const originalText = btn.innerHTML;
+            
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Upload en cours...';
+                
+                const response = await fetch(`/api/jobs/${currentJobId}/upload-owncloud`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('Erreur upload');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Mettre à jour l'interface
+                    const owncloudStatus = document.getElementById('owncloudStatus');
+                    const owncloudStatusText = document.getElementById('owncloudStatusText');
+                    const owncloudLink = document.getElementById('owncloudLink');
+                    
+                    owncloudStatus.classList.remove('hidden');
+                    owncloudStatusText.innerHTML = `
+                        <svg class="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Sauvegardé sur OwnCloud ✅
+                    `;
+                    
+                    if (data.share_link) {
+                        owncloudLink.href = data.share_link;
+                        owncloudLink.textContent = '🔗 Ouvrir dans OwnCloud';
+                        owncloudLink.classList.remove('hidden');
+                    }
+                    
+                    btn.classList.add('hidden');
+                    
+                    alert('✅ Fichier sauvegardé sur OwnCloud avec succès !');
+                } else {
+                    throw new Error(data.error || 'Upload échoué');
+                }
+                
+            } catch (error) {
+                alert('❌ Erreur lors de la sauvegarde: ' + error.message);
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        // ============================================
+        // SUPPRESSION DE JOB
+        // ============================================
+
+        async function deleteCurrentJob() {
+            if (!currentJobId) {
+                alert('❌ Aucun job à supprimer');
+                return;
+            }
+            
+            const confirmation = confirm('🗑️ Êtes-vous sûr de vouloir supprimer cette génération ?\n\n⚠️ Cette action est irréversible et libérera de l\'espace sur le Pod.');
+            
+            if (!confirmation) return;
+            
+            try {
+                const response = await fetch(`/api/jobs/${currentJobId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) throw new Error('Erreur suppression');
+                
+                const data = await response.json();
+                
+                alert('✅ ' + data.message);
+                
+                // Réinitialiser l'interface
+                currentJobId = null;
+                location.reload();
+                
+            } catch (error) {
+                alert('❌ Erreur lors de la suppression: ' + error.message);
+            }
+        }
+
+    </script>
 </body>
 </html>
