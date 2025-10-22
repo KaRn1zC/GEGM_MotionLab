@@ -128,11 +128,22 @@ class ComfyUIClient:
             # Test de connectivité HTTP d'abord
             await self._test_http_connection()
 
-            # Établir la connexion WebSocket
-            self.websocket = await websockets.connect(
-                f"{self.config.websocket_url}?clientId={self.client_id}",
-                timeout=self.config.timeout,
-            )
+            # Connexion WebSocket avec timeout correct
+            try:
+                self.websocket = await asyncio.wait_for(
+                    websockets.connect(
+                        f"{self.config.websocket_url}?clientId={self.client_id}",
+                        open_timeout=30,  # Timeout d'ouverture de connexion
+                        ping_timeout=20,  # Timeout pour les pings
+                        close_timeout=10,  # Timeout pour la fermeture
+                    ),
+                    timeout=self.config.timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"Timeout lors de la connexion WebSocket ({self.config.timeout}s)"
+                )
+                raise ComfyUIError(f"Timeout de connexion après {self.config.timeout}s")
 
             self.is_connected = True
             logger.success("✅ Connexion WebSocket établie avec ComfyUI")
@@ -149,8 +160,14 @@ class ComfyUIClient:
         except asyncio.TimeoutError:
             logger.error("Timeout lors de la connexion à ComfyUI")
             return False
+        except ComfyUIError:
+            # Déjà loggué dans le try ci-dessus
+            return False
         except Exception as e:
             logger.error(f"Erreur lors de la connexion à ComfyUI: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
             return False
 
     async def _test_http_connection(self):
