@@ -339,17 +339,32 @@ def generate_cinemagraph():
         input_image=filepath, prompt=prompt, parameters=parameters
     )
 
-    # Lancer la génération
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    def run_async():
-        loop.run_until_complete(process_cinemagraph_generation(job.job_id))
-
+    # ============================================================
+    # Génération avec contexte Flask
+    # ============================================================
     import threading
 
-    thread = threading.Thread(target=run_async, daemon=True)
+    def run_async(job_id: str):
+        """Exécute la génération async avec contexte Flask"""
+        # Récupérer l'application Flask avant le thread
+        app = current_app._get_current_object()
+
+        # Créer une nouvelle event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # Exécuter avec le contexte Flask
+            with app.app_context():
+                loop.run_until_complete(process_cinemagraph_generation(job_id))
+        except Exception as e:
+            logger.error(f"Erreur dans run_async pour job {job_id}: {e}")
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=run_async, args=(job.job_id,), daemon=True)
     thread.start()
+    # ============================================================
 
     logger.info(f"Génération lancée pour job: {job.job_id}")
     logger.info(
