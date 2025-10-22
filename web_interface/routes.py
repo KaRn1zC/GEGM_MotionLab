@@ -84,7 +84,17 @@ async def process_cinemagraph_generation(job_id: str):
     Args:
         job_id: ID du job à traiter
     """
-    job_manager = current_app.job_manager
+    # ✅ CORRECTION: Récupérer depuis le contexte Flask
+    from flask import current_app as app
+
+    try:
+        job_manager = app.job_manager
+        comfyui_config = app.comfyui_config
+    except RuntimeError:
+        # Contexte Flask non disponible - ne devrait jamais arriver après correction #2
+        logger.error(f"Contexte Flask non disponible pour job {job_id}")
+        return
+
     job = job_manager.get_job(job_id)
 
     if not job:
@@ -114,7 +124,7 @@ async def process_cinemagraph_generation(job_id: str):
             job_id, current_step="Génération du cinemagraph", progress=0.3
         )
 
-        async with ComfyUISession(current_app.comfyui_config) as client:
+        async with ComfyUISession(comfyui_config) as client:
             # Upload de l'image
             with open(job.input_image, "rb") as f:
                 image_data = f.read()
@@ -147,7 +157,9 @@ async def process_cinemagraph_generation(job_id: str):
                 raise Exception("Aucune vidéo générée")
 
             # Sauvegarder la vidéo
-            output_path = get_file_path(f"output_{job_id}.mp4")
+            output_path = os.path.join(
+                app.config["UPLOAD_FOLDER"], f"output_{job_id}.mp4"
+            )
             with open(output_path, "wb") as f:
                 f.write(output_images[0]["data"])
 
@@ -162,6 +174,9 @@ async def process_cinemagraph_generation(job_id: str):
 
     except Exception as e:
         logger.error(f"Erreur job {job_id}: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
         job_manager.update_job(job_id, status=JobStatus.FAILED, error_message=str(e))
 
 
@@ -340,15 +355,17 @@ def generate_cinemagraph():
     )
 
     # ============================================================
-    # Génération avec contexte Flask
+    # CORRECTION: Génération avec contexte Flask
     # ============================================================
     import threading
 
+    # Récupérer l'app Flask et les configs AVANT le thread
+    app = current_app._get_current_object()
+    job_manager = current_app.job_manager
+    comfyui_cfg = current_app.comfyui_config
+
     def run_async(job_id: str):
         """Exécute la génération async avec contexte Flask"""
-        # Récupérer l'application Flask avant le thread
-        app = current_app._get_current_object()
-
         # Créer une nouvelle event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -356,9 +373,16 @@ def generate_cinemagraph():
         try:
             # Exécuter avec le contexte Flask
             with app.app_context():
+                # Restaurer les configs dans le contexte
+                current_app.job_manager = job_manager
+                current_app.comfyui_config = comfyui_cfg
+
                 loop.run_until_complete(process_cinemagraph_generation(job_id))
         except Exception as e:
             logger.error(f"Erreur dans run_async pour job {job_id}: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
         finally:
             loop.close()
 
