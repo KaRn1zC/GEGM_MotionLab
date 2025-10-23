@@ -32,6 +32,49 @@ class WorkflowTemplate:
 
         logger.debug(f"Template chargé: {self.name} v{self.version}")
 
+    def _detect_available_model(self) -> str:
+        """
+        Détecte automatiquement quel modèle WAN 2.2 est disponible
+
+        Returns:
+            str: Nom du dossier du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
+        """
+        import os
+
+        # Chemins possibles des modèles
+        comfyui_models_dir = Path("comfyui/ComfyUI/models/checkpoints")
+
+        # Variante 1: Environnement RunPod
+        if not comfyui_models_dir.exists():
+            comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
+
+        # Variante 2: Local
+        if not comfyui_models_dir.exists():
+            comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
+
+        # Priorité : 14B > 5B
+        model_priority = [
+            "wan2.2-i2v-a14b",  # 14B (meilleure qualité)
+            "wan2.2-ti2v-5b",  # 5B (plus rapide)
+        ]
+
+        for model_name in model_priority:
+            model_path = comfyui_models_dir / model_name
+            if model_path.exists() and any(model_path.glob("*.safetensors")):
+                logger.info(f"✅ Modèle détecté: {model_name}")
+                return model_name
+
+        # Fallback: Essayer de lire depuis variable d'environnement
+        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
+        logger.warning(f"⚠️  Aucun modèle trouvé, utilisation variable env: {env_model}")
+        return env_model
+
+    def _generate_random_seed(self) -> int:
+        """Génère un seed aléatoire valide (>= 0)"""
+        import random
+
+        return random.randint(0, 2**31 - 1)
+
     def apply_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Applique les paramètres au template et retourne le workflow final
@@ -44,6 +87,17 @@ class WorkflowTemplate:
         """
         # Valider les paramètres
         validated_params = self._validate_parameters(params)
+
+        # Détecter et injecter le modèle automatiquement
+        if "model_name" not in validated_params:
+            detected_model = self._detect_available_model()
+            validated_params["model_name"] = detected_model
+            logger.info(f"🤖 Modèle auto-détecté: {detected_model}")
+
+        # Remplacer seed=-1 par un seed aléatoire
+        if "seed" in validated_params and validated_params["seed"] == -1:
+            validated_params["seed"] = self._generate_random_seed()
+            logger.info(f"🎲 Seed aléatoire généré: {validated_params['seed']}")
 
         # Cloner le workflow pour éviter les modifications
         workflow = copy.deepcopy(self.workflow)

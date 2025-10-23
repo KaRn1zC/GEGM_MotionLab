@@ -38,6 +38,7 @@
     "seed": {
       "type": "integer",
       "default": -1,
+      "min": -1,
       "description": "Seed pour reproductibilité (-1 = aléatoire)"
     },
     "frames": {
@@ -93,7 +94,7 @@
     "3": {
       "class_type": "CheckpointLoaderSimple",
       "inputs": {
-        "ckpt_name": "wan2.2-i2v-a14b/{noise_level}_noise_model.safetensors"
+        "ckpt_name": "{model_name}/{noise_level}_noise_model.safetensors"
       }
     },
     "4": {
