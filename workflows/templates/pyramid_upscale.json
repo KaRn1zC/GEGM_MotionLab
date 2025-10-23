@@ -89,7 +89,7 @@
     "2": {
       "class_type": "CheckpointLoaderSimple",
       "inputs": {
-        "ckpt_name": "{model_name}/{noise_level}_noise_model.safetensors"
+        "ckpt_name": "{checkpoint_path}"
       }
     },
     "3": {

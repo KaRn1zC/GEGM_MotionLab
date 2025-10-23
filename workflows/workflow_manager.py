@@ -32,14 +32,60 @@ class WorkflowTemplate:
 
         logger.debug(f"Template chargé: {self.name} v{self.version}")
 
-    def _detect_available_model(self) -> str:
+    def _detect_available_model(self) -> tuple[str, str]:
         """
         Détecte automatiquement quel modèle WAN 2.2 est disponible
 
         Returns:
-            str: Nom du dossier du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
+            tuple: (model_name, model_type) où model_type = "5b" ou "14b"
         """
         import os
+
+        # Chemins possibles des modèles
+        comfyui_models_dir = Path("comfyui/ComfyUI/models/diffusion_models")
+
+        # Variante 1: Environnement RunPod
+        if not comfyui_models_dir.exists():
+            comfyui_models_dir = Path(
+                "/workspace/comfyui/ComfyUI/models/diffusion_models"
+            )
+
+        # Variante 2: Local
+        if not comfyui_models_dir.exists():
+            comfyui_models_dir = Path("../comfyui/ComfyUI/models/diffusion_models")
+
+        # Priorité : 14B > 5B
+        model_priority = [
+            ("wan2.2-i2v-a14b", "14b"),  # 14B (meilleure qualité)
+            ("wan2.2-ti2v-5b", "5b"),  # 5B (plus rapide)
+        ]
+
+        for model_name, model_type in model_priority:
+            model_path = comfyui_models_dir / model_name
+            if model_path.exists() and any(model_path.glob("*.safetensors")):
+                logger.info(f"✅ Modèle détecté: {model_name} (type: {model_type})")
+                return model_name, model_type
+
+        # Fallback: Essayer de lire depuis variable d'environnement
+        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
+        model_type = (
+            "14b" if "14b" in env_model.lower() or "a14b" in env_model.lower() else "5b"
+        )
+        logger.warning(
+            f"⚠️ Aucun modèle trouvé, utilisation variable env: {env_model} (type: {model_type})"
+        )
+        return env_model, model_type
+
+    def _get_model_checkpoint_path(self, model_name: str) -> str:
+        """
+        Retourne le chemin du checkpoint selon le type de modèle
+
+        Args:
+            model_name: Nom du dossier (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
+
+        Returns:
+            str: Chemin du fichier checkpoint principal
+        """
 
         # Chemins possibles des modèles
         comfyui_models_dir = Path("comfyui/ComfyUI/models/checkpoints")
@@ -52,22 +98,33 @@ class WorkflowTemplate:
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
 
-        # Priorité : 14B > 5B
-        model_priority = [
-            "wan2.2-i2v-a14b",  # 14B (meilleure qualité)
-            "wan2.2-ti2v-5b",  # 5B (plus rapide)
-        ]
+        model_path = comfyui_models_dir / model_name
 
-        for model_name in model_priority:
-            model_path = comfyui_models_dir / model_name
-            if model_path.exists() and any(model_path.glob("*.safetensors")):
-                logger.info(f"✅ Modèle détecté: {model_name}")
-                return model_name
+        # Détection automatique selon la structure des fichiers
+        if "5b" in model_name.lower():
+            # Modèle 5B : chercher diffusion_pytorch_model-00001-of-00003.safetensors
+            checkpoint_file = (
+                model_path / "diffusion_pytorch_model-00001-of-00003.safetensors"
+            )
+            if checkpoint_file.exists():
+                logger.info("✅ Modèle 5B détecté : checkpoint unifié")
+                return (
+                    f"{model_name}/diffusion_pytorch_model-00001-of-00003.safetensors"
+                )
 
-        # Fallback: Essayer de lire depuis variable d'environnement
-        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
-        logger.warning(f"⚠️  Aucun modèle trouvé, utilisation variable env: {env_model}")
-        return env_model
+        elif "14b" in model_name.lower() or "a14b" in model_name.lower():
+            # Modèle 14B : chercher high_noise_model.safetensors (architecture MoE)
+            checkpoint_file = model_path / "high_noise_model.safetensors"
+            if checkpoint_file.exists():
+                logger.info("✅ Modèle 14B détecté : architecture MoE")
+                # Le paramètre {noise_level} sera remplacé par "high" ou "low"
+                return f"{model_name}/{{noise_level}}_noise_model.safetensors"
+
+        # Fallback : retourner le chemin par défaut du template
+        logger.warning(
+            "⚠️ Structure de modèle inconnue, utilisation du template par défaut"
+        )
+        return f"{model_name}/{{noise_level}}_noise_model.safetensors"
 
     def _generate_random_seed(self) -> int:
         """Génère un seed aléatoire valide (>= 0)"""
@@ -90,9 +147,17 @@ class WorkflowTemplate:
 
         # Détecter et injecter le modèle automatiquement
         if "model_name" not in validated_params:
-            detected_model = self._detect_available_model()
+            detected_model, model_type = self._detect_available_model()
             validated_params["model_name"] = detected_model
-            logger.info(f"🤖 Modèle auto-détecté: {detected_model}")
+            validated_params["model_type"] = model_type
+            logger.info(
+                f"🤖 Modèle auto-détecté: {detected_model} (type: {model_type})"
+            )
+
+        # Construire le chemin de checkpoint adapté au modèle
+        checkpoint_path = self._get_model_checkpoint_path(detected_model)
+        validated_params["checkpoint_path"] = checkpoint_path
+        logger.info(f"📁 Chemin checkpoint: {checkpoint_path}")
 
         # Remplacer seed=-1 par un seed aléatoire
         if "seed" in validated_params and validated_params["seed"] == -1:
