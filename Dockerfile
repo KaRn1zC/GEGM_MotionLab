@@ -1,12 +1,10 @@
-# ============================================
-# Dockerfile optimisé pour RunPod B200
-# Image LÉGÈRE - Modèles téléchargés depuis OwnCloud
-# ============================================
+# Dockerfile optimisé pour RunPod
+# Modèles téléchargés depuis OwnCloud
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
 # Métadonnées
 LABEL maintainer="GEGM <arnaud.boy@gegmgroup.com>"
-LABEL description="Comfy_Img_to_Loop pour RunPod B200/H200 - Modèles OwnCloud"
+LABEL description="Comfy_Img_to_Loop pour RunPod - Modèles OwnCloud"
 LABEL version="2.0.0-runpod-owncloud"
 LABEL cuda.version="12.8.1"
 
@@ -74,6 +72,10 @@ COPY --exclude=models . /workspace/
 
 # Installer ComfyUI
 RUN /workspace/install-comfyui.sh
+
+# Vérifier les dépendances critiques WAN 2.2
+RUN python -c "import torch; import diffusers; import transformers; print('✅ WAN dependencies OK')" || \
+    (echo "❌ Missing dependencies" && exit 1)
 
 # Les modèles seront téléchargés depuis OwnCloud au démarrage
 # Voir docker-entrypoint.sh

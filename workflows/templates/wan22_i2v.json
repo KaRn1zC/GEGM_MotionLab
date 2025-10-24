@@ -85,56 +85,38 @@
       }
     },
     "2": {
-      "class_type": "CLIPTextEncode",
+      "class_type": "WanVideoModelLoader",
       "inputs": {
-        "text": "{prompt}",
-        "clip": ["3", 1]
+        "model": "{model_name}",
+        "device": "cuda",
+        "dtype": "bf16"
       }
     },
     "3": {
-      "class_type": "CheckpointLoaderSimple",
+      "class_type": "WanVideoConditioning",
       "inputs": {
-        "ckpt_name": "{checkpoint_path}"
+        "model": ["2", 0],
+        "prompt": "{prompt}",
+        "negative_prompt": "{negative_prompt}"
       }
     },
     "4": {
-      "class_type": "CLIPTextEncode",
+      "class_type": "WanVideoImageToVideoSampler",
       "inputs": {
-        "text": "{negative_prompt}",
-        "clip": ["3", 1]
+        "model": ["2", 0],
+        "conditioning": ["3", 0],
+        "image": ["1", 0],
+        "num_frames": "{frames}",
+        "steps": "{steps}",
+        "cfg": "{cfg_scale}",
+        "seed": "{seed}",
+        "width": 512,
+        "height": 512,
+        "motion_bucket_id": "{motion_bucket_id}",
+        "fps": "{fps}"
       }
     },
     "5": {
-      "class_type": "EmptyLatentImage",
-      "inputs": {
-        "width": 512,
-        "height": 512,
-        "batch_size": "{frames}"
-      }
-    },
-    "6": {
-      "class_type": "KSampler",
-      "inputs": {
-        "seed": "{seed}",
-        "steps": "{steps}",
-        "cfg": "{cfg_scale}",
-        "sampler_name": "euler",
-        "scheduler": "normal",
-        "denoise": 1.0,
-        "model": ["3", 0],
-        "positive": ["2", 0],
-        "negative": ["4", 0],
-        "latent_image": ["5", 0]
-      }
-    },
-    "7": {
-      "class_type": "VAEDecode",
-      "inputs": {
-        "samples": ["6", 0],
-        "vae": ["3", 2]
-      }
-    },
-    "8": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
         "frame_rate": "{fps}",
@@ -143,7 +125,7 @@
         "format": "video/h264-mp4",
         "pingpong": false,
         "save_output": true,
-        "images": ["7", 0]
+        "images": ["4", 0]
       }
     }
   },
