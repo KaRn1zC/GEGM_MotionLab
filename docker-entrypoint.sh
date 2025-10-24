@@ -32,7 +32,7 @@ fi
 
 # Utiliser OWNCLOUD_MODEL_NAME ou par défaut wan2.2-ti2v-5b
 MODEL_NAME="${OWNCLOUD_MODEL_NAME:-wan2.2-ti2v-5b}"
-MODEL_DIR="/workspace/comfyui/ComfyUI/models/diffusion_models/${MODEL_NAME}"
+MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
@@ -44,7 +44,7 @@ if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
     
     python /workspace/scripts/download_models_from_owncloud.py \
         --model "$MODEL_NAME" \
-        --target-dir /workspace/comfyui/ComfyUI/models/diffusion_models
+        --target-dir /workspace/comfyui/ComfyUI/models/checkpoints
     
     if [ $? -eq 0 ]; then
         echo "✅ Modèle téléchargé"
