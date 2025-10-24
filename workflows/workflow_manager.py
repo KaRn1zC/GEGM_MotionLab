@@ -35,35 +35,35 @@ class WorkflowTemplate:
     def _detect_available_model(self) -> tuple[str, str]:
         """
         Détecte automatiquement quel modèle WAN 2.2 est disponible
-        
+
         Returns:
             tuple: (model_name, model_type) où model_type = "5b" ou "14b"
         """
         import os
-        
+
         # Chemins possibles des modèles
         comfyui_models_dir = Path("comfyui/ComfyUI/models/checkpoints")
-        
+
         # Variante 1: Environnement RunPod
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
-        
+
         # Variante 2: Local
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
-        
+
         # Priorité : 14B > 5B
         model_priority = [
             ("wan2.2-i2v-a14b", "14b"),  # 14B (meilleure qualité)
-            ("wan2.2-ti2v-5b", "5b"),    # 5B (plus rapide)
+            ("wan2.2-ti2v-5b", "5b"),  # 5B (plus rapide)
         ]
-        
+
         for model_name, model_type in model_priority:
             model_path = comfyui_models_dir / model_name
             if model_path.exists() and any(model_path.glob("*.safetensors")):
                 logger.info(f"✅ Modèle détecté: {model_name} (type: {model_type})")
                 return model_name, model_type
-        
+
         # Fallback: Essayer de lire depuis variable d'environnement
         env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
         model_type = (
@@ -77,44 +77,46 @@ class WorkflowTemplate:
     def _get_model_checkpoint_path(self, model_name: str) -> str:
         """
         Retourne le chemin du checkpoint selon le type de modèle
-        
+
         Args:
             model_name: Nom du dossier (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
-        
+
         Returns:
             str: Chemin du fichier checkpoint principal
         """
-        
+
         # Chemins possibles des modèles
         comfyui_models_dir = Path("comfyui/ComfyUI/models/checkpoints")
-        
+
         # Variante 1: Environnement RunPod
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
-        
+
         # Variante 2: Local
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
-        
+
         model_path = comfyui_models_dir / model_name
-        
+
         # Détection automatique selon la structure des fichiers
         if "5b" in model_name.lower():
             # Modèle 5B : chercher le premier fichier safetensors (format sharded)
-            checkpoint_files = list(model_path.glob("diffusion_pytorch_model-*.safetensors"))
+            checkpoint_files = list(
+                model_path.glob("diffusion_pytorch_model-*.safetensors")
+            )
             if checkpoint_files:
                 # Utiliser le premier fichier (00001)
                 first_checkpoint = sorted(checkpoint_files)[0]
                 logger.info(f"✅ Modèle 5B détecté : {first_checkpoint.name}")
                 return f"{model_name}/{first_checkpoint.name}"
-        
+
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
             # Modèle 14B : chercher high_noise_model.safetensors (architecture MoE)
             checkpoint_file = model_path / "high_noise_model.safetensors"
             if checkpoint_file.exists():
                 logger.info("✅ Modèle 14B détecté : architecture MoE")
                 return f"{model_name}/high_noise_model.safetensors"
-        
+
         # Fallback : retourner le premier safetensors trouvé
         all_checkpoints = list(model_path.glob("*.safetensors"))
         if all_checkpoints:
@@ -123,7 +125,7 @@ class WorkflowTemplate:
                 f"⚠️ Utilisation du fallback checkpoint: {fallback_checkpoint.name}"
             )
             return f"{model_name}/{fallback_checkpoint.name}"
-        
+
         # Dernier fallback
         logger.error("❌ Aucun checkpoint trouvé !")
         return f"{model_name}/model.safetensors"

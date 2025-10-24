@@ -53,10 +53,16 @@ WORKDIR /workspace
 
 # Copier et installer les dépendances Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --upgrade bitsandbytes
+
+# Installer PyTorch AVANT les autres dépendances
 RUN pip install --upgrade --pre torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/nightly/cu128
+
+# Installer les dépendances de base (sans WAN pour l'instant)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Installer bitsandbytes après PyTorch
+RUN pip install --upgrade bitsandbytes
 
 # Nettoyage
 RUN pip cache purge && \
