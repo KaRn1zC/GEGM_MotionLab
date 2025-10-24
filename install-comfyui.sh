@@ -32,7 +32,7 @@ echo "Installing WanVideoWrapper..."
 git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
 cd ComfyUI-WanVideoWrapper
 
-# Installer les dépendances DEPUIS le requirements.txt du wrapper
+# Installer les dépendances
 if [ -f requirements.txt ]; then
     echo "Installing WanVideoWrapper dependencies..."
     pip install --no-cache-dir -r requirements.txt
@@ -40,6 +40,28 @@ else
     echo "⚠️ No requirements.txt found in WanVideoWrapper, using manual install"
     pip install --no-cache-dir diffusers transformers accelerate
 fi
+
+# Remplacer __init__.py pour corriger les imports relatifs
+echo "Applying ComfyUI compatibility patch..."
+cat > __init__.py << 'EOFPATCH'
+"""
+ComfyUI-WanVideoWrapper
+Fixed imports for ComfyUI compatibility
+"""
+
+# Import nodes et mappings avec gestion d'erreurs
+try:
+    from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+    __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
+    print(f"✅ WanVideoWrapper loaded: {len(NODE_CLASS_MAPPINGS)} nodes")
+except Exception as e:
+    print(f"❌ WanVideoWrapper import failed: {e}")
+    NODE_CLASS_MAPPINGS = {}
+    NODE_DISPLAY_NAME_MAPPINGS = {}
+    __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
+EOFPATCH
+
+echo "✅ WanVideoWrapper patched"
 
 cd ..
 
