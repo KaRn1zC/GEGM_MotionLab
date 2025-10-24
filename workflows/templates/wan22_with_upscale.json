@@ -100,10 +100,11 @@
       }
     },
     "5": {
-      "class_type": "VAEEncode",
+      "class_type": "EmptyLatentImage",
       "inputs": {
-        "pixels": ["1", 0],
-        "vae": ["2", 2]
+        "width": 512,
+        "height": 512,
+        "batch_size": "{frames}"
       }
     },
     "6": {
@@ -135,11 +136,10 @@
       }
     },
     "9": {
-      "class_type": "VideoUpscale",
+      "class_type": "ImageUpscaleWithModel",
       "inputs": {
         "upscale_model": ["8", 0],
-        "images": ["7", 0],
-        "scale_by": "{scale_factor}"
+        "image": ["7", 0]
       }
     },
     "10": {
@@ -155,7 +155,7 @@
       }
     }
   },
-  
+
   "outputs": {
     "video": {
       "node": "10",
