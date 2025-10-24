@@ -80,69 +80,51 @@
       }
     },
     "2": {
-      "class_type": "CheckpointLoaderSimple",
+      "class_type": "WanVideoModelLoader",
       "inputs": {
-        "ckpt_name": "{checkpoint_path}"
+        "model": "{model_name}",
+        "device": "cuda",
+        "dtype": "bf16"
       }
     },
     "3": {
-      "class_type": "CLIPTextEncode",
+      "class_type": "WanVideoConditioning",
       "inputs": {
-        "text": "{prompt}",
-        "clip": ["2", 1]
+        "model": ["2", 0],
+        "prompt": "{prompt}",
+        "negative_prompt": "static, frozen, blurry"
       }
     },
     "4": {
-      "class_type": "CLIPTextEncode",
+      "class_type": "WanVideoImageToVideoSampler",
       "inputs": {
-        "text": "static, frozen, blurry",
-        "clip": ["2", 1]
+        "model": ["2", 0],
+        "conditioning": ["3", 0],
+        "image": ["1", 0],
+        "num_frames": "{frames}",
+        "steps": "{steps_generation}",
+        "cfg": "{cfg_scale}",
+        "seed": "{seed}",
+        "width": 512,
+        "height": 512,
+        "motion_bucket_id": 127,
+        "fps": "{fps}"
       }
     },
     "5": {
-      "class_type": "EmptyLatentImage",
-      "inputs": {
-        "width": 512,
-        "height": 512,
-        "batch_size": "{frames}"
-      }
-    },
-    "6": {
-      "class_type": "KSampler",
-      "inputs": {
-        "seed": "{seed}",
-        "steps": "{steps_generation}",
-        "cfg": "{cfg_scale}",
-        "sampler_name": "euler",
-        "scheduler": "normal",
-        "denoise": 1.0,
-        "model": ["2", 0],
-        "positive": ["3", 0],
-        "negative": ["4", 0],
-        "latent_image": ["5", 0]
-      }
-    },
-    "7": {
-      "class_type": "VAEDecode",
-      "inputs": {
-        "samples": ["6", 0],
-        "vae": ["2", 2]
-      }
-    },
-    "8": {
       "class_type": "UpscaleModelLoader",
       "inputs": {
         "model_name": "RealESRGAN_x4plus.pth"
       }
     },
-    "9": {
+    "6": {
       "class_type": "ImageUpscaleWithModel",
       "inputs": {
-        "upscale_model": ["8", 0],
-        "image": ["7", 0]
+        "upscale_model": ["5", 0],
+        "image": ["4", 0]
       }
     },
-    "10": {
+    "7": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
         "frame_rate": "{fps}",
@@ -151,14 +133,14 @@
         "format": "video/h264-mp4",
         "pingpong": false,
         "save_output": true,
-        "images": ["9", 0]
+        "images": ["6", 0]
       }
     }
   },
 
   "outputs": {
     "video": {
-      "node": "10",
+      "node": "7",
       "output": 0,
       "description": "Cinemagraph upscalé"
     }

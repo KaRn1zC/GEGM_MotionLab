@@ -27,6 +27,22 @@ cd ComfyUI-VideoHelperSuite
 pip install --no-cache-dir -r requirements.txt
 cd ..
 
+# ComfyUI-WanVideoWrapper (pour WAN 2.2 support)
+echo "Installing WanVideoWrapper..."
+git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
+cd ComfyUI-WanVideoWrapper
+
+# Installer les dépendances DEPUIS le requirements.txt du wrapper
+if [ -f requirements.txt ]; then
+    echo "Installing WanVideoWrapper dependencies..."
+    pip install --no-cache-dir -r requirements.txt
+else
+    echo "⚠️ No requirements.txt found in WanVideoWrapper, using manual install"
+    pip install --no-cache-dir diffusers transformers accelerate
+fi
+
+cd ..
+
 cd /workspace/comfyui/ComfyUI
 
 # Créer les dossiers de modèles
