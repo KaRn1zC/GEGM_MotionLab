@@ -44,20 +44,32 @@ fi
 # Appliquer les patches de compatibilité ComfyUI
 echo "Applying ComfyUI compatibility patches..."
 
-# Remplacer __init__.py
+# Remplacer __init__.py avec imports ABSOLUS (pas relatifs)
 cat > __init__.py << 'EOFPATCH'
 """
 ComfyUI-WanVideoWrapper
 Fixed imports for ComfyUI compatibility
 """
 
-# Import nodes et mappings avec gestion d'erreurs
+import os
+import sys
+
+# Ajouter le dossier courant au path pour imports absolus
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# Import nodes et mappings avec gestion d'erreurs (SANS import relatif)
 try:
-    from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+    import nodes
+    NODE_CLASS_MAPPINGS = nodes.NODE_CLASS_MAPPINGS
+    NODE_DISPLAY_NAME_MAPPINGS = nodes.NODE_DISPLAY_NAME_MAPPINGS
     __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
     print(f"✅ WanVideoWrapper loaded: {len(NODE_CLASS_MAPPINGS)} nodes")
 except Exception as e:
     print(f"❌ WanVideoWrapper import failed: {e}")
+    import traceback
+    traceback.print_exc()
     NODE_CLASS_MAPPINGS = {}
     NODE_DISPLAY_NAME_MAPPINGS = {}
     __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
@@ -69,6 +81,9 @@ sed -i 's/from \.wanvideo\./from wanvideo./g' nodes.py
 sed -i 's/from \.utils import/from utils import/g' nodes.py
 sed -i 's/from \.fp8_optimization import/from fp8_optimization import/g' nodes.py
 sed -i 's/from \.custom_linear import/from custom_linear import/g' nodes.py
+sed -i 's/from \.taehv import/from taehv import/g' nodes.py
+sed -i 's/from \.nodes_model_loading import/from nodes_model_loading import/g' nodes.py
+sed -i 's/from \.qwen\.qwen import/from qwen.qwen import/g' nodes.py
 
 echo "✅ WanVideoWrapper patches applied"
 
