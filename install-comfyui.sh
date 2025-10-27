@@ -75,15 +75,10 @@ except Exception as e:
     __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
 EOFPATCH
 
-# Corriger les imports relatifs dans nodes.py
-echo "Patching relative imports in nodes.py..."
-sed -i 's/from \.wanvideo\./from wanvideo./g' nodes.py
-sed -i 's/from \.utils import/from utils import/g' nodes.py
-sed -i 's/from \.fp8_optimization import/from fp8_optimization import/g' nodes.py
-sed -i 's/from \.custom_linear import/from custom_linear import/g' nodes.py
-sed -i 's/from \.taehv import/from taehv import/g' nodes.py
-sed -i 's/from \.nodes_model_loading import/from nodes_model_loading import/g' nodes.py
-sed -i 's/from \.qwen\.qwen import/from qwen.qwen import/g' nodes.py
+# Corriger TOUS les imports relatifs dans TOUS les fichiers Python
+echo "Patching ALL relative imports in all Python files..."
+find . -name "*.py" -type f -exec sed -i 's/from \.\./from /g' {} \;
+find . -name "*.py" -type f -exec sed -i 's/from \./from /g' {} \;
 
 echo "✅ WanVideoWrapper patches applied"
 
