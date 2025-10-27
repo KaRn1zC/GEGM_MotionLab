@@ -41,8 +41,10 @@ else
     pip install --no-cache-dir diffusers transformers accelerate
 fi
 
-# Remplacer __init__.py pour corriger les imports relatifs
-echo "Applying ComfyUI compatibility patch..."
+# Appliquer les patches de compatibilité ComfyUI
+echo "Applying ComfyUI compatibility patches..."
+
+# Remplacer __init__.py
 cat > __init__.py << 'EOFPATCH'
 """
 ComfyUI-WanVideoWrapper
@@ -61,7 +63,14 @@ except Exception as e:
     __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
 EOFPATCH
 
-echo "✅ WanVideoWrapper patched"
+# Corriger les imports relatifs dans nodes.py
+echo "Patching relative imports in nodes.py..."
+sed -i 's/from \.wanvideo\./from wanvideo./g' nodes.py
+sed -i 's/from \.utils import/from utils import/g' nodes.py
+sed -i 's/from \.fp8_optimization import/from fp8_optimization import/g' nodes.py
+sed -i 's/from \.custom_linear import/from custom_linear import/g' nodes.py
+
+echo "✅ WanVideoWrapper patches applied"
 
 cd ..
 
