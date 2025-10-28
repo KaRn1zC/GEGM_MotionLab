@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 Image-to-Video",
-  "description": "Génération de cinemagraphs avec WAN 2.2 I2V 14B - Version complète",
-  "version": "2.0.0",
+  "description": "Génération de cinemagraphs avec WAN 2.2 I2V 14B - Version compatible Kijai Oct 2025",
+  "version": "3.0.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
   
@@ -26,14 +26,14 @@
       "default": 20,
       "min": 10,
       "max": 50,
-      "description": "Nombre de steps de dénoising (plus = meilleure qualité)"
+      "description": "Nombre de steps de dénoising"
     },
     "cfg_scale": {
       "type": "float",
       "default": 7.5,
       "min": 1.0,
       "max": 20.0,
-      "description": "Échelle de guidance CFG (plus = suit mieux le prompt)"
+      "description": "Échelle de guidance CFG"
     },
     "seed": {
       "type": "integer",
@@ -54,26 +54,6 @@
       "min": 4,
       "max": 30,
       "description": "Frames par seconde"
-    },
-    "noise_level": {
-      "type": "string",
-      "default": "high",
-      "enum": ["high", "low"],
-      "description": "Niveau de bruit (high=dynamique, low=subtil)"
-    },
-    "motion_bucket_id": {
-      "type": "integer",
-      "default": 127,
-      "min": 1,
-      "max": 255,
-      "description": "Intensité du mouvement (plus = plus de mouvement)"
-    },
-    "augmentation_level": {
-      "type": "float",
-      "default": 0.0,
-      "min": 0.0,
-      "max": 1.0,
-      "description": "Niveau d'augmentation de l'image"
     }
   },
   
@@ -87,36 +67,55 @@
     "2": {
       "class_type": "WanVideoModelLoader",
       "inputs": {
-        "model": "{model_name}",
+        "model": "wan2.2-i2v-a14b",
         "device": "cuda",
         "dtype": "bf16"
       }
     },
     "3": {
-      "class_type": "WanVideoConditioning",
+      "class_type": "WanVideoTextEncode",
       "inputs": {
         "model": ["2", 0],
-        "prompt": "{prompt}",
-        "negative_prompt": "{negative_prompt}"
+        "prompt": "{prompt}"
       }
     },
     "4": {
-      "class_type": "WanVideoImageToVideoSampler",
+      "class_type": "WanVideoTextEncode",
       "inputs": {
         "model": ["2", 0],
-        "conditioning": ["3", 0],
-        "image": ["1", 0],
-        "num_frames": "{frames}",
-        "steps": "{steps}",
-        "cfg": "{cfg_scale}",
-        "seed": "{seed}",
-        "width": 512,
-        "height": 512,
-        "motion_bucket_id": "{motion_bucket_id}",
-        "fps": "{fps}"
+        "prompt": "{negative_prompt}"
       }
     },
     "5": {
+      "class_type": "WanVideoImageToVideoEncode",
+      "inputs": {
+        "model": ["2", 0],
+        "image": ["1", 0]
+      }
+    },
+    "6": {
+      "class_type": "WanVideoSampler",
+      "inputs": {
+        "model": ["2", 0],
+        "positive": ["3", 0],
+        "negative": ["4", 0],
+        "latent": ["5", 0],
+        "steps": "{steps}",
+        "cfg": "{cfg_scale}",
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1.0,
+        "seed": "{seed}"
+      }
+    },
+    "7": {
+      "class_type": "WanVideoDecode",
+      "inputs": {
+        "model": ["2", 0],
+        "samples": ["6", 0]
+      }
+    },
+    "8": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
         "frame_rate": "{fps}",
@@ -125,35 +124,31 @@
         "format": "video/h264-mp4",
         "pingpong": false,
         "save_output": true,
-        "images": ["4", 0]
+        "images": ["7", 0]
       }
     }
   },
   
   "outputs": {
     "video": {
-      "node": "9",
+      "node": "8",
       "output": 0,
       "description": "Cinemagraph généré"
     }
   },
   
   "metadata": {
-    "comfyui_version": ">=0.2.0",
+    "comfyui_version": ">=0.3.0",
+    "wanvideowrapper_version": "kijai_oct2025",
     "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
     "required_nodes": [
       "LoadImage",
-      "CLIPTextEncode",
-      "CheckpointLoaderSimple",
-      "VAEEncode",
-      "VAEDecode",
-      "KSampler",
-      "VideoLinearCFGGuidance",
+      "WanVideoModelLoader",
+      "WanVideoTextEncode",
+      "WanVideoImageToVideoEncode",
+      "WanVideoSampler",
+      "WanVideoDecode",
       "VHS_VideoCombine"
-    ],
-    "required_models": [
-      "wan2.2-i2v-a14b/high_noise_model.safetensors",
-      "wan2.2-i2v-a14b/low_noise_model.safetensors"
     ]
   }
 }
