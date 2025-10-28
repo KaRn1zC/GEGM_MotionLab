@@ -41,21 +41,17 @@ class WorkflowTemplate:
         """
         import os
 
-        # Chemins possibles des modèles
-        comfyui_models_dir = Path("comfyui/ComfyUI/models/checkpoints")
+        # WanVideoModelLoader cherche dans diffusion_models
+        comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/diffusion_models")
 
-        # Variante 1: Environnement RunPod
+        # Fallback si diffusion_models n'existe pas
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
 
-        # Variante 2: Local
-        if not comfyui_models_dir.exists():
-            comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
-
         # Priorité : 14B > 5B
         model_priority = [
-            ("wan2.2-i2v-a14b", "14b"),  # 14B (meilleure qualité)
-            ("wan2.2-ti2v-5b", "5b"),  # 5B (plus rapide)
+            ("wan2.2-i2v-a14b", "14b"),
+            ("wan2.2-ti2v-5b", "5b"),
         ]
 
         for model_name, model_type in model_priority:
@@ -64,7 +60,7 @@ class WorkflowTemplate:
                 logger.info(f"✅ Modèle détecté: {model_name} (type: {model_type})")
                 return model_name, model_type
 
-        # Fallback: Essayer de lire depuis variable d'environnement
+        # Fallback: Variable d'environnement
         env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
         model_type = (
             "14b" if "14b" in env_model.lower() or "a14b" in env_model.lower() else "5b"
