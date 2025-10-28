@@ -82,49 +82,68 @@
     "2": {
       "class_type": "WanVideoModelLoader",
       "inputs": {
-        "model": "{model_name}",
+        "model": "wan2.2-i2v-a14b",
         "device": "cuda",
         "dtype": "bf16"
       }
     },
     "3": {
-      "class_type": "WanVideoConditioning",
+      "class_type": "WanVideoTextEncode",
       "inputs": {
         "model": ["2", 0],
-        "prompt": "{prompt}",
-        "negative_prompt": "static, frozen, blurry"
+        "prompt": "{prompt}"
       }
     },
     "4": {
-      "class_type": "WanVideoImageToVideoSampler",
+      "class_type": "WanVideoTextEncode",
       "inputs": {
         "model": ["2", 0],
-        "conditioning": ["3", 0],
-        "image": ["1", 0],
-        "num_frames": "{frames}",
-        "steps": "{steps_generation}",
-        "cfg": "{cfg_scale}",
-        "seed": "{seed}",
-        "width": 512,
-        "height": 512,
-        "motion_bucket_id": 127,
-        "fps": "{fps}"
+        "prompt": "static, frozen, blurry"
       }
     },
     "5": {
+      "class_type": "WanVideoImageToVideoEncode",
+      "inputs": {
+        "model": ["2", 0],
+        "image": ["1", 0]
+      }
+    },
+    "6": {
+      "class_type": "WanVideoSampler",
+      "inputs": {
+        "model": ["2", 0],
+        "positive": ["3", 0],
+        "negative": ["4", 0],
+        "latent": ["5", 0],
+        "steps": "{steps_generation}",
+        "cfg": "{cfg_scale}",
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": 1.0,
+        "seed": "{seed}"
+      }
+    },
+    "7": {
+      "class_type": "WanVideoDecode",
+      "inputs": {
+        "model": ["2", 0],
+        "samples": ["6", 0]
+      }
+    },
+    "8": {
       "class_type": "UpscaleModelLoader",
       "inputs": {
         "model_name": "RealESRGAN_x4plus.pth"
       }
     },
-    "6": {
+    "9": {
       "class_type": "ImageUpscaleWithModel",
       "inputs": {
-        "upscale_model": ["5", 0],
-        "image": ["4", 0]
+        "upscale_model": ["8", 0],
+        "image": ["7", 0]
       }
     },
-    "7": {
+    "10": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
         "frame_rate": "{fps}",
@@ -133,14 +152,14 @@
         "format": "video/h264-mp4",
         "pingpong": false,
         "save_output": true,
-        "images": ["6", 0]
+        "images": ["9", 0]
       }
     }
   },
 
   "outputs": {
     "video": {
-      "node": "7",
+      "node": "10",
       "output": 0,
       "description": "Cinemagraph upscalé"
     }
