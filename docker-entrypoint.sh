@@ -86,6 +86,12 @@ else
     du -sh "$MODEL_DIR"
 fi
 
+# Configurer les symlinks pour diffusion_models
+if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
+    echo "🔗 Configuration des symlinks modèles..."
+    bash /workspace/scripts/setup_diffusion_models.sh
+fi
+
 # ============================================
 # COMFYUI
 # ============================================
