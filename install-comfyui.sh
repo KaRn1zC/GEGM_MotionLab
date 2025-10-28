@@ -41,47 +41,7 @@ else
     pip install --no-cache-dir diffusers transformers accelerate
 fi
 
-# Appliquer les patches de compatibilité ComfyUI
-echo "Applying ComfyUI compatibility patches..."
-
-# Remplacer __init__.py avec imports ABSOLUS (pas relatifs)
-cat > __init__.py << 'EOFPATCH'
-"""
-ComfyUI-WanVideoWrapper
-Fixed imports for ComfyUI compatibility
-"""
-
-import os
-import sys
-
-# Ajouter le dossier courant au path pour imports absolus
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-# Import nodes et mappings avec gestion d'erreurs (SANS import relatif)
-try:
-    import nodes
-    NODE_CLASS_MAPPINGS = nodes.NODE_CLASS_MAPPINGS
-    NODE_DISPLAY_NAME_MAPPINGS = nodes.NODE_DISPLAY_NAME_MAPPINGS
-    __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
-    print(f"✅ WanVideoWrapper loaded: {len(NODE_CLASS_MAPPINGS)} nodes")
-except Exception as e:
-    print(f"❌ WanVideoWrapper import failed: {e}")
-    import traceback
-    traceback.print_exc()
-    NODE_CLASS_MAPPINGS = {}
-    NODE_DISPLAY_NAME_MAPPINGS = {}
-    __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
-EOFPATCH
-
-# Corriger TOUS les imports relatifs dans TOUS les fichiers Python
-echo "Patching ALL relative imports in all Python files..."
-find . -name "*.py" -type f -exec sed -i 's/from \.\./from /g' {} \;
-find . -name "*.py" -type f -exec sed -i 's/from \./from /g' {} \;
-
-echo "✅ WanVideoWrapper patches applied"
-
+# Pas de patches nécessaires - WanVideoWrapper fonctionne nativement
 cd ..
 
 cd /workspace/comfyui/ComfyUI
