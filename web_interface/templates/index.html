@@ -186,7 +186,7 @@
                             Negative Prompt (À éviter) 
                             <span class="text-gray-400 font-normal">- Optionnel</span>
                         </label>
-                        <textarea id="negativePrompt" rows="2" 
+                        <textarea id="negative_prompt" rows="2" 
                                   placeholder="Ex: static, frozen, distorted, artifacts, glitches, unnatural movement, flickering"
                                   class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"></textarea>
                         <p class="text-xs text-gray-500 mt-1">
@@ -911,7 +911,7 @@
             const formData = new FormData();
             formData.append('image', selectedFile);
             formData.append('prompt', document.getElementById('prompt').value);
-            formData.append('negative_prompt', document.getElementById('negativePrompt').value);
+            formData.append('negative_prompt', document.getElementById('negative_prompt').value);
             formData.append('target_width', targetWidth.value);
             formData.append('target_height', targetHeight.value);
             formData.append('duration', duration.value);

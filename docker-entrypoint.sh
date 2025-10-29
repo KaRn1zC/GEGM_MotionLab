@@ -92,6 +92,53 @@ if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
     bash /workspace/scripts/setup_diffusion_models.sh
 fi
 
+# Télécharger CLIP Vision si absent
+CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
+CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
+
+if [ ! -f "$CLIP_VISION_FILE" ]; then
+    echo ""
+    echo "📥 Téléchargement de CLIP Vision (requis pour WAN 2.2)..."
+    mkdir -p "$CLIP_VISION_DIR"
+    
+    wget -q --show-progress \
+        "https://huggingface.co/openai/clip-vit-large-patch14-336/resolve/main/model.safetensors" \
+        -O "$CLIP_VISION_FILE"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ CLIP Vision téléchargé ($(du -h $CLIP_VISION_FILE | cut -f1))"
+    else
+        echo "❌ Échec téléchargement CLIP Vision"
+        exit 1
+    fi
+else
+    echo ""
+    echo "✅ CLIP Vision déjà présent: $(du -h $CLIP_VISION_FILE | cut -f1)"
+fi
+
+# Télécharger RealESRGAN si absent
+UPSCALE_DIR="/workspace/comfyui/ComfyUI/models/upscale_models"
+UPSCALE_FILE="$UPSCALE_DIR/RealESRGAN_x4plus.pth"
+
+if [ ! -f "$UPSCALE_FILE" ]; then
+    echo ""
+    echo "📥 Téléchargement de RealESRGAN (requis pour upscale)..."
+    mkdir -p "$UPSCALE_DIR"
+    
+    wget -q --show-progress \
+        "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
+        -O "$UPSCALE_FILE"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ RealESRGAN téléchargé ($(du -h $UPSCALE_FILE | cut -f1))"
+    else
+        echo "⚠️ Échec téléchargement RealESRGAN (upscale désactivé)"
+    fi
+else
+    echo ""
+    echo "✅ RealESRGAN déjà présent: $(du -h $UPSCALE_FILE | cut -f1)"
+fi
+
 # ============================================
 # COMFYUI
 # ============================================

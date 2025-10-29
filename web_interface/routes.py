@@ -84,7 +84,7 @@ async def process_cinemagraph_generation(job_id: str):
     Args:
         job_id: ID du job à traiter
     """
-    # ✅ CORRECTION: Récupérer depuis le contexte Flask
+    # Récupérer depuis le contexte Flask
     from flask import current_app as app
 
     try:
@@ -110,11 +110,32 @@ async def process_cinemagraph_generation(job_id: str):
             progress=0.1,
         )
 
+        # Sélection automatique du workflow selon résolution
+        img_path = Path(job.input_image)
+        with Image.open(job.input_image) as img:
+            source_width, source_height = img.size
+
+        # Résolution demandée dans les paramètres
+        target_width = job.parameters.get("width", source_width)
+        target_height = job.parameters.get("height", source_height)
+
+        # Calculer le ratio d'agrandissement
+        scale_ratio = (target_width * target_height) / (source_width * source_height)
+
+        # Sélectionner le workflow
+        if scale_ratio > 1.5:  # Besoin d'upscale intelligent
+            selected_workflow = "wan22_with_upscale"
+            logger.info(f"🔍 Upscale automatique activé (ratio: {scale_ratio:.2f}x)")
+        else:
+            selected_workflow = "wan22_i2v"
+            logger.info(f"✅ Génération standard (ratio: {scale_ratio:.2f}x)")
+
         workflow = workflow_manager.create_workflow(
-            "wan22_i2v",
+            selected_workflow,
             {
-                "input_image": Path(job.input_image).name,
+                "input_image": img_path.name,
                 "prompt": job.prompt,
+                "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
             },
         )
@@ -130,18 +151,18 @@ async def process_cinemagraph_generation(job_id: str):
                 image_data = f.read()
 
             # Lancer le workflow
-            workflow_id = await client.queue_prompt(
+            comfyui_workflow_id = await client.queue_prompt(
                 workflow, images={Path(job.input_image).name: image_data}
             )
 
-            job_manager.update_job(job_id, workflow_id=workflow_id)
+            job_manager.update_job(job_id, workflow_id=comfyui_workflow_id)
 
             # Attendre la completion
             job_manager.update_job(
                 job_id, current_step="Génération en cours...", progress=0.5
             )
 
-            workflow_result = await client.wait_for_completion(workflow_id)
+            workflow_result = await client.wait_for_completion(comfyui_workflow_id)
             logger.info(
                 f"Workflow terminé: {workflow_result.status if hasattr(workflow_result, 'status') else 'completed'}"
             )
@@ -151,7 +172,7 @@ async def process_cinemagraph_generation(job_id: str):
                 job_id, current_step="Récupération du résultat", progress=0.8
             )
 
-            output_images = await client.get_output_images(workflow_id)
+            output_images = await client.get_output_images(comfyui_workflow_id)
 
             if not output_images:
                 raise Exception("Aucune vidéo générée")
@@ -394,6 +415,10 @@ def generate_cinemagraph():
     logger.info(
         f"   Résolution: {final_width}x{final_height} ({frames} frames @ {fps}fps)"
     )
+    # Log du workflow qui sera utilisé
+    scale_ratio = (final_width * final_height) / (source_width * source_height)
+    expected_workflow = "wan22_with_upscale" if scale_ratio > 1.5 else "wan22_i2v"
+    logger.info(f"   Workflow: {expected_workflow} (ratio: {scale_ratio:.2f}x)")
 
     return jsonify(
         {
