@@ -117,7 +117,8 @@
       "class_type": "WanVideoTextEncode",
       "inputs": {
         "positive_prompt": "{prompt}",
-        "negative_prompt": "{negative_prompt}"
+        "negative_prompt": "{negative_prompt}",
+        "t5": ["13", 0]
       }
     },
     "6": {
@@ -197,6 +198,13 @@
         "pingpong": false,
         "save_output": true,
         "images": ["11", 0]
+      }
+    },
+    "13": {
+      "class_type": "WanT5EncoderLoader",
+      "inputs": {
+        "model_name": "t5/umt5-xxl-enc-bf16.pth",
+        "device": "default"
       }
     }
   },
