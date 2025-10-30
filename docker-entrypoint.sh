@@ -58,23 +58,24 @@ if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
             echo ""
             echo "🔧 Reconstitution des fichiers découpés..."
             
-            # Télécharger le script de reconstitution
-            echo "📥 Téléchargement du script de reconstitution..."
-            rclone copy owncloud:/GEGM_ComfyUI/scripts/reassemble_models.sh /tmp/
-            chmod +x /tmp/reassemble_models.sh
-            
-            # Exécuter la reconstitution
-            /tmp/reassemble_models.sh "$MODEL_DIR"
-            
-            if [ $? -eq 0 ]; then
-                echo "✅ Fichiers reconstitués"
+            # Utiliser le script local
+            if [ -f "/workspace/scripts/reassemble_models.sh" ]; then
+                /workspace/scripts/reassemble_models.sh "$MODEL_DIR"
+                
+                if [ $? -eq 0 ]; then
+                    echo "✅ Fichiers reconstitués et chunks supprimés"
+                else
+                    echo "❌ Échec de la reconstitution"
+                    exit 1
+                fi
             else
-                echo "❌ Échec de la reconstitution"
+                echo "❌ Script reassemble_models.sh non trouvé"
                 exit 1
             fi
         else
             echo "   Pas de chunks à reconstituer"
         fi
+
     else
         echo "❌ Échec téléchargement modèles"
         echo "⚠️  Vérifiez les credentials OwnCloud"
@@ -96,19 +97,23 @@ fi
 CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
 CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
 
-if [ ! -f "$CLIP_VISION_FILE" ]; then
+
+if [ ! -f "$CLIP_VISION_FILE" ] || [ ! -s "$CLIP_VISION_FILE" ]; then
     echo ""
-    echo "📥 Téléchargement de CLIP Vision (requis pour WAN 2.2)..."
+    echo "📥 Téléchargement de CLIP Vision (requis pour WAN 2.2, ~2.4GB)..."
     mkdir -p "$CLIP_VISION_DIR"
     
-    wget -q --show-progress \
-        "https://huggingface.co/openai/clip-vit-large-patch14-336/resolve/main/model.safetensors" \
+    # Utiliser le repo h94/IP-Adapter qui contient le bon fichier SafeTensors
+    wget --progress=bar:force \
+        "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
         -O "$CLIP_VISION_FILE"
     
-    if [ $? -eq 0 ]; then
-        echo "✅ CLIP Vision téléchargé ($(du -h $CLIP_VISION_FILE | cut -f1))"
+    if [ $? -eq 0 ] && [ -s "$CLIP_VISION_FILE" ]; then
+        FILE_SIZE=$(du -h "$CLIP_VISION_FILE" | cut -f1)
+        echo "✅ CLIP Vision téléchargé ($FILE_SIZE)"
     else
         echo "❌ Échec téléchargement CLIP Vision"
+        rm -f "$CLIP_VISION_FILE"
         exit 1
     fi
 else

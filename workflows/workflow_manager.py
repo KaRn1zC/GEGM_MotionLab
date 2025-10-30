@@ -96,22 +96,35 @@ class WorkflowTemplate:
 
         # Détection automatique selon la structure des fichiers
         if "5b" in model_name.lower():
-            # Modèle 5B : chercher le premier fichier safetensors (format sharded)
-            checkpoint_files = list(
-                model_path.glob("diffusion_pytorch_model-*.safetensors")
-            )
-            if checkpoint_files:
-                # Utiliser le premier fichier (00001)
-                first_checkpoint = sorted(checkpoint_files)[0]
-                logger.info(f"✅ Modèle 5B détecté : {first_checkpoint.name}")
-                return f"{model_name}/{first_checkpoint.name}"
+            # Modèle 5B : vérifier s'il y a un index JSON (format sharded)
+            index_file = model_path / "diffusion_pytorch_model.safetensors.index.json"
+            if index_file.exists():
+                logger.info(f"✅ Modèle 5B détecté : utilisation index sharded (auto-load tous les fichiers)")
+                # Retourner juste le dossier pour que WanVideoModelLoader utilise l'index
+                return f"{model_name}"
+            else:
+                # Fallback : chercher le premier fichier safetensors
+                checkpoint_files = list(
+                    model_path.glob("diffusion_pytorch_model-*.safetensors")
+                )
+                if checkpoint_files:
+                    first_checkpoint = sorted(checkpoint_files)[0]
+                    logger.info(f"✅ Modèle 5B détecté : {first_checkpoint.name}")
+                    return f"{model_name}/{first_checkpoint.name}"
 
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
-            # Modèle 14B : chercher high_noise_model.safetensors (architecture MoE)
-            checkpoint_file = model_path / "high_noise_model.safetensors"
-            if checkpoint_file.exists():
-                logger.info("✅ Modèle 14B détecté : architecture MoE")
-                return f"{model_name}/high_noise_model.safetensors"
+            # Modèle 14B : vérifier s'il y a un index JSON (format sharded)
+            index_file = model_path / "high_noise_model.safetensors.index.json"
+            if index_file.exists():
+                logger.info("✅ Modèle 14B détecté : utilisation index sharded MoE (auto-load tous les fichiers)")
+                # Retourner juste le dossier pour que WanVideoModelLoader utilise l'index
+                return f"{model_name}"
+            else:
+                # Fallback : chercher high_noise_model.safetensors unique
+                checkpoint_file = model_path / "high_noise_model.safetensors"
+                if checkpoint_file.exists():
+                    logger.info("✅ Modèle 14B détecté : architecture MoE (fichier unique)")
+                    return f"{model_name}/high_noise_model.safetensors"
 
         # Fallback : retourner le premier safetensors trouvé
         all_checkpoints = list(model_path.glob("*.safetensors"))
