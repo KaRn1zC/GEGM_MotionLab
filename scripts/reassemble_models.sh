@@ -25,6 +25,7 @@ find "$MODEL_BASE_DIR" -type d -name "chunks" | while read chunks_dir; do
     # Lire le mapping
     current_file=""
     current_chunks=()
+    reconstitution_success=true
     
     while IFS= read -r line; do
         if [[ $line == FILE:* ]]; then
@@ -33,10 +34,26 @@ find "$MODEL_BASE_DIR" -type d -name "chunks" | while read chunks_dir; do
                 # Reconstituer le fichier précédent
                 output_file="$parent_dir/$current_file"
                 
-                if [ -f "$output_file" ]; then
-                    echo "✅ $current_file déjà reconstitué"
+                if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+                    echo "✅ $current_file déjà reconstitué ($(du -h "$output_file" | cut -f1))"
                 else
                     echo "🔨 Reconstitution de $current_file..."
+                    
+                    # Vérifier que tous les chunks existent
+                    all_chunks_exist=true
+                    for chunk in "${current_chunks[@]}"; do
+                        if [ ! -f "$chunks_dir/$chunk" ]; then
+                            echo "❌ Chunk manquant: $chunk"
+                            all_chunks_exist=false
+                            reconstitution_success=false
+                            break
+                        fi
+                    done
+                    
+                    if [ "$all_chunks_exist" = false ]; then
+                        echo "❌ Reconstitution impossible: chunks manquants"
+                        continue
+                    fi
                     
                     # Construire la commande cat
                     chunk_paths=()
@@ -44,14 +61,18 @@ find "$MODEL_BASE_DIR" -type d -name "chunks" | while read chunks_dir; do
                         chunk_paths+=("$chunks_dir/$chunk")
                     done
                     
+                    # Reconstituer
                     cat "${chunk_paths[@]}" > "$output_file"
                     
-                    if [ $? -eq 0 ]; then
+                    # Vérifier le résultat
+                    if [ $? -eq 0 ] && [ -s "$output_file" ]; then
                         file_size=$(du -h "$output_file" | cut -f1)
                         echo "✅ $current_file reconstitué ($file_size)"
                     else
                         echo "❌ Erreur reconstitution de $current_file"
                         rm -f "$output_file"
+                        reconstitution_success=false
+                        exit 1
                     fi
                 fi
             fi
@@ -71,31 +92,57 @@ find "$MODEL_BASE_DIR" -type d -name "chunks" | while read chunks_dir; do
     if [ -n "$current_file" ]; then
         output_file="$parent_dir/$current_file"
         
-        if [ -f "$output_file" ]; then
-            echo "✅ $current_file déjà reconstitué"
+        if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+            echo "✅ $current_file déjà reconstitué ($(du -h "$output_file" | cut -f1))"
         else
             echo "🔨 Reconstitution de $current_file..."
             
+            # Vérifier que tous les chunks existent
+            all_chunks_exist=true
+            for chunk in "${current_chunks[@]}"; do
+                if [ ! -f "$chunks_dir/$chunk" ]; then
+                    echo "❌ Chunk manquant: $chunk"
+                    all_chunks_exist=false
+                    reconstitution_success=false
+                    break
+                fi
+            done
+            
+            if [ "$all_chunks_exist" = false ]; then
+                echo "❌ Reconstitution impossible: chunks manquants"
+                exit 1
+            fi
+            
+            # Construire la commande cat
             chunk_paths=()
             for chunk in "${current_chunks[@]}"; do
                 chunk_paths+=("$chunks_dir/$chunk")
             done
             
+            # Reconstituer
             cat "${chunk_paths[@]}" > "$output_file"
             
-            if [ $? -eq 0 ]; then
+            # Vérifier le résultat
+            if [ $? -eq 0 ] && [ -s "$output_file" ]; then
                 file_size=$(du -h "$output_file" | cut -f1)
                 echo "✅ $current_file reconstitué ($file_size)"
             else
                 echo "❌ Erreur reconstitution de $current_file"
                 rm -f "$output_file"
+                reconstitution_success=false
+                exit 1
             fi
         fi
     fi
     
-    # Optionnel: supprimer les chunks
-    # echo "🗑️  Suppression des chunks..."
-    # rm -rf "$chunks_dir"
+    # Supprimer les chunks seulement si reconstitution réussie
+    if [ "$reconstitution_success" = true ]; then
+        echo "🗑️  Suppression des chunks..."
+        rm -rf "$chunks_dir"
+        echo "✅ Chunks supprimés"
+    else
+        echo "⚠️  Chunks conservés (reconstitution incomplète)"
+    fi
 done
 
 echo ""
