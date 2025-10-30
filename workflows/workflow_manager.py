@@ -106,7 +106,6 @@ class WorkflowTemplate:
                 logger.info(f"✅ Modèle 5B détecté : {first_checkpoint.name}")
                 return f"{model_name}/{first_checkpoint.name}"
 
-
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
             # Modèle 14B : chercher high_noise_model.safetensors (architecture MoE)
             checkpoint_file = model_path / "high_noise_model.safetensors"
