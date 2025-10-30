@@ -93,6 +93,112 @@ if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
     bash /workspace/scripts/setup_diffusion_models.sh
 fi
 
+# ============================================
+# PATCH WANVIDEOMODELLOADER (Sharded Support)
+# ============================================
+
+echo ""
+echo "🔧 Application du patch WanVideoModelLoader..."
+
+python3 << 'PATCH_PYTHON'
+import re
+import sys
+
+node_file = "/workspace/comfyui/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_model_loading.py"
+
+try:
+    with open(node_file, 'r') as f:
+        content = f.read()
+    
+    # Vérifier si déjà patchés
+    if 'def load_sharded_safetensors' in content:
+        print("✅ Patch déjà appliqué")
+        sys.exit(0)
+    
+    # 1. Ajouter import json
+    if 'import json' not in content[:500]:
+        content = content.replace('import os, gc, uuid', 'import os, gc, uuid\nimport json')
+        print("✅ Import json ajouté")
+    
+    # 2. Ajouter la fonction
+    new_function = '''
+
+def load_sharded_safetensors(model_path_str, device="cpu"):
+    """Charge tous les fichiers sharded si un index JSON existe"""
+    from pathlib import Path
+    from safetensors.torch import load_file
+    
+    model_path = Path(model_path_str)
+    if not model_path.exists():
+        return None
+    
+    parent_dir = model_path.parent
+    possible_indices = [
+        parent_dir / "diffusion_pytorch_model.safetensors.index.json",
+        parent_dir / "high_noise_model.safetensors.index.json",
+        parent_dir / f"{model_path.stem}.index.json",
+    ]
+    
+    index_file = None
+    for idx_path in possible_indices:
+        if idx_path.exists():
+            index_file = idx_path
+            break
+    
+    if index_file:
+        try:
+            with open(index_file) as f:
+                index = json.load(f)
+            files_needed = set(index['weight_map'].values())
+            all_tensors = {}
+            for fname in sorted(files_needed):
+                fpath = parent_dir / fname
+                tensors = load_file(str(fpath), device=device)
+                all_tensors.update(tensors)
+            return all_tensors
+        except Exception as e:
+            log.error(f"Erreur chargement sharded: {e}")
+            return None
+    else:
+        try:
+            return load_file(str(model_path), device=device)
+        except:
+            return None
+'''
+    
+    if 'def load_sharded_safetensors' not in content:
+        insert_pos = content.find('update_folder_names_and_paths("unet_gguf"')
+        insert_pos = content.find('\n', insert_pos) + 1
+        content = content[:insert_pos] + new_function + content[insert_pos:]
+        print("✅ Fonction load_sharded_safetensors ajoutée")
+    
+    # 3. Patcher l'appel load_torch_file
+    pattern = r'(\s+)sd = load_torch_file\(model_path, device=transformer_load_device, safe_load=True\)'
+    replacement = r'''\1# Charger via index JSON (sharded) ou fallback
+\1sd = load_sharded_safetensors(model_path, device=transformer_load_device.type if hasattr(transformer_load_device, 'type') else str(transformer_load_device))
+\1if sd is None:
+\1    sd = load_torch_file(model_path, device=transformer_load_device, safe_load=True)'''
+    
+    if re.search(pattern, content):
+        content = re.sub(pattern, replacement, content)
+        print("✅ Appel load_torch_file patché")
+    
+    with open(node_file, 'w') as f:
+        f.write(content)
+    
+    print("✅ Patch WanVideoModelLoader appliqué!")
+    
+except Exception as e:
+    print(f"❌ Erreur: {e}")
+    sys.exit(1)
+
+PATCH_PYTHON
+
+if [ $? -ne 0 ]; then
+    echo "❌ Échec application du patch"
+    exit 1
+fi
+
 # Télécharger CLIP Vision si absent
 CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
 CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
