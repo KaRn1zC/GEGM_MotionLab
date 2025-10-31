@@ -206,58 +206,12 @@ fi
 echo ""
 echo "🔧 Application du patch VAE channels (96 → 48)..."
 
-python3 << 'VAE_PATCH_PYTHON'
-import re
-import sys
+python3 /workspace/scripts/fix_wan_vae_channels.py
 
-node_file = "/workspace/comfyui/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes.py"
-
-try:
-    with open(node_file, 'r') as f:
-        content = f.read()
-    
-    # Vérifier si déjà patché
-    if 'VAE_CHANNELS_FIX_APPLIED' in content:
-        print("✅ Patch VAE channels déjà appliqué")
-        sys.exit(0)
-    
-    # Trouver la ligne exacte à patcher
-    # Ligne 963-966 dans WanVideoImageToVideoEncode.process()
-    pattern = r'(image_embeds = \{[\s\S]*?"clip_context": clip_embeds\.get\("clip_embeds", None\) if clip_embeds is not None else None,)'
-    
-    replacement = r'''\1
-        # VAE_CHANNELS_FIX_APPLIED: Réduire les clip_embeds de 96 à 48 canaux
-        if clip_embeds is not None and "clip_embeds" in clip_embeds:
-            clip_tensor = clip_embeds["clip_embeds"]
-            if hasattr(clip_tensor, 'shape') and len(clip_tensor.shape) >= 2:
-                if clip_tensor.shape[1] == 96:
-                    # Réduire 96 → 48 en prenant la première moitié
-                    clip_embeds["clip_embeds"] = clip_tensor[:, :48, ...]
-                    log.warning(f"⚠️ CLIP embeds réduits de 96 à 48 canaux")'''
-    
-    # Appliquer le patch
-    content_new = re.sub(pattern, replacement, content, count=1)
-    
-    if content_new == content:
-        print("❌ Pattern non trouvé, patch échoué")
-        sys.exit(1)
-    
-    # Écrire le fichier patché
-    with open(node_file, 'w') as f:
-        f.write(content_new)
-    
-    print("✅ Patch VAE channels appliqué avec succès!")
-    
-except Exception as e:
-    print(f"❌ Erreur: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-VAE_PATCH_PYTHON
-
-if [ $? -ne 0 ]; then
-    echo "⚠️  Patch VAE channels échoué (ne bloque pas la suite)"
+if [ $? -eq 0 ]; then
+    echo "✅ Patch VAE channels appliqué!"
+else
+    echo "⚠️  Patch VAE channels échoué (non critique)"
 fi
 
 # Télécharger CLIP Vision si absent
