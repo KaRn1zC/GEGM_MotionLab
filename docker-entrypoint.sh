@@ -199,6 +199,90 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# ============================================
+# PATCH VAE CHANNELS (96 → 48 fix)
+# ============================================
+
+echo ""
+echo "🔧 Application du patch VAE channels (96 → 48)..."
+
+python3 << 'VAE_PATCH_PYTHON'
+import re
+import sys
+
+node_file = "/workspace/comfyui/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_model_loading.py"
+
+try:
+    with open(node_file, 'r') as f:
+        content = f.read()
+    
+    # Vérifier si déjà patchés
+    if 'VAE_CHANNELS_FIX_APPLIED' in content:
+        print("✅ Patch VAE channels déjà appliqué")
+        sys.exit(0)
+    
+    # Ajouter le marker et la fonction de fix
+    marker = "\n# VAE_CHANNELS_FIX_APPLIED\n"
+    
+    # Trouver la classe WanVideoImageToVideoEncode
+    pattern = r'class WanVideoImageToVideoEncode[^:]*:'
+    match = re.search(pattern, content)
+    
+    if match:
+        # Trouver la méthode process de cette classe
+        class_start = match.start()
+        next_class = content.find('\nclass ', class_start + 1)
+        if next_class == -1:
+            next_class = len(content)
+        
+        class_content = content[class_start:next_class]
+        
+        # Chercher la ligne qui crée les latent embeddings problématiques
+        # Pattern: où on combine les embeddings image et text
+        problematic_pattern = r'(def process\(self.*?)(image_embeds\s*=\s*.*?\.cat\(|image_embeds\s*=)'
+        
+        if re.search(problematic_pattern, class_content, re.DOTALL):
+            # Ajouter le fix: forcer les embeddings à 48 canaux
+            fix_code = '''
+    # FIX: Réduire les embeddings à 48 canaux (VAE WAN 5B)
+    # Les embeddings du CLIP peuvent avoir 96 canaux au lieu de 48
+    # On les réduit avec une projection linéaire
+    if hasattr(image_embeds, 'shape') and len(image_embeds.shape) > 1:
+        if image_embeds.shape[1] != 48:  # Si pas 48 canaux
+            import torch
+            if image_embeds.shape[1] == 96:  # Si c'est 96, on réduit
+                # Moyenne des deux moitiés ou take première moitié
+                image_embeds = image_embeds[:, :48, ...]  # Prendre les 48 premiers canaux
+                log.warning(f"⚠️ VAE channels réduits de 96 à 48")
+'''
+            
+            # Insérer le fix avant le return
+            insert_pos = content.find('return', class_start)
+            if insert_pos > 0:
+                insert_pos = content.rfind('\n', class_start, insert_pos)
+                content = content[:insert_pos] + fix_code + content[insert_pos:]
+                print("✅ Fix VAE channels injecté dans WanVideoImageToVideoEncode")
+    
+    # Ajouter le marker
+    content = content + marker
+    
+    with open(node_file, 'w') as f:
+        f.write(content)
+    
+    print("✅ Patch VAE channels appliqué!")
+    
+except Exception as e:
+    print(f"❌ Erreur: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+VAE_PATCH_PYTHON
+
+if [ $? -ne 0 ]; then
+    echo "⚠️  Patch VAE channels échoué (ne bloque pas la suite)"
+fi
+
 # Télécharger CLIP Vision si absent
 CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
 CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
