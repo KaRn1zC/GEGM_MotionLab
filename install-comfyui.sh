@@ -44,6 +44,15 @@ fi
 # Pas de patches nécessaires - WanVideoWrapper fonctionne nativement
 cd ..
 
+# ComfyUI-PyramidFlowWrapper (pour RealESRGAN upscale video)
+echo "Installing PyramidFlowWrapper..."
+git clone https://github.com/kijai/ComfyUI-PyramidFlowWrapper.git
+cd ComfyUI-PyramidFlowWrapper
+if [ -f requirements.txt ]; then
+    pip install --no-cache-dir -r requirements.txt
+fi
+cd ..
+
 cd /workspace/comfyui/ComfyUI
 
 # Créer les dossiers de modèles
