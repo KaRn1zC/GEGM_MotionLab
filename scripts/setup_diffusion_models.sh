@@ -20,28 +20,7 @@ if [ -d "../checkpoints/wan2.2-i2v-a14b" ]; then
     echo "✅ Symlink créé: wan2.2-i2v-a14b"
 fi
 
-# Gestion du VAE
-echo "📂 Configuration du VAE..."
-
-# Créer le dossier vae
-mkdir -p /workspace/comfyui/ComfyUI/models/vae
-
-# Symlink du VAE pour 5B
-if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/Wan2.2_VAE.pth" ]; then
-    ln -sf ../checkpoints/wan2.2-ti2v-5b/Wan2.2_VAE.pth /workspace/comfyui/ComfyUI/models/vae/Wan2.2_VAE.pth
-    echo "✅ Symlink VAE créé: Wan2.2_VAE.pth (5B)"
-fi
-
-# Symlink du VAE pour 14B (si différent)
-if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/Wan2.2_VAE.pth" ]; then
-    # Vérifier si le VAE 14B est différent du 5B
-    if [ ! -L "/workspace/comfyui/ComfyUI/models/vae/Wan2.2_VAE.pth" ]; then
-        ln -sf ../checkpoints/wan2.2-i2v-a14b/Wan2.2_VAE.pth /workspace/comfyui/ComfyUI/models/vae/Wan2.2_VAE_14B.pth
-        echo "✅ Symlink VAE créé: Wan2.2_VAE_14B.pth (14B)"
-    fi
-fi
-
-# AJOUT : Gestion du T5 Encoder
+# Gestion du T5 Encoder
 echo "📂 Configuration du T5 Encoder..."
 
 # Créer le dossier text_encoders/t5
