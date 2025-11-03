@@ -88,10 +88,9 @@
       }
     },
     "3": {
-      "class_type": "WanVideoVAELoader",
+      "class_type": "VAELoader",
       "inputs": {
-        "model_name": "Wan2.2_VAE.pth",
-        "precision": "bf16"
+        "vae_name": "vae-kl-f8.safetensors"
       }
     },
     "4": {
@@ -155,7 +154,7 @@
       }
     },
     "9": {
-      "class_type": "WanVideoDecode",
+      "class_type": "VAEDecode",
       "inputs": {
         "vae": ["3", 0],
         "samples": ["8", 0],

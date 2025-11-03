@@ -200,19 +200,32 @@ if [ $? -ne 0 ]; then
 fi
 
 # ============================================
-# PATCH VAE CHANNELS (96 → 48 fix)
+# TÉLÉCHARGER LE BON VAE COMFYUI OFFICIEL
 # ============================================
 
 echo ""
-echo "🔧 Application du patch VAE channels (96 → 48)..."
 
-python3 /workspace/scripts/fix_wan_vae_channels.py
+echo "📥 Configuration du VAE ComfyUI officiel (48 canaux)..."
 
-if [ $? -eq 0 ]; then
-    echo "✅ Patch VAE channels appliqué!"
+mkdir -p /workspace/comfyui/ComfyUI/models/vae
+
+if [ ! -f "/workspace/comfyui/ComfyUI/models/vae/vae-kl-f8.safetensors" ]; then
+    echo "   Téléchargement du VAE officiel..."
+    cd /workspace/comfyui/ComfyUI/models/vae
+    wget -q https://huggingface.co/stabilityai/sd-vae-ft-mse-original/resolve/main/diffusion_pytorch_model.safetensors -O vae-kl-f8.safetensors 2>/dev/null || \
+    curl -L -o vae-kl-f8.safetensors https://huggingface.co/stabilityai/sd-vae-ft-mse-original/resolve/main/diffusion_pytorch_model.safetensors 2>/dev/null
+    
+    if [ -f "vae-kl-f8.safetensors" ] && [ -s "vae-kl-f8.safetensors" ]; then
+        echo "✅ VAE officiel téléchargé"
+    else
+        echo "❌ Erreur téléchargement VAE"
+        exit 1
+    fi
 else
-    echo "⚠️  Patch VAE channels échoué (non critique)"
+    echo "✅ VAE officiel déjà présent"
 fi
+
+cd /workspace
 
 # Télécharger CLIP Vision si absent
 CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"

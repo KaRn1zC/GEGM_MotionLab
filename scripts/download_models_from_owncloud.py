@@ -101,6 +101,8 @@ def download_model_from_owncloud(
             "copy",
             remote_path,
             str(model_target),
+            "--exclude",
+            "Wan2.2_VAE.pth",  # Exclure le mauvais VAE 96 canaux
             "--progress",
             "--transfers",
             "4",
