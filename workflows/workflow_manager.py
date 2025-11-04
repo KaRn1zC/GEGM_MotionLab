@@ -182,11 +182,9 @@ class WorkflowTemplate:
     def _substitute_params_recursive(self, obj: Any, params: Dict[str, Any]) -> Any:
         """
         Substitue les paramètres de manière récursive EN GARDANT LES TYPES
-
         Args:
             obj: Objet à traiter
             params: Paramètres de substitution
-
         Returns:
             Objet avec paramètres substitués
         """
@@ -197,17 +195,22 @@ class WorkflowTemplate:
         elif isinstance(obj, list):
             return [self._substitute_params_recursive(item, params) for item in obj]
         elif isinstance(obj, str):
-            # Si c'est exactement un placeholder, retourner la valeur avec son type
+            # Si c'est EXACTEMENT un placeholder complet, retourner avec le type original
             for param_name, param_value in params.items():
                 placeholder = f"{{{param_name}}}"
                 if obj == placeholder:
+                    # Retourner le type original (int, float, etc.)
                     return param_value
 
-            # Sinon, substituer dans la string
+            # Sinon, c'est une substitution partielle dans une string
             result = obj
             for param_name, param_value in params.items():
                 placeholder = f"{{{param_name}}}"
                 if placeholder in result:
+                    # Vérifier si c'est la SEULE valeur
+                    if result == placeholder:
+                        return param_value
+                    # Sinon remplacer dans la string
                     result = result.replace(placeholder, str(param_value))
             return result
         else:
