@@ -93,19 +93,18 @@
       }
     },
     "2": {
-      "class_type": "Wan22ImageToVideoLatent",
+      "class_type": "WanVideoModelLoader",
       "inputs": {
         "model": "{checkpoint_path}",
-        "width": "{width}",
-        "height": "{height}",
-        "num_frames": "{frames}",
-        "force_offload": true
+        "base_precision": "bf16",
+        "quantization": "disabled",
+        "load_device": "offload_device"
       }
     },
     "3": {
-      "class_type": "VAELoader",
+      "class_type": "WanVideoVAELoader",
       "inputs": {
-        "vae_name": "vae-kl-f8.safetensors"
+        "model_name": "vae-kl-f8.safetensors"
       }
     },
     "4": {
@@ -154,22 +153,21 @@
       }
     },
     "8": {
-      "class_type": "Wan22Sampler",
+      "class_type": "WanVideoSampler",
       "inputs": {
         "model": ["2", 0],
-        "latents": ["7", 0],
-        "positive": ["5", 0],
-        "negative": ["5", 1],
+        "image_embeds": ["7", 0],
+        "text_embeds": ["5", 0],
         "steps": "{steps}",
         "cfg": "{cfg_scale}",
-        "sampler_name": "uni_pc",
-        "scheduler": "karras",
+        "shift": 5.0,
         "seed": "{seed}",
-        "denoise": 1.0
+        "force_offload": true,
+        "scheduler": "unipc"
       }
     },
     "9": {
-      "class_type": "VAEDecode",
+      "class_type": "WanVideoDecode",
       "inputs": {
         "vae": ["3", 0],
         "samples": ["8", 0],
