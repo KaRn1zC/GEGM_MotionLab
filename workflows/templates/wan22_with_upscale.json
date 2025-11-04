@@ -158,12 +158,13 @@
         "model": ["2", 0],
         "image_embeds": ["7", 0],
         "text_embeds": ["5", 0],
-        "steps": "{steps}",
+        "steps": "{steps_generation}",
         "cfg": "{cfg_scale}",
         "shift": 5.0,
         "seed": "{seed}",
         "force_offload": true,
-        "scheduler": "unipc"
+        "scheduler": "unipc",
+        "riflex_freq_index": 0
       }
     },
     "9": {

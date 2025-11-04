@@ -149,7 +149,8 @@
         "shift": 5.0,
         "seed": "{seed}",
         "force_offload": true,
-        "scheduler": "unipc"
+        "scheduler": "unipc",
+        "riflex_freq_index": 0
       }
     },
     "9": {
