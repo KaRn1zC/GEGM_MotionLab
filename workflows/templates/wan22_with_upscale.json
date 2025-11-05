@@ -104,7 +104,8 @@
     "3": {
       "class_type": "WanVideoVAELoader",
       "inputs": {
-        "model_name": "vae-kl-f8.safetensors"
+        "model_name": "vae-kl-f8.safetensors",
+        "precision": "bf16"
       }
     },
     "4": {
