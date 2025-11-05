@@ -94,7 +94,7 @@ if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
 fi
 
 # ============================================
-# TÉLÉCHARGER LE BON VAE COMFYUI OFFICIEL
+# TÉLÉCHARGER LE VAE COMFYUI OFFICIEL (48 canaux)
 # ============================================
 
 echo ""
@@ -104,8 +104,10 @@ mkdir -p /workspace/comfyui/ComfyUI/models/vae
 cd /workspace/comfyui/ComfyUI/models/vae
 
 VAE_FILE="vae-kl-f8.safetensors"
-VAE_MIN_SIZE=300000000  # 300MB minimum
+VAE_URL="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/vae/diffusion_pytorch_model.safetensors"
+VAE_MIN_SIZE=300000000
 
+# Vérifier si VAE existe ET est valide (> 300MB)
 if [ -f "$VAE_FILE" ]; then
     VAE_ACTUAL_SIZE=$(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$VAE_FILE" 2>/dev/null || echo 0)
     if [ "$VAE_ACTUAL_SIZE" -gt "$VAE_MIN_SIZE" ]; then
@@ -113,13 +115,13 @@ if [ -f "$VAE_FILE" ]; then
         echo "✅ VAE officiel valide déjà présent ($SIZE)"
         cd /workspace
     else
-        echo "⚠️  VAE corrompu/incomplet détecté ($VAE_ACTUAL_SIZE bytes)"
+        echo "⚠️  VAE corrompu/incomplet détecté ($VAE_ACTUAL_SIZE bytes) - suppression..."
         rm -f "$VAE_FILE"
     fi
 fi
 
 if [ ! -f "$VAE_FILE" ] || [ $(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$VAE_FILE" 2>/dev/null || echo 0) -lt "$VAE_MIN_SIZE" ]; then
-    echo "   Téléchargement du VAE officiel depuis Stabilityai SDXL-Base (~320MB)..."
+    echo "   Téléchargement du VAE officiel depuis Stabilityai SDXL (~320MB)..."
     
     for attempt in {1..3}; do
         echo "   Tentative $attempt/3..."
@@ -128,7 +130,7 @@ if [ ! -f "$VAE_FILE" ] || [ $(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$
             --connect-timeout 60 \
             --max-time 600 \
             --progress-bar \
-            "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/vae/diffusion_pytorch_model.safetensors" 2>/dev/null; then
+            "$VAE_URL" 2>/dev/null; then
             
             VAE_SIZE=$(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$VAE_FILE" 2>/dev/null || echo 0)
             if [ "$VAE_SIZE" -gt "$VAE_MIN_SIZE" ]; then
@@ -136,7 +138,7 @@ if [ ! -f "$VAE_FILE" ] || [ $(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$
                 echo "✅ VAE officiel téléchargé avec succès ($SIZE_DISPLAY)"
                 break
             else
-                echo "   ⚠️  VAE incomplet ($VAE_SIZE bytes). Nouvelle tentative..."
+                echo "   ⚠️  VAE incomplet téléchargé ($VAE_SIZE bytes). Nouvelle tentative..."
                 rm -f "$VAE_FILE"
             fi
         else
@@ -149,7 +151,7 @@ if [ ! -f "$VAE_FILE" ] || [ $(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$
     
     VAE_FINAL_SIZE=$(stat -c%s "$VAE_FILE" 2>/dev/null || stat -f%z "$VAE_FILE" 2>/dev/null || echo 0)
     if [ "$VAE_FINAL_SIZE" -lt "$VAE_MIN_SIZE" ]; then
-        echo "❌ ERREUR CRITIQUE: Échec du téléchargement du VAE après 3 tentatives"
+        echo "❌ ERREUR CRITIQUE: VAE invalide après 3 tentatives"
         echo "   Taille finale: $VAE_FINAL_SIZE bytes (attendu: >= ${VAE_MIN_SIZE})"
         rm -f "$VAE_FILE"
         exit 1
