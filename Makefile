@@ -196,8 +196,8 @@ full-upload-workflow: download-models rclone-upload-all models-clean ## Workflow
 
 # ==================== Sequential Upload (Low Disk Space) ====================
 
-full-workflow-14b: rclone-check ## 14B: Download → Convert VAE → Split → Upload → Verify → Clean
-	@echo "🔄 Workflow complet modèle 14B (download → convert VAE → split → upload → verify → clean)"
+full-workflow-14b: rclone-check ## 14B: Download → Convert VAE → Split (delete originals) → Upload (chunks only) → Verify → Clean
+	@echo "🔄 Workflow complet modèle 14B (download → convert VAE → split (delete originals) → upload (chunks) → verify → clean)"
 	@echo ""
 	@echo "📥 1/6: Téléchargement du modèle 14B..."
 	./scripts/setup_wan22_native.sh wan2.2-i2v-a14b
@@ -217,8 +217,8 @@ full-workflow-14b: rclone-check ## 14B: Download → Convert VAE → Split → U
 	@echo "✅ 6/6: Modèle 14B uploadé et nettoyé"
 	@df -h . | tail -1
 
-full-workflow-5b: rclone-check ## 5B: Download → Convert VAE → Split → Upload → Verify → Clean
-	@echo "🔄 Workflow complet modèle 5B (download → convert VAE → split → upload → verify → clean)"
+full-workflow-5b: rclone-check ## 5B: Download → Convert VAE → Split (delete originals) → Upload (chunks only) → Verify → Clean
+	@echo "🔄 Workflow complet modèle 5B (download → convert VAE → split (delete originals) → upload (chunks) → verify → clean)"
 	@echo ""
 	@echo "📥 1/6: Téléchargement du modèle 5B..."
 	./scripts/setup_wan22_native.sh wan2.2-ti2v-5b
