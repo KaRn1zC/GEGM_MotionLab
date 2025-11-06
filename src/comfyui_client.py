@@ -300,10 +300,15 @@ class ComfyUIClient:
         error_data = data.get("data", {})
         workflow_id = error_data.get("prompt_id")
         error_message = error_data.get("exception_message", "Erreur inconnue")
+        exception_type = error_data.get("exception_type", "Unknown")
+        traceback_str = error_data.get("traceback", "")
 
         logger.error(
-            f"Erreur workflow {workflow_id[:8] if workflow_id else 'inconnu'}: {error_message}"
+            f"❌ Erreur workflow {workflow_id[:8] if workflow_id else 'inconnu'}: {exception_type}"
         )
+        logger.error(f"   Message: {error_message}")
+        if traceback_str:
+            logger.error(f"   Traceback: {traceback_str[:500]}")
 
         if workflow_id and workflow_id in self.active_workflows:
             workflow = self.active_workflows[workflow_id]
