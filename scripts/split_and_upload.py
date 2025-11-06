@@ -126,6 +126,20 @@ def process_model_dir(model_dir, owncloud_remote):
     else:
         print("✅ Aucun fichier >8GB à découper")
 
+    # 🗑️ SUPPRIMER les fichiers d'origine découpés (garder que les chunks)
+    if files_to_split:
+        print("\n🗑️  Suppression des fichiers d'origine découpés...")
+        for file_path, rel_path in files_to_split:
+            try:
+                print(
+                    f"   Suppression: {rel_path} ({format_size(get_file_size(file_path))})"
+                )
+                os.remove(file_path)
+            except Exception as e:
+                print(f"   ❌ Erreur suppression: {e}")
+                sys.exit(1)
+        print("✅ Fichiers découpés supprimés, chunks conservés pour upload")
+
     # Upload avec TOUS les paramètres optimaux
     print(f"\n📤 Upload vers {owncloud_remote}...")
     print("   Durée estimée: ~30 min pour les chunks + 2-3h pour le reste")
