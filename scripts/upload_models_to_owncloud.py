@@ -104,11 +104,6 @@ async def upload_model_to_owncloud(
         for idx, file_path in enumerate(files, 1):
             relative_path = file_path.relative_to("models")
 
-            # EXCLUSION: Ne pas uploader le mauvais VAE 96 canaux
-            if "Wan2.2_VAE.pth" in str(relative_path):
-                logger.warning(f"⏭️  Skipped (VAE 96ch): {relative_path}")
-                continue
-
             remote_path = str(relative_path)
 
             logger.info(f"📤 [{idx}/{total_files}] Upload: {relative_path}")
