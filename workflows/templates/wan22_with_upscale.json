@@ -104,7 +104,7 @@
     "3": {
       "class_type": "WanVideoVAELoader",
       "inputs": {
-        "vae_name": "Wan2.2_VAE.pth",
+        "model_name": "Wan2.2_VAE.pth",
         "precision": "bf16"
       }
     },
