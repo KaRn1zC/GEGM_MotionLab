@@ -1,539 +1,756 @@
-# 🐳 GEGM MotionLab - Docker Deployment
+# 🐳 GEGM MotionLab - Guide Docker
 
-Guide complet de déploiement containerisé pour GEGM MotionLab.
+Guide complet de déploiement containerisé pour GEGM MotionLab en environnement local.
 
-## ⚠️ Architecture Importante
-
-**Image Docker Légère : ~8GB (sans modèles)**
-
-Les modèles WAN 2.2 (5B/14B) ne sont **PAS inclus** dans l'image Docker pour éviter une taille excessive (35-40GB).
-
-**Workflow de déploiement :**
-1. Build image Docker légère (~8GB)
-2. Modèles stockés sur OwnCloud (découpés en chunks)
-3. Pod RunPod télécharge les modèles au démarrage depuis OwnCloud
-
-**Démarrage du Pod RunPod :**
-1. Le conteneur démarre (~10 secondes)
-2. Script `docker-entrypoint.sh` s'exécute
-3. Téléchargement automatique des modèles depuis OwnCloud (~5-10 min)
-4. Reconstitution des chunks en modèles complets
-5. Démarrage de ComfyUI et Flask
-6. 🎬 Interface GEGM MotionLab prête !
-
-**Voir [README_RUNPOD.md](README_RUNPOD.md) pour le workflow complet de préparation.**
+[![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://docker.com)
+[![Docker Compose](https://img.shields.io/badge/docker%20compose-2.0+-blue.svg)](https://docs.docker.com/compose)
 
 ---
 
-## 🚀 Quick Start
+## 📋 Table des matières
 
-### Prérequis
+1. [Architecture Docker](#architecture-docker)
+2. [Prérequis](#prérequis)
+3. [Installation et démarrage](#installation-et-démarrage)
+4. [Configuration](#configuration)
+5. [Gestion des services](#gestion-des-services)
+6. [Volumes et persistance](#volumes-et-persistance)
+7. [Build custom](#build-custom)
+8. [Troubleshooting](#troubleshooting)
+
+---
+
+## Architecture Docker
+
+### Stratégie multi-stage
+
+Le **Dockerfile** utilise une stratégie multi-stage pour minimiser la taille de l'image finale:
+
+```dockerfile
+# Stage 1: Base CUDA
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 AS base
+# GPU runtime + librairies CUDA 12.8
+
+# Stage 2: Builder
+FROM base AS builder
+# Installation dépendances
+# Compilation wheels Python
+# Build dependencies temporaires
+
+# Stage 3: Runtime
+FROM base AS runtime
+# Copie wheels du builder
+# ComfyUI + dépendances
+# Configuration entrypoint
+# Image finale ~8GB
+```
+
+### Taille optimisée
+
+| Variante | Taille | Contenu | Usage |
+|----------|--------|---------|-------|
+| **Image légère** | ~8 GB | Runtime + ComfyUI | ✅ Actuellement utilisée |
+| **Modèles séparés** | - | WAN 2.2 5B/14B (41GB) | Téléchargés au démarrage Pod |
+| **Total complet** | ~49 GB | Image + modèles | Non utilisé (trop volumineux) |
+
+**Avantage:** Image légère permet:
+- ✅ Déploiement rapide RunPod (~10 sec démarrage)
+- ✅ Push/pull rapide Docker Hub
+- ✅ Modèles téléchargés depuis OwnCloud au démarrage (~5-10 min)
+
+---
+
+## Prérequis
+
+### Système local
 
 - **Docker** : 20.10+ avec BuildX
 - **Docker Compose** : 2.0+
-- **RAM** : 8GB minimum
-- **Stockage** : 15GB pour l'image (sans modèles)
-- **GPU** : NVIDIA avec CUDA 12.8+ (pour production)
+- **GPU NVIDIA** : 40+ GB VRAM minimum (48GB recommandé)
+- **CUDA** : 12.8+ sur machine hôte (optionnel pour hôte)
+- **RAM** : 8 GB minimum
+- **Espace disque** : 100 GB minimum
+  - ~8 GB image Docker
+  - ~13-28 GB modèles WAN 2.2
+  - ~40-50 GB working/output
 
-### 1. Configuration
-
-Créez \`.env\` à la racine du projet :
+### Commandes requises
 
 ```bash
-cp .env.example .env
-# Éditez .env avec vos identifiants OwnCloud
+# Vérifier Docker
+docker --version       # Doit être 20.10+
+docker-compose --version  # Doit être 2.0+
+
+# Vérifier GPU NVIDIA (optionnel)
+nvidia-smi            # Si pas disponible sur hôte, OK (Docker l'a)
 ```
 
-**Contenu de \`.env\` :**
+### Accès au registre Docker
 
+- Compte Docker Hub OU
+- Registre privé configuré
+- (Optionnel pour développement local)
+
+---
+
+## Installation et démarrage
+
+> Le projet utilise deux fichiers de dépendances :
+> - **`requirements.txt`** contient l’ensemble des dépendances, y compris PyTorch et ses modules (torch, torchvision, torchaudio).
+> - **`requirements-base.txt`** est identique à `requirements.txt` SANS ces trois lignes :
+>   ```>   torch==2.10.0.dev20251106 >   torchaudio==2.10.0.dev20251106 >   torchvision==0.25.0.dev20251106 >  ```
+>
+> Cette organisation permet :
+> - **En local** : Utiliser `requirements.txt` pour que `pip install -r requirements.txt` installe également PyTorch, nécessaire pour exécuter les scripts d’upload/download, VAE, découpage/reconstitution, etc.
+> - **En production Docker/RunPod** : L’installation de PyTorch, optimisée pour le GPU cible, se fait directement dans le Dockerfile. Par conséquent, on n’installe dans le conteneur que les dépendances de `requirements-base.txt` (donc sans écraser la version de torch installée par le Dockerfile).
+>
+> **Important** :
+> - En local, toujours utiliser `requirements.txt`
+> - En cloud/Docker, le Dockerfile doit appeler `pip install -r requirements-base.txt` après l’installation du bon PyTorch
+
+### Démarrage rapide (recommended)
+
+```bash
+# 1. Cloner le projet
+git clone <repo-url>
+cd GEGM_MotionLab
+
+# 2. Copier template configuration
+cp .env.example .env
+# Éditer .env si besoin (optionnel pour local)
+
+# 3. Démarrer services
+docker-compose up -d
+
+# 4. Attendre démarrage (30-60 secondes)
+sleep 30
+
+# 5. Vérifier statut
+docker-compose ps
+docker-compose logs
+
+# 6. Accéder interface
+open http://localhost:5000
+```
+
+### Démarrage pas à pas
+
+#### Étape 1: Build image
+
+```bash
+# Build local (sans modèles)
+docker-compose build
+
+# Output: Image ID: sha256:abc123...
+# Taille: ~8GB
+# Durée: 10-15 minutes (première fois)
+```
+
+#### Étape 2: Configurer variables d'environnement
+
+```bash
+# Copier template
+cp .env.example .env
+
+# Éditer (si besoin d'OwnCloud)
+nano .env
+```
+
+**Variables principales pour local:**
 ```env
-# OwnCloud Configuration
-OWNCLOUD_SERVER_URL=https://www.cloud-gegm.com
-OWNCLOUD_USERNAME=votre-username
-OWNCLOUD_PASSWORD=votre-password
-OWNCLOUD_MODEL_FOLDER=/GEGM_ComfyUI/Models
-OWNCLOUD_CINEMAGRAPH_FOLDER=/GEGM_ComfyUI/Cinemagraphs
-
-# Flask Configuration
 FLASK_HOST=0.0.0.0
 FLASK_PORT=5000
 FLASK_DEBUG=false
-SECRET_KEY=change-me-in-production
 
-# ComfyUI Configuration
 COMFYUI_HOST=127.0.0.1
 COMFYUI_PORT=8188
 
-# Logging
 LOG_LEVEL=INFO
 ```
 
-### 2. Build & Démarrage
+**Si vous utiliserez OwnCloud (optionnel pour local):**
+```env
+OWNCLOUD_SERVER_URL=https://www.cloud-gegm.com
+OWNCLOUD_USERNAME=votre-username
+OWNCLOUD_PASSWORD=votre-password
+```
+
+#### Étape 3: Démarrer les services
 
 ```bash
-# Build de l'image
-docker-compose build
-
-# Démarrer les services
+# Démarrage en arrière-plan
 docker-compose up -d
 
-# Vérifier les logs
+# OU démarrage au premier plan (logs visibles)
+docker-compose up
+```
+
+#### Étape 4: Vérifier démarrage
+
+```bash
+# Vérifier statut services
+docker-compose ps
+# Status: "healthy" pour comfy_img_to_loop
+
+# Voir logs détaillés
 docker-compose logs -f
+
+# Attendre messages:
+# "ComfyUI started successfully"
+# "Flask app started on 0.0.0.0:5000"
 ```
 
-### 3. Accès
-
-- **Interface Web** : http://localhost:5000
-- **API Health** : http://localhost:5000/health
-- **ComfyUI** : http://localhost:8188
-
----
-
-## 📦 Architecture Docker
-
-### Multi-Stage Build Optimisé
-
-**Stage 1: Base CUDA**
-- Base: `nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04`
-- Installation Python 3.11
-- Dépendances système (FFmpeg, rclone, etc.)
-
-**Stage 2: Builder**
-- Installation dépendances Python
-- Build des wheels pour accélération
-
-**Stage 3: Runtime**
-- Copie des dépendances buildées
-- Ajout ComfyUI
-- **Script de téléchargement modèles depuis OwnCloud**
-- Configuration entrypoint
-- Healthcheck intégré
-
-### Taille de l'Image
-
-| Variante | Taille | Modèles | Notes |
-|----------|--------|---------|-------|
-| **Légère (production)** | ~8GB | ❌ Téléchargés au démarrage | **Utilisée actuellement** |
-| Complète 5B | ~18-20GB | ✅ WAN 2.2 5B inclus | Non utilisée |
-| Complète 14B | ~35-40GB | ✅ WAN 2.2 14B inclus | Non utilisée |
-
-**Avantages de l'architecture légère :**
-- ✅ Build rapide (~10-15 min vs 30-60 min)
-- ✅ Push rapide (~5-10 min vs 1-2h)
-- ✅ Image Docker Hub légère
-- ✅ Flexibilité : choix du modèle au démarrage du Pod
-
-**Inconvénient :**
-- ⚠️ Téléchargement modèles au premier démarrage Pod (~5-10 min)
-
-## 🔧 Workflow de Préparation des Modèles
-
-Les modèles WAN 2.2 sont gérés via OwnCloud avec découpe automatique.
-
-**Voir [README.md](README.md) section "Préparation de l'Image Docker pour RunPod"** pour :
-- Téléchargement des modèles localement
-- Découpe automatique en chunks (>8GB → morceaux de 2GB)
-- Upload via rclone sur OwnCloud
-- Vérification de l'upload
-
-**Commandes principales :**
-```
-make download-models # Télécharger modèles
-make sequential-upload-workflow # Upload séquentiel (économe)
-make rclone-verify # Vérifier upload
-```
-
-## 🏗️ Build Multi-Architecture
-
-Support AMD64 (RunPod/serveurs) + ARM64 (Mac M1/M2/M3).
-
-### Setup BuildX (une fois)
+#### Étape 5: Accéder l'interface
 
 ```bash
-# Créer le builder multi-arch
-docker buildx create --name multiarch-builder --use
-docker buildx inspect --bootstrap
-```
+# Ouvrir navigateur
+open http://localhost:5000
 
-### Build Multi-Arch
-
-```bash
-# Build pour AMD64 + ARM64
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --tag arnaudboy/comfy_img_to_loop:latest \
-  --push \
-  .
-
-# Ou via Makefile
-make runpod-build
+# OU direct URL
+curl http://localhost:5000/health
+# Response: {"status":"healthy",...}
 ```
 
 ---
 
-## 📂 Volumes Docker
+## Configuration
 
-| Volume      | Path Container                 | Description                          |
-| ----------- | ------------------------------ | ------------------------------------ |
-| **uploads** | \`/app/web_interface/uploads\` | Images uploadées (temporaire)        |
-| **logs**    | \`/app/logs\`                  | Logs application                     |
-| **models**  | \`/app/models\`                | Modèles IA (optionnel si pré-inclus) |
-| **output**  | \`/app/output\`                | Cinemagraphs générés                 |
+### Docker Compose Configuration
 
-### Montage des Volumes
-
-**docker-compose.yml :**
+**Fichier: docker-compose.yml**
 
 ```yaml
 services:
   comfy_img_to_loop:
+    image: arnaudboy/comfy_img_to_loop:latest
+    build: .
+    container_name: gegm_motionlab
+    restart: unless-stopped
+    
+    # GPU Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Réseau et ports
+    ports:
+      - "5000:5000"    # Flask interface
+      - "8188:8188"    # ComfyUI API
+    
+    # Variables d'environnement
+    env_file:
+      - .env
+    
+    # Volumes (persistance)
     volumes:
-      - ./logs:/app/logs
-      - ./web_interface/uploads:/app/web_interface/uploads
-      - ./output:/app/output
-      # Optionnel : monter les modèles si non inclus dans l'image
-      # - ./models:/app/models:ro
+      - ./logs:/app/logs              # Logs application
+      - ./uploads:/app/uploads        # Images uploadées
+      - ./output:/app/output          # Vidéos générées
+      - ./config:/app/config          # Configuration
+    
+    # Vérification santé
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Limites ressources
+    mem_limit: 16g
+    memswap_limit: 16g
 ```
+
+### Variables d'environnement
+
+| Variable | Valeur | Description |
+|----------|--------|-------------|
+| `FLASK_HOST` | `0.0.0.0` | Adresse d'écoute Flask |
+| `FLASK_PORT` | `5000` | Port Flask |
+| `FLASK_DEBUG` | `false` | Debug mode (false en prod) |
+| `COMFYUI_HOST` | `127.0.0.1` | Host ComfyUI (localhost) |
+| `COMFYUI_PORT` | `8188` | Port ComfyUI |
+| `COMFYUI_TIMEOUT` | `300` | Timeout WebSocket (sec) |
+| `LOG_LEVEL` | `INFO` | Level logging (INFO/DEBUG/WARNING) |
+| `CUDA_VISIBLE_DEVICES` | `0` | GPU IDs (0 pour premier GPU) |
+
+**Pour OwnCloud (optionnel):**
+
+| Variable | Exemple | Description |
+|----------|---------|-------------|
+| `OWNCLOUD_SERVER_URL` | `https://cloud.example.com` | URL serveur OwnCloud |
+| `OWNCLOUD_USERNAME` | `user@example.com` | Username |
+| `OWNCLOUD_PASSWORD` | `password` | Mot de passe |
+| `OWNCLOUD_MODEL_FOLDER` | `/GEGM_ComfyUI/Models` | Dossier modèles |
 
 ---
 
-## 🌐 Variables d'Environnement
+## Gestion des services
 
-### Flask (Backend)
+### Commandes essentielles
 
-| Variable        | Défaut      | Description                 |
-| --------------- | ----------- | --------------------------- |
-| \`FLASK_HOST\`  | \`0.0.0.0\` | Adresse d'écoute            |
-| \`FLASK_PORT\`  | \`5000\`    | Port de l'interface         |
-| \`FLASK_DEBUG\` | \`false\`   | Mode debug (dev uniquement) |
-| \`SECRET_KEY\`  | _(requis)_  | Clé secrète Flask           |
-
-### ComfyUI
-
-| Variable            | Défaut        | Description                  |
-| ------------------- | ------------- | ---------------------------- |
-| \`COMFYUI_HOST\`    | \`127.0.0.1\` | Host ComfyUI                 |
-| \`COMFYUI_PORT\`    | \`8188\`      | Port API ComfyUI             |
-| \`COMFYUI_TIMEOUT\` | \`300\`       | Timeout connexion (secondes) |
-
-### OwnCloud
-
-| Variable                        | Description                  |
-| ------------------------------- | ---------------------------- |
-| \`OWNCLOUD_SERVER_URL\`         | URL du serveur (https://...) |
-| \`OWNCLOUD_USERNAME\`           | Username OwnCloud            |
-| \`OWNCLOUD_PASSWORD\`           | Mot de passe                 |
-| \`OWNCLOUD_MODEL_FOLDER\`       | Dossier des modèles          |
-| \`OWNCLOUD_CINEMAGRAPH_FOLDER\` | Dossier des cinemagraphs     |
-
-### Logging
-
-| Variable      | Valeurs                                     | Description    |
-| ------------- | ------------------------------------------- | -------------- |
-| \`LOG_LEVEL\` | \`DEBUG\`, \`INFO\`, \`WARNING\`, \`ERROR\` | Niveau de logs |
-
----
-
-## 🔧 Modes de Déploiement
-
-### Mode Développement
+#### Démarrage/Arrêt
 
 ```bash
-# Démarrer avec hot reload
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
-
-# Ou via Makefile
-make dev
-```
-
-**Features dev :**
-
-- ✅ Code source monté en volume (hot reload)
-- ✅ Debug logs activés
-- ✅ Pas de restart automatique
-- ✅ Ports exposés pour debug
-
-### Mode Production
-
-```bash
-# Démarrer en production
+# Démarrer en arrière-plan
 docker-compose up -d
 
-# Ou via Makefile
-make prod
+# Démarrer au premier plan (logs visibles)
+docker-compose up
+
+# Arrêter services
+docker-compose stop
+
+# Arrêter et supprimer conteneurs
+docker-compose down
+
+# Arrêter et nettoyer tout (volumes inclus)
+docker-compose down -v
 ```
 
-**Features prod :**
-
-- ✅ Code copié dans l'image (pas de volumes)
-- ✅ Restart automatique (\`unless-stopped\`)
-- ✅ Healthcheck actif
-- ✅ Logs structurés
-
----
-
-## 🏥 Health Check
-
-Le conteneur expose un endpoint de santé.
-
-### Test Health Check
-
-```bash
-# Via curl
-curl http://localhost:5000/health
-
-# Réponse attendue
-{
-  "status": "healthy",
-  "services": {
-    "flask": "ok",
-    "comfyui": "ok",
-    "owncloud": "ok"
-  },
-  "timestamp": "2025-10-21T12:00:00Z"
-}
-```
-
-### Configuration Docker
-
-**docker-compose.yml :**
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 60s
-```
-
----
-
-## 📊 Monitoring & Logs
-
-### Voir les Logs
+#### Logs et monitoring
 
 ```bash
 # Logs en temps réel
 docker-compose logs -f
 
-# Logs d'un service spécifique
+# Logs service spécifique
 docker-compose logs -f comfy_img_to_loop
 
+# Logs dernières 100 lignes
+docker-compose logs --tail=100
+
 # Logs avec timestamps
-docker-compose logs -f -t
+docker-compose logs -f --timestamps
 ```
 
-### Logs Structurés
-
-Les logs sont au format JSON structuré (Loguru) :
-
-```json
-{
-  "timestamp": "2025-10-21 12:00:00",
-  "level": "INFO",
-  "module": "routes",
-  "message": "Job abc-123 started",
-  "extra": {
-    "job_id": "abc-123",
-    "user_ip": "192.168.1.1"
-  }
-}
-```
-
-### Statistiques en Temps Réel
+#### Vérification statut
 
 ```bash
-# Stats conteneurs
-docker stats
+# Vérifier statut services
+docker-compose ps
 
-# Ou via Makefile
-make stats
+# Vérifier health check
+docker-compose ps --no-trunc
+
+# Vérifier disque utilisé
+docker system df
+
+# Vérifier réseau services
+docker-compose exec comfy_img_to_loop \
+  curl http://127.0.0.1:8188/system_stats
 ```
 
----
-
-## 🧪 Tests dans Docker
-
-### Exécuter les Tests
+#### Nettoyage et maintenance
 
 ```bash
-# Tous les tests
-docker-compose exec comfy_img_to_loop pytest tests/ -v
+# Redémarrer service
+docker-compose restart
 
-# Tests d'un module spécifique
-docker-compose exec comfy_img_to_loop pytest tests/test_routes.py -v
-
-# Avec couverture
-docker-compose exec comfy_img_to_loop pytest --cov=src --cov-report=html
-```
-
-### Shell Interactif
-
-```bash
-# Accéder au shell
-docker-compose exec comfy_img_to_loop /bin/bash
-
-# Ou via Makefile
-make shell
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Conteneur Ne Démarre Pas
-
-```bash
-# Voir les logs de démarrage
-docker-compose logs comfy_img_to_loop
-
-# Vérifier la configuration
-docker-compose config
-
-# Rebuild from scratch
-docker-compose down -v
+# Rebuild image sans cache
 docker-compose build --no-cache
-docker-compose up -d
-```
 
-### Erreur de Connexion ComfyUI
+# Nettoyer images inutilisées
+docker image prune -a --force
 
-```bash
-# Vérifier que ComfyUI écoute sur 0.0.0.0
-docker-compose exec comfy_img_to_loop curl http://127.0.0.1:8188/system_stats
+# Nettoyer volumes inutilisés
+docker volume prune -f
 
-# Vérifier les logs ComfyUI
-docker-compose logs comfyui
-```
-
-### Problèmes de Permissions
-
-```bash
-# Les volumes doivent être accessibles par UID 1000
-sudo chown -R 1000:1000 logs/ web_interface/uploads/ output/
-
-# Vérifier les permissions dans le conteneur
-docker-compose exec comfy_img_to_loop ls -la /app/logs
-```
-
-### Modèles Introuvables
-
-```bash
-# Vérifier la présence des modèles dans l'image
-docker-compose exec comfy_img_to_loop ls -lh /app/models/
-
-# Si modèles non inclus, monter le volume
-# docker-compose.yml :
-volumes:
-  - ./models:/app/models:ro
-```
-
-### OwnCloud Upload Échoue
-
-```bash
-# Tester la connexion OwnCloud
-docker-compose exec comfy_img_to_loop python -c "
-from src.owncloud_uploader import OwnCloudUploader
-import asyncio
-async def test():
-    config = {'server_url': 'https://...', 'username': '...', 'password': '...'}
-    async with OwnCloudUploader(config) as uploader:
-        print('✅ Connexion OwnCloud OK')
-asyncio.run(test())
-"
+# Nettoyer tout
+docker system prune -a --volumes -f
 ```
 
 ---
 
-## 🔒 Sécurité
+## Volumes et persistance
 
-### Best Practices Appliquées
+### Types de volumes
 
-- ✅ **Utilisateur non-root** : UID 1000 dans le conteneur
-- ✅ **Image slim** : Surface d'attaque réduite
-- ✅ **Secrets via env vars** : Pas de credentials hardcodés
-- ✅ **Healthcheck** : Auto-healing des services
-- ✅ **Restart policy** : \`unless-stopped\` en production
+| Mount Path | Type | Persistence | Purpose |
+|---|---|---|---|
+| `/app/logs` | Volume local | ✅ Persistant | Logs application |
+| `/app/uploads` | Volume local | ✅ Persistant | Images uploadées (temporaire) |
+| `/app/output` | Volume local | ✅ Persistant | Vidéos générées (avant upload OwnCloud) |
+| `/app/config` | Volume local | ✅ Persistant | Configuration application |
+| `/workspace/comfyui` | Volume interne | ❌ Éphémère* | ComfyUI + modèles |
 
-### Recommandations Production
+\* Les modèles sont téléchargés au démarrage depuis OwnCloud sur RunPod
 
+### Gestion des volumes
+
+**Voir disque utilisé:**
+```bash
+docker-compose exec comfy_img_to_loop \
+  df -h /app /workspace
+
+# Output:
+# /app       50G  10G  40G  20%  (uploads + output)
+# /workspace 500G 40G 460G  8%  (modèles + working)
+```
+
+**Nettoyer uploads/output locales:**
+```bash
+# Local directory
+rm -rf ./output/*
+rm -rf ./uploads/*
+
+# Ou via Docker
+docker-compose exec comfy_img_to_loop \
+  sh -c "rm -rf /app/output/* /app/uploads/*"
+```
+
+**Backup volumes:**
+```bash
+# Backup complet
+docker-compose exec comfy_img_to_loop \
+  tar -czf - /app/output | gzip > backup.tar.gz
+
+# Restore
+gunzip < backup.tar.gz | \
+  docker-compose exec -T comfy_img_to_loop \
+  tar -xzf - -C /
+```
+
+---
+
+## Build custom
+
+### Builder image localement
+
+```bash
+# Build standard
+docker build -t gegm-motionlab:latest .
+
+# Build multi-arch (amd64 + arm64)
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --tag gegm-motionlab:latest \
+  .
+
+# Build avec tag personnalisé
+docker build -t gegm-motionlab:dev \
+  --build-arg PYTHON_VERSION=3.11 \
+  .
+```
+
+### Push vers registre
+
+```bash
+# Tag pour Docker Hub
+docker tag gegm-motionlab:latest \
+  username/comfy_img_to_loop:latest
+
+# Login Docker Hub
+docker login
+
+# Push
+docker push username/comfy_img_to_loop:latest
+
+# Multi-arch avec buildx + push
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --tag username/comfy_img_to_loop:latest \
+  --push .
+```
+
+### Override docker-compose local
+
+**Fichier: docker-compose.override.yml**
 ```yaml
-# docker-compose.prod.yml
 services:
   comfy_img_to_loop:
-    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.11"
+    
     environment:
-      - FLASK_DEBUG=false
-      - SECRET_KEY=${SECRET_KEY} # Depuis secrets manager
-    networks:
-      - internal
-    # Pas d'exposition directe, utiliser un reverse proxy
-    expose:
-      - "5000"
-
-  nginx:
-    image: nginx:alpine
+      FLASK_DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+    
     ports:
-      - "443:443"
+      - "5000:5000"
+      - "8188:8188"
+      - "6006:6006"  # TensorBoard (optionnel)
+    
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    networks:
-      - internal
-      - external
+      - .:/app  # Code hot-reload
+      - ./logs:/app/logs
+```
+
+**Utilisation:**
+```bash
+docker-compose up  # Utilise automatiquement les overrides
 ```
 
 ---
 
-## 🧹 Nettoyage
+## Troubleshooting
 
-### Arrêter et Nettoyer
+### Services ne démarrent pas
+
+**Symptôme:** `docker-compose up` échoue immédiatement
 
 ```bash
-# Arrêter les services
-docker-compose down
+# 1. Vérifier logs
+docker-compose logs
 
-# Supprimer les volumes (⚠️ perte de données)
-docker-compose down -v
+# 2. Vérifier image existe
+docker images | grep gegm
 
-# Supprimer l'image
-docker rmi arnaudboy/comfy_img_to_loop:latest
+# 3. Vérifier ports disponibles
+netstat -an | grep 5000
+lsof -i :5000
 
-# Nettoyer Docker complet
-docker system prune -a --volumes
+# 4. Tuer process utilisant port
+sudo lsof -ti :5000 | xargs kill -9
+
+# 5. Rebuild image
+docker-compose build --no-cache
+
+# 6. Redémarrer Docker daemon
+sudo systemctl restart docker
+```
+
+### GPU non utilisée
+
+**Symptôme:** `nvidia-smi` dans container affiche pas de GPU
+
+```bash
+# 1. Vérifier GPU hôte
+nvidia-smi
+
+# 2. Vérifier driver Docker NVIDIA
+docker run --rm --gpus all nvidia/cuda:12.8.1-base \
+  nvidia-smi
+
+# 3. Si erreur, réinstaller Docker NVIDIA
+# macOS: docker-compose inclut déjà support GPU
+# Linux: apt install nvidia-docker2
+
+# 4. Vérifier configuration docker-compose
+docker-compose config | grep -A 10 "deploy:"
+
+# 5. Test GPU dans container
+docker-compose exec comfy_img_to_loop \
+  python -c "import torch; print(torch.cuda.is_available())"
+```
+
+### VRAM insuffisante
+
+**Symptôme:** `CUDA out of memory` lors génération
+
+```bash
+# 1. Vérifier VRAM utilisée
+docker-compose exec comfy_img_to_loop \
+  nvidia-smi
+
+# 2. Réduire steps dans interface (20 → 15)
+
+# 3. Augmenter memory limits dans docker-compose.yml
+mem_limit: 32g  # Si GPU a suffisant
+memswap_limit: 32g
+
+# 4. Vérifier autres processes GPU
+nvidia-smi -l 1  # Refresh toutes les secondes
+
+# 5. Redémarrer container
+docker-compose restart
+```
+
+### Modèles non trouvés
+
+**Symptôme:** Erreur "Checkpoint not found"
+
+```bash
+# 1. Vérifier présence modèles locaux
+docker-compose exec comfy_img_to_loop \
+  ls -lh /workspace/comfyui/ComfyUI/models/checkpoints/
+
+# 2. Si vides, télécharger depuis HF
+docker-compose exec comfy_img_to_loop \
+  bash -c "cd /app && \
+    python scripts/setup_wan22_native.sh"
+
+# 3. OU télécharger depuis OwnCloud
+docker-compose exec comfy_img_to_loop \
+  python scripts/download_models_from_owncloud.py
+
+# 4. Vérifier taille modèles
+docker-compose exec comfy_img_to_loop \
+  du -sh /workspace/comfyui/ComfyUI/models/checkpoints/
+```
+
+### Erreur VAE (96 vs 48 canaux)
+
+**Symptôme:** `RuntimeError: Expected 48 channels, got 96`
+
+```bash
+# 1. Vérifier VAE utilisé
+docker-compose exec comfy_img_to_loop \
+  ls -l /workspace/comfyui/ComfyUI/models/vae/
+
+# 2. Si pas présent, créer symlink
+docker-compose exec comfy_img_to_loop \
+  bash -c "cd /app && \
+    bash scripts/setup_diffusion_models.sh"
+
+# 3. Vérifier VAE converti existe
+docker-compose exec comfy_img_to_loop \
+  ls -l /workspace/comfyui/ComfyUI/models/checkpoints/wan*/Wan2.2_VAE.pth
+
+# 4. Si pas converti, reconvertir
+docker-compose exec comfy_img_to_loop \
+  python -c "from upload_models_to_owncloud import convert_vae_96_to_48; ..."
+```
+
+### Connexion ComfyUI échoue
+
+**Symptôme:** "Failed to connect to ComfyUI" dans logs
+
+```bash
+# 1. Vérifier port ComfyUI
+docker-compose logs | grep -i "8188\|comfyui started"
+
+# 2. Tester connexion locale
+docker-compose exec comfy_img_to_loop \
+  curl -s http://127.0.0.1:8188/system_stats | python -m json.tool
+
+# 3. Vérifier health check
+docker-compose exec comfy_img_to_loop \
+  curl -s http://localhost:5000/health
+
+# 4. Augmenter COMFYUI_TIMEOUT
+# .env: COMFYUI_TIMEOUT=600  (au lieu de 300)
+
+# 5. Redémarrer
+docker-compose restart
+```
+
+### OwnCloud ne se connecte pas
+
+**Symptôme:** "OwnCloud authentication failed"
+
+```bash
+# 1. Vérifier configuration
+cat .env | grep OWNCLOUD
+
+# 2. Tester rclone
+docker-compose exec comfy_img_to_loop \
+  rclone ls owncloud:/GEGM_ComfyUI/Models
+
+# 3. Vérifier credentials
+docker-compose exec comfy_img_to_loop \
+  rclone config show owncloud
+
+# 4. Test connexion directe
+curl -u username:password \
+  https://cloud-gegm.com/remote.php/webdav
+
+# 5. Ajouter debug logs
+LOG_LEVEL=DEBUG docker-compose up
+```
+
+### Disque plein
+
+**Symptôme:** "No space left on device"
+
+```bash
+# 1. Vérifier espace disque
+docker-compose exec comfy_img_to_loop \
+  df -h /
+
+# 2. Nettoyer output videos
+rm -rf ./output/*
+
+# 3. Nettoyer uploads temporaires
+rm -rf ./uploads/*
+
+# 4. Nettoyer logs
+docker-compose exec comfy_img_to_loop \
+  rm -rf /app/logs/*.log
+
+# 5. Nettoyer Docker
+docker system prune -a --volumes -f
+
+# 6. Verifier espace à nouveau
+df -h
 ```
 
 ---
 
-## 📝 Makefile Commands
+## Conseils de performance
 
-Commandes disponibles via \`make\` :
+### Optimiser build time
 
-| Commande         | Description           |
-| ---------------- | --------------------- |
-| \`make help\`    | Afficher l'aide       |
-| \`make build\`   | Construire l'image    |
-| \`make up\`      | Démarrer les services |
-| \`make down\`    | Arrêter les services  |
-| \`make restart\` | Redémarrer            |
-| \`make logs\`    | Voir les logs         |
-| \`make shell\`   | Shell interactif      |
-| \`make test\`    | Exécuter les tests    |
-| \`make health\`  | Health check          |
-| \`make stats\`   | Statistiques          |
-| \`make clean\`   | Nettoyer              |
-| \`make rebuild\` | Rebuild from scratch  |
+```bash
+# Utiliser cache layers
+docker-compose build
+
+# Ou builder sans cache (plus lent)
+docker-compose build --no-cache
+
+# Multi-stage: seulement runtime dans final image
+# Réduit taille ~75%
+```
+
+### Optimiser runtime
+
+```bash
+# 1. GPU memory allocation
+PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
+
+# 2. Réduire steps pour tests rapides
+# Interface: Preset "Rapide" = 15 steps
+
+# 3. Réduire logs verbosity en production
+LOG_LEVEL=WARNING
+
+# 4. Augmenter memory limits si VRAM ample
+mem_limit: 32g
+```
 
 ---
 
-## 🆘 Support
+## Commandes Makefile utiles
 
-- **Documentation** : Voir [README.md](README.md) principal
-- **RunPod** : Voir [README_RUNPOD.md](README_RUNPOD.md)
-- **Issues** : GitHub Issues (projet privé)
-- **Contact** : arnaud.boy@gegmgroup.com
+```bash
+# Démarrage rapide
+make up                          # docker-compose up -d
+
+# Voir logs
+make logs                        # docker-compose logs -f
+
+# Arrêter
+make down                        # docker-compose down
+
+# Rebuild
+make rebuild                     # docker-compose build --no-cache
+
+# Nettoyage
+make clean                       # Remove volumes
+
+# Deployer sur RunPod
+make runpod-deploy              # Build + push multi-arch
+
+# Voir tous les targets
+make help
+```
 
 ---
 
-**© 2025 GEGM Group - Docker deployment guide v2.0**
+## Ressources
+
+- [Docker Documentation](https://docs.docker.com)
+- [Docker Compose Documentation](https://docs.docker.com/compose)
+- [NVIDIA Docker Documentation](https://github.com/NVIDIA/nvidia-docker)
+- [README.md](README.md) - Documentation principale
+- [README_RUNPOD.md](README_RUNPOD.md) - Déploiement RunPod
+
+---
+
+**Last Updated:** 7 novembre 2025  
+**Status:** ✅ Production Ready

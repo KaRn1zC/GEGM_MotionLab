@@ -2,11 +2,13 @@
 
 **Studio professionnel de création de cinemagraphs propulsé par l'IA WAN 2.2**
 
-> Transformez vos images statiques en boucles vidéo avec l'intelligence artificielle.
+> Transformez vos images statiques en boucles vidéo fluides avec l'intelligence artificielle.
 
 [![License](https://img.shields.io/badge/license-Private-red.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11.13-blue.svg)](https://python.org)
+[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://docker.com)
+[![ComfyUI](https://img.shields.io/badge/comfyui-latest-blueviolet.svg)](https://github.com/comfyanonymous/ComfyUI)
+[![WAN 2.2](https://img.shields.io/badge/WAN%202.2-production%20ready-green.svg)](https://huggingface.co/wanx)
 
 ---
 
@@ -14,578 +16,612 @@
 
 ### Interface Professionnelle
 
-- **🎨 Interface GEGM MotionLab** : Interface web moderne et intuitive
-- **🎛️ Paramètres avancés** : Contrôle total avec tooltips éducatifs
-- **⚡ Presets intelligents** : Qualité Max, Équilibré, Rapide, Naturel
-- **🎲 Gestion du Seed** : Reproductibilité des générations
+- **🎨 Interface GEGM MotionLab** : Interface web moderne et intuitive basée sur Flask
+- **🎛️ Paramètres avancés** : Contrôle total avec 12+ paramètres et tooltips éducatifs
+- **⚡ Presets intelligents** : 4 configurations prédéfinies (Qualité Max, Équilibré, Rapide, Naturel)
+- **🎲 Gestion du Seed** : Reproductibilité garantie des générations
 
 ### IA de Pointe
 
-- **🧠 WAN 2.2 5B/14B** : Modèles state-of-the-art pour image-to-video
-- **📊 Analyse automatique** : Détection et optimisation des résolutions
-- **🎬 Qualité professionnelle** : 720p à 4K avec boucles fluides
+- **🧠 WAN 2.2 5B/14B** : Modèles state-of-the-art image-to-video
+  - **5B**: ~13 GB, ~5 min/vidéo (RTX 6000 Ada), $0.064/cinemagraph
+  - **14B**: ~28 GB, ~8 min/vidéo (H100 SXM), $0.36/cinemagraph
+- **📊 Analyse automatique** : Détection résolution et sélection modèle approprié
+- **🎬 Qualité professionnelle** : 720p à 4K avec boucles fluides et anti-flickering
 
-### Cloud & Stockage
+### Architecture Robuste
 
-- **☁️ Upload manuel OwnCloud** : Contrôle total sur la sauvegarde
-- **🗑️ Gestion intelligente du stockage** : Suppression des tests ratés
-- **💾 Téléchargement local** : Backup de sécurité intégré
-
-### Déploiement
-
-- **🐳 Docker multi-architecture** : AMD64 + ARM64 (Mac M1/M2/M3)
-- **🚀 RunPod optimisé** : Image légère + modèles OwnCloud
-- **📦 Modèles via OwnCloud** : Téléchargés au démarrage du Pod (~5-10 min)
-- **🔧 Workflow automatisé** : rclone + découpe automatique des fichiers
+- **☁️ Déploiement cloud** : RunPod avec GPU professionnel (RTX 6000 Ada ou H100 SXM)
+- **🐳 Containerisation** : Docker multi-architecture (AMD64 + ARM64)
+- **💾 Gestion modèles** : OwnCloud avec découpe chunks et reconstitution automatique
+- **📤 Upload manuel** : Contrôle total des sauvegardes via boutons interface
 
 ---
 
-## 📋 Prérequis
+## 📋 Table des matières
 
-### Développement Local
-
-- **Python** : 3.11.13
-- **GPU** : 24GB+ VRAM recommandé (NVIDIA avec CUDA 12.8+)
-- **Stockage** : 50GB pour modèles + workspace
-- **OS** : Linux, macOS, Windows (WSL2)
-
-### Production Cloud (RunPod)
-
-- **GPU Recommandés** :
-  - **WAN 2.2 5B** : RTX 6000 Ada 48GB ($0.77/h) ⭐ ou H100 SXM 80GB ($2.69/h)
-  - **WAN 2.2 14B** : H100 SXM 80GB ($2.69/h) ⭐ ou H200 SXM 141GB ($3.99/h)
-- **Stockage** : 10GB container disk minimum
-- **Réseau** : Connexion stable pour téléchargement modèles OwnCloud
-
-### Services Externes
-
-- **OwnCloud** : Serveur pour sauvegarde (optionnel mais recommandé)
-- **Docker Hub** : Compte pour push des images (production)
+1. [Installation rapide](#installation-rapide)
+2. [Prérequis](#prérequis)
+3. [Stack technologique](#stack-technologique)
+4. [Structure du projet](#structure-du-projet)
+5. [Configuration VAE](#configuration-vae)
+6. [Modèles IA](#modèles-ia)
+7. [Interface web](#interface-web)
+8. [Workflows ComfyUI](#workflows-comfyui)
+9. [Déploiement](#déploiement)
+10. [Configuration](#configuration)
+11. [Utilisation](#utilisation)
+12. [Troubleshooting](#troubleshooting)
+13. [Ressources](#ressources)
 
 ---
 
-## 🛠 Installation
+## Installation rapide
 
-### 1. Cloner le Projet
+> Le projet utilise deux fichiers de dépendances :
+> - **`requirements.txt`** contient l’ensemble des dépendances, y compris PyTorch et ses modules (torch, torchvision, torchaudio).
+> - **`requirements-base.txt`** est identique à `requirements.txt` SANS ces trois lignes :
+>   ```>   torch==2.10.0.dev20251106 >   torchaudio==2.10.0.dev20251106 >   torchvision==0.25.0.dev20251106 >  ```
+>
+> Cette organisation permet :
+> - **En local** : Utiliser `requirements.txt` pour que `pip install -r requirements.txt` installe également PyTorch, nécessaire pour exécuter les scripts d’upload/download, VAE, découpage/reconstitution, etc.
+> - **En production Docker/RunPod** : L’installation de PyTorch, optimisée pour le GPU cible, se fait directement dans le Dockerfile. Par conséquent, on n’installe dans le conteneur que les dépendances de `requirements-base.txt` (donc sans écraser la version de torch installée par le Dockerfile).
+>
+> **Important** :
+> - En local, toujours utiliser `requirements.txt`
+> - En cloud/Docker, le Dockerfile doit appeler `pip install -r requirements-base.txt` après l’installation du bon PyTorch
+
+### Local avec Docker Compose
 
 ```bash
-git clone https://github.com/KaRn1zC/GEGM_MotionLab.git
+# Cloner le projet
+git clone <repo>
 cd GEGM_MotionLab
-```
 
-### 2. Configuration de l'Environnement Virtuel .venv
+# Configurer OwnCloud (optional pour local)
+cp .env.example .env
+# Éditer .env avec vos credentials OwnCloud (optionnel)
 
-```bash
-
-# Créer et activer l'environnement virtuel
-
-python3.11 -m venv .venv
-source .venv/bin/activate # Linux/Mac
-
-# .venv\Scripts\activate # Windows
-
-# Installer les dépendances
-
-pip install -r requirements.txt
-```
-
-### 3. Création du fichier de variables d'environnement .env
-
-Créer un fichier de variables d'environnements `.env` à la racine.
-Se baser sur le contenu du fichier `.env.example` et remplacer les valeurs par ses propres informations.
-
----
-
-## 🐳 Préparation de l'Image Docker pour RunPod
-
-### Architecture : Image Légère + Modèles OwnCloud
-
-**Stratégie adoptée :**
-```
-Image Docker (~8GB) OwnCloud (~37GB modèles)
-                    ↓ ↓
-RunPod Pod ← Télécharge modèles au démarrage
-```
-
-**Avantages :**
-
-- ✅ Image Docker légère (~8GB vs 35-40GB)
-- ✅ Build rapide (~10-15 min)
-- ✅ Push Docker Hub rapide (~5-10 min)
-- ✅ Flexibilité : choix du modèle 5B ou 14B au démarrage
-
-**Inconvénient :**
-
-- ⚠️ Téléchargement modèles au 1er démarrage Pod (~5-10 min)
-
----
-
-### Workflow de Préparation Complet
-
-#### Prérequis
-
-- **rclone** configuré pour OwnCloud
-- **Docker BuildX** pour multi-architecture
-- **Espace disque** : 30GB minimum (workflow séquentiel)
-
-#### Étape 1 : Configuration rclone (Une Fois)
-
-Installer rclone
-```
-brew install rclone # macOS
-```
-
-OU
-```
-curl https://rclone.org/install.sh | sudo bash # Linux
-```
-
-Configurer rclone
-```
-rclone config
-```
-
-```
-Name: owncloud
-Type: webdav
-URL: https://www.cloud-gegm.com/remote.php/dav
-Vendor: owncloud
-User: votre-username
-Password: votre-password
-```
-
-Tester
-```
-make rclone-check
-```
-
-#### Étape 2 : Télécharger les Modèles
-
-Télécharger les modèles (choix interactif)
-```
-make download-models
-```
-
-Ou manuellement :
-```
-./scripts/setup_wan22_native.sh
-```
-
-#### Étape 3 : Uploader sur OwnCloud
-
-**Méthode Recommandée : Workflow Séquentiel (économe en espace)**
-
-Workflow complet : download → split → upload → clean
-Nécessite seulement ~30GB d'espace disque
-```
-make sequential-upload-workflow
-```
-
-**Workflow détaillé :**
-Download modèle 14B (~28GB) → Split → Upload → Clean
-
-Download modèle 5B (~11GB) → Split → Upload → Clean
-
-Upload script de reconstitution
-✅ Résultat : Tous les modèles sur OwnCloud, machine propre
-
-**Commandes individuelles (si besoin) :**
-
-Upload modèle 14B seulement
-```
-make full-workflow-14b
-```
-
-Upload modèle 5B seulement
-```
-make full-workflow-5b
-```
-
-Upload script de reconstitution
-```
-make rclone-upload-reassemble-script
-```
-
-#### Étape 4 : Vérifier l'Upload
-
-Vérifier la taille et présence des modèles
-```
-make rclone-verify
-```
-
-Lister les fichiers uploadés
-```
-make rclone-list
-```
-
-#### Étape 5 : Build et Push de l'Image Docker
-
-Build multi-architecture + Push Docker Hub
-```
-make runpod-deploy
-```
-
-Ou version rapide (AMD64 seulement)
-```
-make runpod-deploy-quick
-```
-
-**Durée totale du workflow :** 60-120 minutes (dépend de votre connexion)
-
----
-
-### Commandes Makefile Principales
-
-| Commande                          | Description                               | Espace Requis |
-| --------------------------------- | ----------------------------------------- | ------------- |
-| `make download-models`            | Télécharger modèles localement            | ~37GB         |
-| `make sequential-upload-workflow` | Workflow séquentiel (économe)             | ~30GB         |
-| `make full-upload-workflow`       | Workflow complet (tous modèles d'un coup) | ~54GB         |
-| `make rclone-verify`              | Vérifier uploads OwnCloud                 | -             |
-| `make rclone-list`                | Lister fichiers sur OwnCloud              | -             |
-| `make runpod-deploy`              | Build + Push image (multi-arch)           | -             |
-| `make runpod-deploy-quick`        | Build + Push image (AMD64 only)           | -             |
-| `make models-deep-clean`          | Nettoyage complet local                   | -             |
-
----
-
-### Commandes rclone Détaillées
-
-Upload individuel des modèles
-```
-make rclone-upload-14b # Upload modèle 14B (découpe auto si >8GB)
-make rclone-upload-5b # Upload modèle 5B (découpe auto si >8GB)
-make rclone-upload-all # Upload TOUS les modèles + script
-```
-
-Workflows séquentiels (économie d'espace)
-```
-make full-workflow-14b # 14B: Download → Split → Upload → Clean
-make full-workflow-5b # 5B: Download → Split → Upload → Clean
-```
-
-Gestion
-```
-make rclone-check # Vérifier configuration rclone
-make models-size # Afficher taille modèles locaux
-make models-deep-clean # Nettoyer cache + chunks + modèles locaux
-```
-
----
-
-### 3. Préparation pour RunPod
-
-Voir la section **"🐳 Préparation de l'Image Docker pour RunPod"** ci-dessus pour :
-
-- Téléchargement des modèles
-- Upload sur OwnCloud via rclone
-- Build et push de l'image Docker
-
----
-
-## 🎯 Utilisation Rapide
-
-### Déploiement Local
-
-```bash
-
-# Démarrer ComfyUI
-
-cd /path/to/ComfyUI
-python main.py --listen 0.0.0.0 --port 8188
-
-# Démarrer l'interface web (nouveau terminal)
-
-cd /path/to/GEGM_MotionLab
-source .venv/bin/activate
-python scripts/run_web_interface.py
-```
-
-**Accès** : http://localhost:5000
-
-### Déploiement Docker Local
-
-```bash
-
-# Build et démarrage
-
+# Démarrer services
 docker-compose up -d
 
-# Vérifier les logs
-
-docker-compose logs -f
-
-# Health check
-
-curl http://localhost:5000/health
+# Accéder interface
+open http://localhost:5000
 ```
 
-### Déploiement RunPod
+### Cloud sur RunPod
 
-Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
+```bash
+# Préparer modèles (voir README_RUNPOD.md)
+make sequential-upload-workflow
 
----
+# Builder image Docker
+make runpod-deploy
 
-## 🎨 Interface GEGM MotionLab
-
-### Paramètres Avancés avec Tooltips
-
-#### 🎛️ Section Diffusion
-
-- **Steps (5-100)** : Nombre d'itérations de diffusion
-  - Recommandé : 20-25 steps pour production
-- **CFG Scale (1-20)** : Adhérence au prompt
-  - Recommandé : 7-8 pour équilibre créatif/précision
-- **Denoise (0-100%)** : Force de transformation
-  - Recommandé : 60-80% pour équilibre
-
-#### 🌊 Section Mouvement
-
-- **Motion Intensity** : Subtil / Modéré / Fort / Extrême
-- **Noise Level** : Low / Medium / High
-- **Loop Smoothness** : None / Basic / Advanced
-- **Temporal Consistency (0-100%)** : Anti-flickering
-
-#### 🔬 Section Experts
-
-- **Seed** : Graine aléatoire pour reproductibilité
-  - -1 = aléatoire à chaque fois
-  - Nombre fixe = résultat identique
-- **Motion Area** : Full / Center / Edges / Bottom / Top
-- **Color Preservation (0-100%)** : Fidélité couleurs
-- **Frame Blending (1-7)** : Interpolation temporelle
-
-### Presets Rapides
-
-| Preset            | Steps | CFG | Denoise | Usage              |
-| ----------------- | ----- | --- | ------- | ------------------ |
-| 💎 **Qualité Max** | 30    | 8.0 | 80%     | Production premium |
-| ⚖️ **Équilibré**   | 20    | 7.5 | 75%     | Défaut recommandé  |
-| ⚡ **Rapide**      | 15    | 7.0 | 70%     | Tests rapides      |
-| 🍃 **Naturel**     | 20    | 6.0 | 65%     | Mouvement subtil   |
-
-### Workflow de Production
-
-```
-1. Upload image → Analyse automatique
-2. Sélectionner preset ou ajuster paramètres
-3. Générer → Aperçu en temps réel
-4. Si satisfait :
-   - ⬇️ Télécharger (backup local)
-   - ☁️ Sauvegarder (OwnCloud)
-   - 📋 Noter le seed pour variations
-5. Si non satisfait :
-   - 🗑️ Supprimer (libérer Pod)
-   - 🔄 Nouvelle génération
+# Créer Pod RunPod (voir README_RUNPOD.md pour détails)
+# 1. Aller https://runpod.io
+# 2. Déployer Pod avec image: arnaudboy/comfy_img_to_loop:latest
+# 3. 15-20 minutes puis interface prête!
 ```
 
 ---
 
-## 🧠 Recommandations GPU RunPod
+## Prérequis
+
+### Environnement local
+
+- **GPU NVIDIA** : 40+ GB VRAM (48 GB minimum recommandé)
+- **CUDA** : 12.8+
+- **Docker** : 20.10+ avec BuildX
+- **Docker Compose** : 2.0+
+- **Python** : 3.11 (si installation native)
+- **RAM** : 8 GB minimum
+
+### Services requis
+
+- **OwnCloud** : Stockage modèles + résultats (voir `.env.example`)
+- **RunPod Account** : Pour déploiement cloud (optionnel)
+- **rclone** : Synchronisation modèles (voir setup section)
+
+### Éducation préalable
+
+Familiarité recommandée avec:
+- Docker et conteneurs
+- Ligne de commande (bash/zsh)
+- Concepts IA/diffusion (optionnel)
+- RunPod UI (pour déploiement cloud)
+
+---
+
+## Stack technologique
+
+| Catégorie | Composant | Version | Rôle |
+|-----------|-----------|---------|------|
+| **Runtime** | Python | 3.11 | Langage principal |
+| **Web** | Flask | 3.0+ | Backend API + interface |
+| **IA** | ComfyUI | Latest | Node-based workflow engine |
+| **Modèles** | WAN 2.2 5B/14B | Latest | Génération image-to-video |
+| **Vision** | CLIP Vision | - | Extraction features images |
+| **Deep Learning** | PyTorch | 2.0+ | Framework CUDA 12.8+ |
+| **Container** | Docker | 20.10+ | Multi-architecture |
+| **Sync** | rclone | Latest | OwnCloud sync |
+| **GPU** | NVIDIA CUDA | 12.8+ | Compute backend |
+
+---
+
+## Structure du projet
+
+```
+GEGM_MotionLab/
+│
+├── 📁 docker/
+│   ├── Dockerfile                    # Build image multi-stage
+│   ├── docker-compose.yml            # Services local/prod
+│   ├── docker-compose.runpod.yml     # Overrides RunPod
+│   └── docker-entrypoint.sh          # Démarrage Pod
+│
+├── 📁 web_interface/
+│   ├── app.py                        # App Flask principale
+│   ├── routes.py                     # Endpoints API REST
+│   ├── jobs.py                       # Queue asynchrone
+│   ├── 📁 templates/
+│   │   ├── base.html
+│   │   └── index.html                # Interface GEGM MotionLab
+│   └── 📁 static/
+│       ├── 📁 css/
+│       │   └── style.css
+│       └── 📁 js/
+│           └── app.js
+│
+├── 📁 workflows/
+│   ├── workflow_manager.py           # Orchestration
+│   └── 📁 templates/
+│       ├── wan22_i2v.json            # Workflow standard
+│       └── wan22_with_upscale.json   # Workflow avec upscale
+│
+├── 📁 src/
+│   ├── logger.py                     # Logging Loguru
+│   ├── comfyui_client.py             # WebSocket ComfyUI
+│   ├── owncloud_uploader.py          # Upload OwnCloud
+│   └── config.py                     # Config app
+│
+├── 📁 scripts/
+│   ├── setup_wan22_native.sh         # Download HF
+│   ├── upload_models_to_owncloud.py  # Upload + VAE convert
+│   ├── download_models_from_owncloud.py # Download + reconstitue
+│   └── reassemble_models.sh          # Reconstitue chunks
+│
+├── 📁 config/
+│   ├── model_versions.yaml           # URLs modèles
+│   └── owncloud.yaml                 # Config OwnCloud
+│
+├── Dockerfile                        # Production multi-arch
+├── docker-compose.yml                # Dev
+├── Makefile                          # Automation (70+ targets)
+├── requirements.txt                  # ~200 dependencies
+├── README.md                         # Ce fichier
+├── README_DOCKER.md                  # Guide Docker
+└── README_RUNPOD.md                  # Guide RunPod
+```
+
+---
+
+## Configuration VAE
+
+### Le problème
+
+Le modèle WAN 2.2 original inclut `Wan2.2_VAE.pth` avec architecture **96 canaux**, incompatible avec le node ComfyUI `WanVideoVAELoader` qui attend **48 canaux**.
+
+**Erreur bloquante:**
+```
+RuntimeError: Given groups=1, weight of size [96, 48, 3, 3], 
+expected input[1, 48, 60, 90] to have 96 channels, but got 48 channels instead
+```
+
+### La solution (Novembre 2025)
+
+La solution implémentée en production consiste à **convertir le VAE de 96 à 48 canaux** via script intégré dans le pipeline upload OwnCloud.
+
+**Étapes:**
+
+1. **Conversion** : Script `convert_vae_96_to_48()` dans `upload_models_to_owncloud.py`
+   - Réduit `encoder.conv_in.weight`: [96, 48, 3, 3] → [48, 48, 3, 3]
+   - Réduit `decoder.conv_out.weight`: [96, 3, 3, 3] → [48, 3, 3, 3]
+   - Autres poids: conservés intacts
+
+2. **Suppression original** : VAE non modifié (96 canaux) supprimé pour éviter duplication
+
+3. **Upload OwnCloud** : VAE converti inclus (pas d'exclusion)
+
+4. **Workflow** : Utilise nodes corrects:
+   ```json
+   {
+     "3": {
+       "class_type": "WanVideoVAELoader",
+       "inputs": {
+         "model_name": "Wan2.2_VAE.pth",
+         "precision": "bf16"
+       }
+     }
+   }
+   ```
+
+5. **Symlink** : `/models/vae/Wan2.2_VAE.pth` créé au démarrage Pod
+
+**Résultat:** ✅ Génération vidéo fonctionnelle sans erreurs VAE
+
+---
+
+## Modèles IA
 
 ### WAN 2.2 5B (Production Standard)
 
-| GPU              | VRAM | Prix/h    | Temps/Cinéma | Coût/Cinéma | Note              |
-| ---------------- | ---- | --------- | ------------ | ----------- | ----------------- |
-| **RTX 6000 Ada** | 48GB | **$0.77** | 5 min        | **$0.064**  | ⭐⭐⭐⭐⭐ Optimal     |
-| **H100 SXM**     | 80GB | **$2.69** | 2.5 min      | **$0.11**   | ⭐⭐⭐⭐ Vitesse pure |
+| Propriété | Valeur |
+|-----------|--------|
+| **Nom** | `wan2.2-ti2v-5b` |
+| **Taille** | ~13 GB (3 fichiers .safetensors) |
+| **Paramètres** | 5 milliards |
+| **Résolution max** | 1280x720 (HD) |
+| **GPU recommandé** | RTX 6000 Ada 48GB ⭐ |
+| **Temps génération** | ~5 min/cinemagraph |
+| **Coût RunPod** | $0.77/h (~$0.064/pièce) |
 
-**Recommandation : RTX 6000 Ada** (meilleur rapport qualité/prix)
-
----
+**Cas d'usage:**
+- Tests rapides et itérations
+- Production volume élevé avec contrainte budgétaire
+- Animations résolutions jusqu'à HD
 
 ### WAN 2.2 14B (Qualité Premium)
 
-| GPU          | VRAM  | Prix/h    | Temps/Cinéma | Coût/Cinéma | Note             |
-| ------------ | ----- | --------- | ------------ | ----------- | ---------------- |
-| **H100 SXM** | 80GB  | **$2.69** | 8 min        | **$0.36**   | ⭐⭐⭐⭐⭐ Optimal    |
-| **H200 SXM** | 141GB | **$3.99** | 6 min        | **$0.40**   | ⭐⭐⭐⭐ Vitesse max |
+| Propriété | Valeur |
+|-----------|--------|
+| **Nom** | `wan2.2-i2v-a14b` |
+| **Taille** | ~28 GB (3 fichiers .safetensors) |
+| **Paramètres** | 14 milliards |
+| **Résolution max** | 4K (3840x2160) |
+| **GPU recommandé** | H100 SXM 80GB ⭐ |
+| **Temps génération** | ~8 min/cinemagraph |
+| **Coût RunPod** | $2.69/h (~$0.36/pièce) |
 
-**Recommandation : H100 SXM** (meilleur compromis perf/prix)
+**Cas d'usage:**
+- Production premium qualité maximale
+- Résolutions 4K
+- Animations complexes avec mouvement subtil
 
----
+### Sélection automatique
 
-### Résumé des Choix
+Le système détecte automatiquement le modèle approprié selon la résolution uploadée:
 
-WAN 2.2 5B → RTX 6000 Ada (défaut) ou H100 SXM (vitesse)
-WAN 2.2 14B → H100 SXM (défaut) ou H200 SXM (vitesse max)
-
-### Coûts Mensuels Estimés
-
-**WAN 2.2 5B (10 sessions de 6h/mois) :**
-
-- RTX 6000 Ada : $46.20/mois (~720 cinemagraphs)
-- H100 SXM : $161.40/mois (~1440 cinemagraphs)
-
-**WAN 2.2 14B (10 sessions de 6h/mois) :**
-
-- H100 SXM : $161.40/mois (~450 cinemagraphs)
-- H200 SXM : $239.40/mois (~600 cinemagraphs)
-
-## 🏗 Architecture Projet
-
-```bash
-GEGM_MotionLab/
-├── 🐍 src/ # Code Python core
-│ ├── comfyui_client.py # Client API ComfyUI
-│ ├── owncloud_uploader.py # Gestion OwnCloud
-│ └── logger.py # Logging Loguru
-├── 🌐 web_interface/ # Interface Flask
-│ ├── templates/
-│ │ ├── index.html # Interface principale
-│ │ └── base.html # Template de base
-│ ├── routes.py # Routes API
-│ ├── app.py # Application Flask
-│ └── jobs.py # Gestion jobs async
-├── 🧠 models/ # Modèles IA (non versionné Git)
-│ ├── wan2.2-i2v-a5b/ # WAN 2.2 5B
-│ └── wan2.2-i2v-a14b/ # WAN 2.2 14B
-├── ⚙️ workflows/ # Workflows ComfyUI
-│ ├── templates/ # Templates JSON
-│ └── workflow_manager.py # Gestionnaire
-├── 🐳 docker/ # Configuration Docker
-│ ├── Dockerfile # Multi-arch build
-│ └── docker-entrypoint.sh # Entrypoint RunPod
-├── 📋 scripts/                # Scripts d'automatisation
-│   ├── setup_wan22_native.sh  # Setup modèles
-│   ├── reassemble_models.sh   # Reconstitution chunks OwnCloud
-│   ├── split_and_upload.py    # Découpe et upload rclone
-│   └── run_web_interface.py   # Lancement interface
-├── 📝 config/ # Configuration
-│ └── owncloud.yaml # Config OwnCloud
-└── 📚 docs/ # Documentation
-├── README.md # Ce fichier
-├── README_DOCKER.md # Guide Docker
-└── README_RUNPOD.md # Guide RunPod
+```
+Résolution image ≤ 1280x720 → WAN 2.2 5B + wan22_i2v.json
+Résolution image > 1280x720 → WAN 2.2 14B + wan22_with_upscale.json
 ```
 
 ---
 
-## 🔧 Technologies Utilisées
+## Interface web
 
-| Composant     | Stack Technique                     |
-| ------------- | ----------------------------------- |
-| **Backend**   | Python 3.11, Flask, asyncio         |
-| **Frontend**  | HTML5/CSS3/JavaScript (Vanilla)     |
-| **IA**        | WAN 2.2 5B/14B, ComfyUI             |
-| **Logging**   | Loguru (structured logs)            |
-| **Container** | Docker multi-stage, BuildX          |
-| **Cloud**     | RunPod GPU, OwnCloud Storage        |
-| **API**       | REST API, JSON, WebSocket (ComfyUI) |
-
----
-
-## 📊 Performance
-
-### WAN 2.2 5B (RTX 6000 Ada)
-
-- **Résolution** : 720p (1280x720)
-- **Durée** : 5 secondes (120 frames @ 24fps)
-- **Temps génération** : ~5 minutes
-- **Coût** : ~$0.064/cinemagraph
-
-### WAN 2.2 14B (H100 SXM 80GB)
-
-- **Résolution** : 720p (1280x720)
-- **Durée** : 5 secondes (121 frames @ 24fps)
-- **Temps génération** : ~8 minutes
-- **Coût** : ~$0.36/cinemagraph
-
-### Formats Supportés
-
-- **Entrée** : JPG, PNG, WebP
-- **Sortie** : MP4 (H.264)
-- **Résolutions** : 720p à 4K (optimisation automatique)
-
----
-
-## 📚 Documentation Complète
-
-- **[🐳 Guide Docker](README_DOCKER.md)** : Déploiement local containerisé
-- **[🚀 Guide RunPod](README_RUNPOD.md)** : Déploiement cloud production
-- **[🔧 API Reference](docs/API.md)** : Documentation API complète
-- **[💡 Guide Utilisateur](docs/USAGE.md)** : Utilisation interface
-
----
-
-## 🐛 Troubleshooting
-
-### ComfyUI ne répond pas
-
-```bash
-
-# Vérifier que ComfyUI est démarré
-
-ps aux | grep "python main.py"
-
-# Tester l'API
-
-curl http://localhost:8188/system_stats
-
-# Redémarrer ComfyUI
-
-cd /path/to/ComfyUI
-python main.py --listen 0.0.0.0 --port 8188
-```
-
-### Erreur upload OwnCloud
-
-```bash
-
-# Tester la connexion OwnCloud
-
-python scripts/test_owncloud_uploader.py
-
-# Vérifier les credentials dans config/owncloud.yaml
+### Architecture
 
 ```
+http://localhost:5000 ou https://pod-id-5000.proxy.runpod.net
+│
+├─ Upload Image
+│  ├─ Drag & drop ou clic
+│  └─ Formats: JPG, PNG, WebP
+│
+├─ Configuration Paramètres
+│  ├─ 4 Presets rapides
+│  │  ├─ 💎 Qualité Max (30 steps, 8.0 CFG, $$$)
+│  │  ├─ ⚖️ Équilibré (20 steps, 7.5 CFG) ← Recommandé
+│  │  ├─ ⚡ Rapide (15 steps, 7.0 CFG)
+│  │  └─ 🍃 Naturel (20 steps, 6.0 CFG)
+│  │
+│  └─ 12+ Paramètres avancés (modifiables individuellement)
+│     ├─ Diffusion: Steps, CFG Scale, Denoise
+│     ├─ Mouvement: Intensity, Noise Level, Loop Smoothness, Temporal Consistency
+│     └─ Experts: Seed, Motion Area, Color Preservation, Frame Blending
+│
+├─ Génération
+│  ├─ Bouton: 🎬 Générer le Cinemagraph
+│  └─ Barre progression avec étapes (5-10 min)
+│
+└─ Résultat
+   ├─ ▶️ Aperçu vidéo
+   ├─ 📋 Seed utilisé (reproductibilité)
+   └─ Actions:
+      ├─ ⬇️ Télécharger (backup local)
+      ├─ ☁️ Sauvegarder (upload OwnCloud manuel)
+      ├─ 🗑️ Supprimer (libérer espace)
+      └─ 🔄 Nouvelle (génération suivante)
+```
 
-### Modèles introuvables
+### Paramètres avancés
+
+| Paramètre | Plage | Recommandé | Description |
+|-----------|-------|-----------|-------------|
+| **Steps** | 5-100 | 20-25 | Itérations diffusion (qualité vs temps) |
+| **CFG Scale** | 1-20 | 7-8 | Fidélité image source (1=créatif, 20=fidèle) |
+| **Denoise** | 0-100% | 60-80% | Intensité transformation |
+| **Motion Intensity** | Subtil/Modéré/Fort/Extrême | Modéré | Quantité mouvement global |
+| **Noise Level** | Low/Medium/High | Medium | Détails stochastiques |
+| **Loop Smoothness** | None/Basic/Advanced | Advanced | Continuité boucle vidéo |
+| **Temporal Consistency** | 0-100% | 70-85% | Anti-flickering |
+| **Seed** | -1 ou nombre | -1 | -1=aléatoire, nombre=reproductible |
+| **Motion Area** | Full/Center/Edges/Bottom/Top | Full | Zone de mouvement |
+| **Color Preservation** | 0-100% | 80-95% | Fidélité couleurs originales |
+| **Frame Blending** | 1-7 | 3-4 | Interpolation temporelle |
+
+### Endpoints API REST
+
+**POST `/api/generate`** - Lancer génération
+```json
+{
+  "preset": "balanced",
+  "steps": 20,
+  "cfg_scale": 7.5
+}
+```
+
+**GET `/api/jobs/<job_id>`** - Statut génération
+- Statuts: `queued`, `processing`, `completed`, `failed`
+
+**GET `/api/download/<job_id>`** - Télécharger vidéo MP4
+
+**POST `/api/upload_owncloud/<job_id>`** - Upload manuel OwnCloud
+
+**GET `/health`** - Health check API
+
+---
+
+## Workflows ComfyUI
+
+### WAN 2.2 Standard (wan22_i2v.json)
+
+**Utilisation:** Images sans upscale nécessaire
+
+**Nodes principaux:**
+1. **CheckpointLoader** → Charge modèle WAN 2.2 (5B ou 14B)
+2. **CLIPVisionLoader** → Extraction features CLIP
+3. **WanVideoVAELoader** → VAE 48 canaux converti (bf16)
+4. **WanVideoImageToVideoLatentProcessor** → Image → Latents
+5. **WanVideoSampler** → Diffusion sampling (N steps)
+6. **WanVideoDecode** → Latents → Pixels vidéo
+7. **VHS_VideoCombine** → Encodage H.264 MP4 @ 24fps
+
+**Output:** Vidéo MP4 1280x720 ou 1920x1080
+
+### WAN 2.2 avec Upscale (wan22_with_upscale.json)
+
+**Utilisation:** Images nécessitant upscale
+
+**Étapes supplémentaires après encodage:**
+- **Résolution < 720p** → RealESRGAN x4 upscaler (480p → 1920p)
+- **Résolution ≥ 720p** → Pyramid Upscale multi-étapes (préservation détails)
+
+**Output:** Vidéo MP4 4K ou ultra-HD
+
+---
+
+## Déploiement
+
+### Local avec Docker Compose
+
+Voir [README_DOCKER.md](README_DOCKER.md)
 
 ```bash
+docker-compose up -d
+# Interface: http://localhost:5000
+```
 
-# Vérifier la présence des modèles
+### Cloud sur RunPod
 
-ls -lh models/wan2.2-i2v-a5b/high_noise_model/
+Voir [README_RUNPOD.md](README_RUNPOD.md)
 
-# Re-télécharger si nécessaire
-
-./scripts/setup_wan22_native.sh
+```bash
+make sequential-upload-workflow    # Préparer modèles
+make runpod-deploy                 # Builder image
+# Puis créer Pod RunPod avec GPU recommandé
 ```
 
 ---
 
-## 🔒 Sécurité & Licence
+## Configuration
 
-### Sécurité
+### Fichier .env
 
-- ✅ Utilisateur non-root dans Docker
-- ✅ Secrets via variables d'environnement
-- ✅ OwnCloud HTTPS uniquement
-- ✅ Pas de credentials dans le code
+Copier et éditer:
+```bash
+cp .env.example .env
+```
 
-### Licence
+**Variables critiques:**
 
-- **Projet** : Propriétaire GEGM Group
-- **Modèles WAN 2.2** : Apache 2.0 (usage commercial autorisé)
-- **ComfyUI** : GPL-3.0
+```env
+# OwnCloud
+OWNCLOUD_SERVER_URL=https://www.cloud-gegm.com
+OWNCLOUD_USERNAME=your-username
+OWNCLOUD_PASSWORD=your-password
 
-**© 2025 KaRn1zC & GEGM Group - Tous droits réservés**
+# Flask
+FLASK_HOST=0.0.0.0
+FLASK_PORT=5000
+FLASK_DEBUG=false
+
+# ComfyUI
+COMFYUI_HOST=127.0.0.1
+COMFYUI_PORT=8188
+COMFYUI_TIMEOUT=300
+
+# GPU
+CUDA_VISIBLE_DEVICES=0
+LOG_LEVEL=INFO
+```
+
+### Configuration rclone (pour OwnCloud sync)
+
+```bash
+rclone config
+# Name: owncloud
+# Type: webdav
+# URL: https://www.cloud-gegm.com/remote.php/dav
+# User: your-username
+# Password: your-password
+```
 
 ---
 
-## 🤝 Contribution
+## Utilisation
 
-Ce projet est privé et destiné à un usage professionnel interne GEGM.
+### Workflow complet
+
+```
+1. Accéder interface (localhost:5000 ou RunPod URL)
+2. Upload image JPG/PNG/WebP
+3. Sélectionner preset (recommandé: "Équilibré")
+   OU ajuster paramètres avancés individuellement
+4. Cliquer "🎬 Générer le Cinemagraph"
+5. Attendre (3-8 min selon GPU et paramètres)
+6. Résultat vidéo affichée
+7. Actions:
+   - ⬇️ Télécharger: Backup local
+   - ☁️ Sauvegarder: Upload OwnCloud (manuel)
+   - 🗑️ Supprimer: Libérer espace Pod
+   - 🔄 Nouvelle: Prochaine génération
+```
+
+### Cas d'usage exemples
+
+**Test rapide (Qualité Max déconseillé):**
+```
+Preset: Rapide → ~3 minutes → Vidéo test
+```
+
+**Production recommandée:**
+```
+Preset: Équilibré → ~5 minutes → Vidéo finalisée
+```
+
+**Premium (14B recommandé):**
+```
+Preset: Qualité Max → ~8 minutes → Meilleure qualité
+```
 
 ---
 
-## 📞 Support
+## Troubleshooting
 
-- **Documentation** : Voir `/docs`
-- **Issues** : GitHub Issues (projet privé)
-- **Contact** : arnaud.boy@gegmgroup.com
+### Interface ne démarre pas
+
+```bash
+# Vérifier logs
+docker-compose logs -f
+
+# Vérifier ports disponibles
+netstat -an | grep 5000
+
+# Redémarrer services
+docker-compose restart
+```
+
+### Erreur VRAM insuffisante
+
+```
+OutOfMemoryError: CUDA out of memory
+```
+
+**Solutions:**
+- Réduire steps (20 → 15)
+- Réduire resolution image source
+- Passer à GPU supérieur (RunPod)
+- Augmenter tile_size pour upscaling
+
+### Erreur VAE (si ancien VAE)
+
+```
+RuntimeError: Expected 48 channels, got 96
+```
+
+**Solution:** Assurer VAE converti utilisé (setup_diffusion_models.sh)
+
+### Modèles non trouvés
+
+```bash
+# Vérifier présence modèles locaux
+ls -lh /workspace/comfyui/ComfyUI/models/checkpoints/
+
+# Si manquants, télécharger depuis OwnCloud
+python scripts/download_models_from_owncloud.py
+```
+
+### Génération très lente
+
+**Vérifications:**
+- GPU correctement utilisée: `nvidia-smi`
+- Pas d'autres processes GPU: `nvidia-smi -l 1`
+- Vérifier temperature GPU (< 75°C idéal)
+- Vérifier VRAM utilisation (OK jusqu'à 95%)
+
+### OwnCloud non accessible
+
+```bash
+# Vérifier configuration
+cat .env | grep OWNCLOUD
+
+# Tester rclone
+rclone ls owncloud:/
+
+# Vérifier credentials
+rclone config show owncloud
+```
 
 ---
 
-**Développé avec ❤️ pour la création de cinemagraphs d'exception**
+## Ressources
+
+### Documentation complète
+- [GEGM_MotionLab_Documentation.md](GEGM_MotionLab_Documentation.md) - Documentation exhaustive (70+ KB)
+
+### Guides spécifiques
+- [README_DOCKER.md](README_DOCKER.md) - Déploiement local Docker
+- [README_RUNPOD.md](README_RUNPOD.md) - Déploiement cloud RunPod
+
+### Projets upstream
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) - Workflow engine
+- [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper) - WAN 2.2 nodes
+- [WAN 2.2 (Hugging Face)](https://huggingface.co/wanx) - Modèles
+- [OwnCloud](https://owncloud.com) - Cloud storage
+
+### Support
+- Logs détaillés: `/app/logs/` (Docker)
+- Health check: `curl http://localhost:5000/health`
+- Issues: Consulter logs avant issues
+
+---
+
+## Licence
+
+🔒 Private - Usage interne uniquement
+
+---
+
+## Changelog
+
+### Version 3.1.0 (7 Novembre 2025)
+- ✅ Documentation consolidée et mise à jour
+- ✅ VAE conversion 96→48 canaux en production
+- ✅ Upload manuel OwnCloud (pas automatique)
+- ✅ Interface avec 4 presets + 12+ paramètres avancés
+- ✅ Workflows wan22_i2v.json et wan22_with_upscale.json
+
+### Version 3.0.0 (29 Octobre 2025)
+- Initial production release
+- Support WAN 2.2 5B/14B
+- Docker deployment
+- OwnCloud integration
+
+---
+
+**Last Updated:** 7 novembre 2025, 15:00 CET  
+**Status:** ✅ Production Ready  
+**Maintained by:** GEGM MotionLab Team

@@ -1,744 +1,759 @@
-# 🚀 GEGM MotionLab - RunPod Deployment Guide
+# 🚀 GEGM MotionLab - Guide RunPod
 
 Guide complet de déploiement cloud sur RunPod avec GPUs professionnels.
 
-**✨ NOUVEAUTÉS v2.0 :**
-
-- Interface GEGM MotionLab rebranding complet
-- Paramètres avancés avec tooltips interactifs
-- Upload manuel OwnCloud (pas d'upload auto)
-- Gestion intelligente du stockage Pod
-- Support WAN 2.2 5B et 14B
+[![RunPod](https://img.shields.io/badge/runpod-cloud-blueviolet.svg)](https://runpod.io)
+[![GPU](https://img.shields.io/badge/GPU-RTX%206000%20Ada%20%2F%20H100-green.svg)](https://runpod.io)
 
 ---
 
-## 📋 Prérequis
+## 📋 Table des matières
 
-### GPU Recommandés
-
-**WAN 2.2 5B (Production Standard) :**
-
-- ⭐ **RTX 6000 Ada 48GB** : $0.77/h (~5 min/cinéma, $0.064/pièce)
-- **H100 SXM 80GB** : $2.69/h (~2.5 min/cinéma, $0.11/pièce) - Vitesse
-
-**WAN 2.2 14B (Qualité Premium) :**
-
-- ⭐ **H100 SXM 80GB** : $2.69/h (~8 min/cinéma, $0.36/pièce)
-- **H200 SXM 141GB** : $3.59/h (~5 min/cinéma, $0.30/pièce) - Vitesse
-
-### Stockage
-
-- **Container Disk** : 100GB minimum (uploads/logs)
-- **Modèles WAN 2.2** : Se télécharge et se réassemble automatiquement
-
-### Services
-
-- **RunPod Account** : Avec crédits
-- **Docker Hub** : Pour push de l'image (ou utiliser registry public)
-- **OwnCloud** : Serveur de sauvegarde (optionnel)
+1. [Présentation RunPod](#présentation-runpod)
+2. [Prérequis](#prérequis)
+3. [Préparation des modèles](#préparation-des-modèles)
+4. [Configuration rclone](#configuration-rclone)
+5. [Build et déploiement image](#build-et-déploiement-image)
+6. [Créer le Pod](#créer-le-pod)
+7. [Utilisation en production](#utilisation-en-production)
+8. [Gestion des coûts](#gestion-des-coûts)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
-## 🐳 Préparation de l'Image Docker
+## Présentation RunPod
 
-### Architecture : Image Légère + Modèles OwnCloud
+### Qu'est-ce que RunPod?
 
-**Stratégie adoptée :**
-```
-Image Docker (~8GB) OwnCloud (~37GB modèles)
-                    ↓ ↓
-RunPod Pod ← Télécharge modèles au démarrage
-```
+**RunPod** est une plateforme cloud spécialisée dans le GPU computing. Elle propose des GPUs professionnels (RTX 6000 Ada, H100 SXM, H200 SXM) à la demande avec facturation à la minute.
 
-**Avantages :**
+**Avantages:**
+- ✅ GPUs haute-performance (RTX 6000 Ada 48GB, H100 SXM 80GB)
+- ✅ Facturation à la minute (pas d'engagement)
+- ✅ Déploiement rapide (< 1 minute)
+- ✅ Intégration simple avec Docker
+- ✅ API et UI intuitive
 
-- ✅ Image Docker légère (~8GB vs 35-40GB)
-- ✅ Build rapide (~10-15 min)
-- ✅ Push Docker Hub rapide (~5-10 min)
-- ✅ Flexibilité : choix du modèle 5B ou 14B au démarrage
-
-**Inconvénient :**
-
-- ⚠️ Téléchargement modèles au 1er démarrage Pod (~5-10 min)
+**Inconvénients:**
+- ❌ Coûts variables selon GPU choisi ($0.77-$3.59/heure)
+- ❌ Stockage Pod éphémère (destruction après)
+- ❌ Modèles à télécharger à chaque démarrage
 
 ---
 
-## 📦 Workflow de Préparation Complet
+## Prérequis
 
-### Prérequis Locaux
+### Compte et services
 
-- **Python 3.11+** avec environnement virtuel activé
-- **rclone** configuré pour OwnCloud
-- **Docker** + **BuildX** pour multi-architecture
-- **Espace disque** : 30GB minimum (workflow séquentiel)
+- **Compte RunPod** : https://runpod.io (gratuit, crédit requis)
+- **OwnCloud** : Serveur avec stockage modèles (41GB minimum)
+- **rclone** : Installé localement (Windows/macOS/Linux)
+- **Docker Hub** (optionnel) : Pour push image multi-arch
 
-### Configuration rclone (Une Fois Seulement)
+### GPU recommandés
 
-**1. Installer rclone :**
-macOS
+**Pour WAN 2.2 5B (Production Standard):**
+
+| GPU | VRAM | Vitesse | Coût/h | Cinemagraphs/h |
+|-----|------|---------|--------|-------------------|
+| **RTX 6000 Ada** ⭐ | 48GB | ~5 min | $0.77 | 12 |
+| **H100 SXM** | 80GB | ~2.5 min | $2.69 | 24 |
+| **H200 SXM** | 141GB | ~2 min | $3.59 | 30 |
+
+**Pour WAN 2.2 14B (Qualité Premium):**
+
+| GPU | VRAM | Vitesse | Coût/h | Cinemagraphs/h |
+|-----|------|---------|--------|-------------------|
+| **H100 SXM** ⭐ | 80GB | ~8 min | $2.69 | 7 |
+| **H200 SXM** | 141GB | ~5 min | $3.59 | 12 |
+| **RTX 6000 Ada** | 48GB | ❌ Trop petit | - | - |
+
+**Sélection recommandée:**
+- 🏆 **5B sur RTX 6000 Ada** : Meilleur rapport coût/qualité ($0.064/cinémagraph)
+- 🏆 **14B sur H100 SXM** : Meilleur rapport qualité/vitesse ($0.36/cinémagraph)
+
+### Configuration machine locale
+
+```bash
+# Vérifier rclone
+which rclone
+rclone --version
+
+# Si pas installé
+# macOS: brew install rclone
+# Linux: curl https://rclone.org/install.sh | sudo bash
+# Windows: Télécharger depuis https://rclone.org/downloads/
 ```
-brew install rclone
-```
 
-Linux
-```
-curl https://rclone.org/install.sh | sudo bash
-```
+---
 
-**2. Configurer rclone pour OwnCloud :**
-```
+## Préparation des modèles
+
+**⏱️ Durée totale:** 45-90 minutes (dépend connexion internet)  
+**💾 Espace requis:** 30-40 GB
+
+### Étape 1: Configurer rclone
+
+**Configuration OwnCloud une seule fois:**
+
+```bash
+# Lancer configuration interactive
 rclone config
+
+# Répondre aux prompts:
+# Name: owncloud
+# Type: webdav
+# URL: https://www.cloud-gegm.com/remote.php/dav
+# Vendor: owncloud
+# User: votre-username
+# Password: votre-password
+
+# Tester connexion
+rclone ls owncloud:/GEGM_ComfyUI/Models/
 ```
 
-Suivre les instructions :
+### Étape 2: Télécharger modèles depuis Hugging Face
 
-- Name: owncloud
-- Type: webdav
-- URL: https://www.cloud-gegm.com/remote.php/dav
-- Vendor: owncloud
-- User: votre-username
-- Password: votre-password
+**Option A: Automatique (recommandé)**
 
-**3. Tester la connexion :**
-```
-make rclone-check
-```
-
----
-
-### Étape 1 : Télécharger les Modèles Localement
-
-Télécharger les modèles (choix interactif)
-```
+```bash
+# Via Makefile
 make download-models
+
+# Ou script manuel
+./scripts/setup_wan22_native.sh
 ```
 
-**Choix disponibles :**
+**Option B: Manuel**
 
-- **Option 1** : WAN 2.2 5B (~11GB)
-- **Option 2** : WAN 2.2 14B (~28GB)
+```bash
+# Installer HF CLI
+pip install huggingface-hub
 
-**Astuce :** Vous pouvez télécharger un seul modèle si l'espace disque est limité.
+# Download 5B (~13GB)
+huggingface-cli download wanx/wan2.2-ti2v-5b \
+  --local-dir ./models/wan2.2-ti2v-5b \
+  --repo-type model
 
----
-
-### Étape 2 : Découper et Uploader sur OwnCloud
-
-#### **Méthode Recommandée : Workflow Séquentiel** ⭐
-
-**Avantage : Nécessite seulement ~30GB d'espace disque**
-
-Workflow complet séquentiel :
-
-1. Download 14B → Split → Upload → Clean
-2. Download 5B → Split → Upload → Clean
-3. Upload script de reconstitution
-    ```
-    make sequential-upload-workflow
-    ```
-
-
-**Ce que fait cette commande :**
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ 1. Télécharge modèle 14B (~28GB) │
-│ 2. Découpe les fichiers >8GB en chunks de 2GB │
-│ 3. Upload sur OwnCloud │
-│ 4. Vérifie l'upload │
-│ 5. Supprime les fichiers locaux (libère ~28GB) │
-│ ───────────────────────────────────────────────────── │
-│ 6. Télécharge modèle 5B (~11GB) │
-│ 7. Découpe les fichiers >8GB en chunks de 2GB │
-│ 8. Upload sur OwnCloud │
-│ 9. Vérifie l'upload │
-│ 10. Supprime les fichiers locaux (libère ~11GB) │
-│ ───────────────────────────────────────────────────── │
-│ 11. Upload script reassemble_models.sh │
-└─────────────────────────────────────────────────────────┘
+# Download 14B (~28GB)
+huggingface-cli download wanx/wan2.2-i2v-a14b \
+  --local-dir ./models/wan2.2-i2v-a14b \
+  --repo-type model
 ```
 
-✅ Résultat : Tous les modèles sur OwnCloud, machine locale propre
+**Durée estimée:** 30-45 minutes
+**Output:** Modèles dans `./models/wan2.2-{ti2v-5b,i2v-a14b}/`
 
-**Durée totale estimée :** 45-90 minutes (dépend de votre connexion)
+### Étape 3: Uploader vers OwnCloud (Workflow séquentiel)
 
-#### **Méthode Alternative : Workflow Complet**
+**⭐ Recommandé (économe en espace disque): 30GB requis**
 
-**Nécessite ~54GB d'espace disque libre**
-
-Télécharge TOUS les modèles, puis upload, puis clean
+```bash
+# Via Makefile
+make sequential-upload-workflow
 ```
-make full-upload-workflow
+
+**Qu'est-ce que ça fait:**
+
+```
+Workflow séquentiel (30GB espace local)
+├─ Download modèle 14B (~28GB)
+├─ Split en chunks 2GB
+├─ Upload OwnCloud via rclone
+├─ Vérifier upload
+├─ Supprimer fichiers locaux ✓ Libère 28GB
+│
+├─ Download modèle 5B (~11GB)
+├─ Split en chunks 2GB
+├─ Upload OwnCloud via rclone
+├─ Vérifier upload
+├─ Supprimer fichiers locaux ✓ Libère 11GB
+│
+└─ Upload script reassemble_models.sh
 ```
 
-#### **Commandes Individuelles (Si Besoin)**
+**Commandes individuelles (si besoin):**
 
-Upload modèle 14B seulement
-```
+```bash
+# Upload 14B complet
 make full-workflow-14b
-```
 
-Upload modèle 5B seulement
-```
+# Upload 5B complet
 make full-workflow-5b
-```
 
-Upload script de reconstitution
-```
-make rclone-upload-reassemble-script
-```
-
----
-
-### Étape 3 : Vérifier l'Upload sur OwnCloud
-
-**Vérifier la taille et présence des modèles :**
-```
+# Vérifier upload réussi
 make rclone-verify
+
+# Voir résumé
+# 📦 Modèle 14B: Total size: 27.8 GB, objects: 156
+# 📦 Modèle 5B: Total size: 10.9 GB, objects: 87
 ```
 
-**Sortie attendue :**
-📦 Modèle 14B:
-Total objects: 156
-Total size: 27.8 GB
+**Durée estimée:** 45-90 minutes (dépend bande passante)
 
-📦 Modèle 5B:
-Total objects: 87
-Total size: 10.9 GB
+### Étape 4: Vérifier intégrité upload
 
-
-**Lister les fichiers uploadés :**
-```
+```bash
+# Lister fichiers OwnCloud
 make rclone-list
+
+# Output attendu:
+# /GEGM_ComfyUI/Models/wan2.2-14b/
+#   diffusion_pytorch_model-00001-of-00003.safetensors
+#   diffusion_pytorch_model-00002-of-00003.safetensors
+#   diffusion_pytorch_model-00003-of-00003.safetensors
+#   Wan2.2_VAE.pth
+
+# Vérifier checksums
+make rclone-verify-checksums
 ```
 
 ---
 
-### Étape 4 : Nettoyer les Fichiers Locaux
+## Configuration rclone
 
-**⚠️ Optionnel : Les workflows automatiques nettoient déjà**
+### Installation
 
-Si vous avez utilisé des commandes individuelles :
+```bash
+# macOS
+brew install rclone
 
-Nettoyage profond (modèles + chunks + cache)
+# Linux
+curl https://rclone.org/install.sh | sudo bash
+
+# Windows
+# Télécharger depuis https://rclone.org/downloads/
+# Extraire et ajouter au PATH
 ```
-make models-deep-clean
+
+### Configuration OwnCloud
+
+**Méthode interactive (recommandée):**
+
+```bash
+rclone config
+
+# Prompts:
+# -> New remote? -> n (nouveau)
+# -> Name: -> owncloud
+# -> Type: -> webdav
+# -> URL: -> https://www.cloud-gegm.com/remote.php/dav
+# -> Vendor: -> owncloud
+# -> User: -> votre-username
+# -> Password: -> votre-password
+# -> Edit advanced config? -> n
+# -> Confirm? -> y
 ```
 
-Vérifier l'espace libéré
-df -h .
+**Vérifier configuration:**
+
+```bash
+# Lister contenu
+rclone ls owncloud:/
+
+# Voir config stockée
+rclone config show owncloud
+
+# Test accès
+rclone ls owncloud:/GEGM_ComfyUI/Models/
+```
+
+### Commandes rclone utiles
+
+```bash
+# Lister fichiers
+rclone ls owncloud:/GEGM_ComfyUI/Models/
+
+# Copier fichier
+rclone copy fichier.pth \
+  owncloud:/GEGM_ComfyUI/Models/
+
+# Copier dossier complet
+rclone copy ./models/wan2.2-5b/ \
+  owncloud:/GEGM_ComfyUI/Models/wan2.2-5b/
+
+# Télécharger fichier
+rclone copy \
+  owncloud:/GEGM_ComfyUI/Models/fichier.pth \
+  ./local_folder/
+
+# Vérifier taille distante
+rclone size owncloud:/GEGM_ComfyUI/Models/
+```
 
 ---
 
-### Étape 5 : Build et Push de l'Image Docker
+## Build et déploiement image
 
-#### **Option 1 : Déploiement Complet (Multi-Arch)** ⭐
+> Le projet utilise deux fichiers de dépendances :
+> - **`requirements.txt`** contient l’ensemble des dépendances, y compris PyTorch et ses modules (torch, torchvision, torchaudio).
+> - **`requirements-base.txt`** est identique à `requirements.txt` SANS ces trois lignes :
+>   ```>   torch==2.10.0.dev20251106 >   torchaudio==2.10.0.dev20251106 >   torchvision==0.25.0.dev20251106 >  ```
+>
+> Cette organisation permet :
+> - **En local** : Utiliser `requirements.txt` pour que `pip install -r requirements.txt` installe également PyTorch, nécessaire pour exécuter les scripts d’upload/download, VAE, découpage/reconstitution, etc.
+> - **En production Docker/RunPod** : L’installation de PyTorch, optimisée pour le GPU cible, se fait directement dans le Dockerfile. Par conséquent, on n’installe dans le conteneur que les dépendances de `requirements-base.txt` (donc sans écraser la version de torch installée par le Dockerfile).
+>
+> **Important** :
+> - En local, toujours utiliser `requirements.txt`
+> - En cloud/Docker, le Dockerfile doit appeler `pip install -r requirements-base.txt` après l’installation du bon PyTorch
 
-Build AMD64 + ARM64 + Push Docker Hub (avec vérification OwnCloud)
+### Build local
+
+```bash
+# Build image standard (AMD64)
+docker build -t gegm-motionlab:latest .
+
+# Durée: 10-15 minutes
+# Taille résultante: ~8GB
 ```
+
+### Build et push multi-architecture
+
+**Prérequis:** Compte Docker Hub + buildx
+
+```bash
+# 1. Setup buildx
+docker buildx create --use
+
+# 2. Login Docker Hub
+docker login
+
+# 3. Build multi-arch + push
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --tag username/comfy_img_to_loop:latest \
+  --push .
+
+# Durée: 30-45 minutes
+# Tailles générées:
+# - linux/amd64: ~8.5GB
+# - linux/arm64: ~8.2GB
+# - Manifest: ~400MB
+```
+
+### Via Makefile
+
+**Recommandé (wrapper automatisé):**
+
+```bash
+# Build multi-arch + push
 make runpod-deploy
-```
 
-**Ce que fait cette commande :**
-
-1. ✅ Vérifie la connexion OwnCloud
-2. ✅ Configure Docker BuildX (multi-arch)
-3. ✅ Build pour AMD64 (RunPod) + ARM64 (Mac M1/M2/M3)
-4. ✅ Push vers Docker Hub
-
-**Durée :** ~15-30 minutes
-
-#### **Option 2 : Déploiement Rapide (AMD64 Seulement)**
-
-Build AMD64 seulement + Push (plus rapide)
-```
+# OU version rapide (AMD64 uniquement)
 make runpod-deploy-quick
-```
 
-**Durée :** ~10-15 minutes
-
----
-
-### Étape 6 : Vérifier l'Image sur Docker Hub
-
-**URL :** https://hub.docker.com/r/arnaudboy/comfy_img_to_loop
-
-**Vérifiez que les tags suivants existent :**
-
-- `arnaudboy/comfy_img_to_loop:runpod`
-- `arnaudboy/comfy_img_to_loop:latest`
-
----
-
-## 📊 Résumé des Commandes Make
-
-
-| Commande                          | Description                     | Espace Requis |
-| --------------------------------- | ------------------------------- | ------------- |
-| `make sequential-upload-workflow` | Workflow séquentiel (économe)   | ~30GB         |
-| `make full-upload-workflow`       | Workflow complet (tous modèles) | ~54GB         |
-| `make full-workflow-14b`          | Upload modèle 14B uniquement    | ~28GB         |
-| `make full-workflow-5b`           | Upload modèle 5B uniquement     | ~11GB         |
-| `make rclone-verify`              | Vérifier uploads OwnCloud       | -             |
-| `make runpod-deploy`              | Build + Push image (multi-arch) | -             |
-| `make runpod-deploy-quick`        | Build + Push image (AMD64 only) | -             |
-| `make models-deep-clean`          | Nettoyage complet local         | -             |
-
----
-
-## 🚀 Déploiement sur RunPod
-
-### Étape 5 : Créer le Pod
-
-**1. Aller sur https://runpod.io**
-
-**2. Cliquer sur "Deploy" → "New Pod"**
-
-**3. Configuration du Pod :**
-
-**GPU :**
-
-**Pour WAN 2.2 5B :**
-- ⭐ **RTX 6000 Ada 48GB** ($0.77/h) - Recommandé
-- **H100 SXM 80GB** ($2.69/h) - Vitesse pure
-
-**Pour WAN 2.2 14B :**
-- ⭐ **H100 SXM 80GB** ($2.69/h) - Recommandé
-- **H200 SXM 141GB** ($3.99/h) - Vitesse max
-
-**Container Configuration :**
-
-```
-Container Image: votreusername/comfy_img_to_loop:latest (pas nécessaire)
-Container Disk: 100 GB minimum (par défaut)
-Volume Disk: 0GB (modèles téléchargés au démarrage)
-Expose HTTP Ports: 5000 (déjà renseigné)
-Expose TCP Ports: (laisser vide)
-Environment Variables : déjà renseignées dans le template via secrets
-```
-
-**4. Démarrer le Pod**
-
-Cliquez sur "Deploy" et attendez le démarrage.
-Le Pod doit télécharger l'image Docker, le modèle découpé en plusieurs parties puis installer le container et réassembler le modèle, le temps d'attente est donc relativement long (30mins à 1h).
-Une fois toutes les étapes réalisées l'interface est indiqué comme "Actif" et la génération de cinemagraphs peut commencer
-
----
-
-## ⚡ Démarrage Instantané
-
-**✨ AVANTAGE MAJEUR :** Modèles pré-installés dans l'image Docker !
-
-**Logs de démarrage attendus :**
-
-```
-🚀 Starting GEGM MotionLab on RunPod...
-🎮 GPU: NVIDIA RTX 6000 Ada (48GB VRAM)
-📦 ComfyUI: Installing...
-✅ Models found in image:
-
-- WAN 2.2 I2V 5B: 11GB ✅
-- High noise model: ✅
-- VAE: ✅
-- Text encoders: ✅
-  🎨 Starting ComfyUI...
-  🌐 Starting Flask web interface...
-  🎬 GEGM MotionLab ready!
-
-Web Interface: https://xxxxx-5000.proxy.runpod.net
+# Voir image créée
+docker images | grep gegm
 ```
 
 ---
 
-## 🌐 Accès à l'Interface
+## Créer le Pod
 
-RunPod génère automatiquement une URL publique :
+### Préparation
+
+1. Aller sur **https://runpod.io**
+2. Créer compte (gratuit) et ajouter crédits
+3. Aller sur "Pods" → "Deploy"
+
+### Création du Pod
+
+#### Étape 1: Sélectionner GPU
+
+**Pour WAN 2.2 5B (recommandé):**
+- **RTX 6000 Ada 48GB** - Cliquer "Deploy" ($0.77/h)
+
+**Pour WAN 2.2 14B (qualité max):**
+- **H100 SXM 80GB** - Cliquer "Deploy" ($2.69/h)
+
+#### Étape 2: Configuration Pod
+
+| Paramètre | Valeur | Notes |
+|-----------|--------|-------|
+| **Pod Name** | `gegm-motionlab` | Identifiant unique |
+| **Container Image** | `arnaudboy/comfy_img_to_loop:latest` | Docker Hub official |
+| **Container Disk** | `100 GB` | Minimum requis |
+| **Volume Disk** | `0 GB` | Pas nécessaire (ephemeral) |
+| **CPU** | `8-16 cores` | Auto-sélectionné |
+| **Memory** | `16-32 GB` | Auto-sélectionné |
+
+#### Étape 3: Configuration réseau
+
+- **Expose HTTP Port**: `5000` (interface Flask)
+- **HTTP Port Label**: `GEGM MotionLab`
+- Laisser autres ports fermés
+
+#### Étape 4: Déployer
+
+1. Vérifier configuration
+2. Cliquer "Deploy Pod"
+3. Attendre ~30-60 secondes
+
+### Démarrage Pod
+
+**Après création, RunPod affiche:**
 
 ```
-https://your-pod-id-5000.proxy.runpod.net
+Pod ID: abc-1234-xyz
+Connection Status: Running
+Pod URL: https://abc-1234-xyz-5000.proxy.runpod.net
 ```
 
-### Test de Connexion
+**Durée démarrage Pod:**
 
 ```
-# Health check
+T+0s:    Pod boot
+T+10s:   Docker container starts
+T+60s:   docker-entrypoint.sh executes
+T+60-70s: Models downloading from OwnCloud (~5-10 min)
+T+70-80s: Models reconstituting
+T+80-90s: ComfyUI startup
+T+90s:   Flask app ready
+────────────────────────────
+T+120-600s: GEGM MotionLab accessible
+Total: 15-20 minutes before interface available
+```
 
-curl https://your-pod-id-5000.proxy.runpod.net/health
+**Vérifier démarrage:**
 
-# Réponse attendue
+```bash
+# Attendre 5 minutes, puis tester
+curl https://abc-1234-xyz-5000.proxy.runpod.net/health
 
-{
-"status": "healthy",
-"services": {
-"flask": "ok",
-"comfyui": "ok",
-"owncloud": "ok"
-}
-}
+# Response: {"status":"healthy",...}
 ```
 
 ---
 
-## 🎨 Utilisation de GEGM MotionLab
+## Utilisation en production
 
-### Workflow de Production
-
-**1. Accéder à l'interface**
+### Accès interface
 
 ```
-https://your-pod-id-5000.proxy.runpod.net
+https://pod-id-5000.proxy.runpod.net
 ```
 
-**2. Upload d'image**
+Remplacer `pod-id` avec votre Pod ID de RunPod.
 
-- Drag & drop ou cliquez "Choisir une image"
-- Formats supportés : JPG, PNG, WebP
-- Résolution recommandée : 1280x720 ou supérieure
+### Workflow type
 
-**3. Configuration des paramètres**
+```
+1. Accéder URL Pod
+   ↓
+2. Upload image JPG/PNG
+   ↓
+3. Sélectionner preset ou paramètres
+   ├─ Qualité Max (30 steps, ~8 min)
+   ├─ Équilibré (20 steps, ~5 min) ← Recommandé
+   ├─ Rapide (15 steps, ~3 min)
+   └─ Naturel (20 steps, ~5 min)
+   ↓
+4. Cliquer "🎬 Générer le Cinemagraph"
+   ↓
+5. Attendre génération
+   ├─ Barre progression affichée
+   ├─ Étapes: Modèle → Diffusion → Upscale → Encoding
+   └─ Temps: 3-8 min selon GPU/paramètres
+   ↓
+6. Résultat vidéo affichée
+   ↓
+7. Actions:
+   ├─ ⬇️ Télécharger: Backup local
+   ├─ ☁️ Sauvegarder: Upload OwnCloud (manuel)
+   ├─ 🗑️ Supprimer: Libérer espace
+   └─ 🔄 Nouvelle: Prochaine génération
+```
 
-**Presets rapides :**
+### Gestion Pod
 
-- 💎 **Qualité Max** : 30 steps, CFG 8, denoise 80% (~8 min)
-- ⚖️ **Équilibré** : 20 steps, CFG 7.5, denoise 75% (~5 min) ✅ Recommandé
-- ⚡ **Rapide** : 15 steps, CFG 7, denoise 70% (~3 min)
-- 🍃 **Naturel** : 20 steps, CFG 6, mouvement subtil (~5 min)
+**Voir logs Pod:**
+```bash
+# Via RunPod dashboard
+# Cliquer "Logs" dans Pod details
 
-**Ou paramètres avancés (section dépliable) :**
+# OU via terminal (si SSH disponible)
+ssh root@pod-ip
+tail -f /app/logs/app.log
+```
 
-- Steps : 5-100 (recommandé : 20-25)
-- CFG Scale : 1-20 (recommandé : 7-8)
-- Denoise : 0-100% (recommandé : 60-80%)
-- Motion Intensity : Subtil / Modéré / Fort / Extrême
-- Seed : -1 (aléatoire) ou nombre fixe (reproductibilité)
-- - 8 autres paramètres avec tooltips explicatifs
+**Monitorer ressources:**
+```bash
+# GPU usage
+curl pod-url:5000/api/stats
+```
 
-**4. Génération**
+**Arrêter Pod (économiser crédits):**
+1. RunPod dashboard
+2. Cliquer Pod
+3. "Pause" (pause) ou "Stop" (arrêt complet)
 
-Cliquez "🎬 Générer le Cinemagraph" et attendez :
-
-- Prévisualisation en temps réel du statut
-- Barre de progression
-- Temps estimé affiché
-
-**5. Résultat**
-
-Une fois terminé :
-
-- ▶️ Aperçu vidéo intégré
-- 🎲 Seed utilisé affiché (pour reproductibilité)
-- ⬇️ **Télécharger** : Backup local
-- ☁️ **Sauvegarder** : Upload manuel OwnCloud
-- 🗑️ **Supprimer** : Libérer l'espace Pod
-- 🔄 **Nouvelle** : Recommencer
-
-**⚠️ Important :** Les fichiers non sauvegardés sur OwnCloud seront perdus à la fermeture du Pod !
+**Reprendre Pod:**
+1. Dashboard
+2. "Resume"
+3. Redémarrage et téléchargement modèles (~20 min)
 
 ---
 
-## 💾 Gestion du Stockage Pod
+## Gestion des coûts
 
-### Workflow Optimisé
+### Calcul coûts
+
+**Pour WAN 2.2 5B (RTX 6000 Ada):**
 
 ```
-Génération 1 → Aperçu → ❌ Pas satisfait → Clic "Supprimer"
-Génération 2 → Aperçu → ❌ Pas satisfait → Clic "Supprimer"
-Génération 3 → Aperçu → ✅ PARFAIT !
-                ↓
-Clic "Télécharger" (backup local)
-                ↓
-Clic "Sauvegarder" (OwnCloud permanent)
+Coût GPU: $0.77/hour
+Temps génération: ~5 minutes par cinemagraph
+
+Calcul par cinemagraph:
+($0.77 / 60 min) × 5 min = $0.064/cinemagraph
+
+Calcul pour session 6h:
+$0.77 × 6h = $4.62
+→ ~72 cinemagraphs
+
+Mensuel (10 sessions):
+$4.62 × 10 = $46.20
 ```
 
-**Avantages :**
+**Pour WAN 2.2 14B (H100 SXM):**
 
-- ✅ 1 seul fichier uploadé sur OwnCloud (le bon)
-- ✅ Pod léger (pas de pollution)
-- ✅ OwnCloud organisé
-- ✅ Économie de bande passante
+```
+Coût GPU: $2.69/hour
+Temps génération: ~8 minutes par cinemagraph
 
-### Suppression Automatique
+Calcul par cinemagraph:
+($2.69 / 60 min) × 8 min = $0.36/cinemagraph
 
-Le système ne fait **PAS d'upload automatique** sur OwnCloud. Vous devez explicitement cliquer "☁️ Sauvegarder" pour ne pas perdre le travail généré.
+Calcul pour session 6h:
+$2.69 × 6h = $16.14
+→ ~45 cinemagraphs
 
----
+Mensuel (10 sessions):
+$16.14 × 10 = $161.40
+```
 
-## 💰 Coûts RunPod Détaillés
+### Optimisation des coûts
 
-### WAN 2.2 5B
+**1. Créer Pod uniquement si besoin immédiat**
+```bash
+- Avant: $0/heure
+- Pendant utilisation: $0.77-$2.69/heure
+- Après: $0/heure (Pod détruit)
+→ Économie: ~90% vs Pod permanent
+```
 
-**GPU Recommandé : RTX 6000 Ada 48GB ($0.77/h)**
+**2. Réduire time/generation**
+```bash
+- Preset "Rapide" (15 steps): -40% temps
+- Réduire résolution source: -30% temps
+- Résultat: Coûts réduits proportionnellement
+```
 
-| Usage            | Durée | Coût Session | Cinemagraphs | Coût/Pièce |
-| ---------------- | ----- | ------------ | ------------ | ---------- |
-| Test rapide      | 2h    | $1.54        | ~24          | $0.064     |
-| Session normale  | 6h    | $4.62        | ~72          | $0.064     |
-| Journée complète | 8h    | $6.16        | ~96          | $0.064     |
+**3. Batch processing (si possible)**
+```bash
+- Session 6h: $4.62 (5B) ou $16.14 (14B)
+- Générer ~72 (5B) ou ~45 (14B) cinemagraphs par session
+- Meilleur rapport que Pod permanent
+```
 
-**Alternative H100 SXM 80GB ($2.69/h) :**
-
-| Usage            | Durée | Coût Session | Cinemagraphs | Coût/Pièce |
-| ---------------- | ----- | ------------ | ------------ | ---------- |
-| Test rapide      | 2h    | $5.38        | ~48          | $0.11      |
-| Session normale  | 6h    | $16.14       | ~144         | $0.11      |
-| Journée complète | 8h    | $21.52       | ~192         | $0.11      |
-
-**Mensuel (10 sessions de 6h) :**
-- RTX 6000 Ada : $46.20/mois (~720 cinemagraphs)
-- H100 SXM : $161.40/mois (~1440 cinemagraphs)
-
----
-
-### WAN 2.2 14B
-
-**GPU Recommandé : H100 SXM 80GB ($2.69/h)**
-
-| Usage            | Durée | Coût Session | Cinemagraphs | Coût/Pièce |
-| ---------------- | ----- | ------------ | ------------ | ---------- |
-| Test rapide      | 2h    | $5.38        | ~15          | $0.36      |
-| Session normale  | 6h    | $16.14       | ~45          | $0.36      |
-| Journée complète | 8h    | $21.52       | ~60          | $0.36      |
-
-**Alternative H200 SXM 141GB ($3.99/h) :**
-
-| Usage            | Durée | Coût Session | Cinemagraphs | Coût/Pièce |
-| ---------------- | ----- | ------------ | ------------ | ---------- |
-| Test rapide      | 2h    | $7.98        | ~20          | $0.40      |
-| Session normale  | 6h    | $23.94       | ~60          | $0.40      |
-| Journée complète | 8h    | $31.92       | ~80          | $0.40      |
-
-**Mensuel (10 sessions de 6h) :**
-- H100 SXM : $161.40/mois (~450 cinemagraphs)
-- H200 SXM : $239.40/mois (~600 cinemagraphs)
+**4. Sélectionner GPU approprié**
+```bash
+- 5B sur RTX 6000 Ada: Moins cher ($0.77/h vs $2.69/h)
+- 14B sur H100: Plus rapide compensant coût extra
+- Calculer breakeven selon besoins
+```
 
 ---
 
-## 🐛 Troubleshooting RunPod
+## Troubleshooting
 
 ### Pod ne démarre pas
 
-```
-# 1. Vérifier les logs RunPod
+**Symptôme:** Pod reste en "Starting..." après 2-3 minutes
 
-# Dans l'interface RunPod, cliquer sur "Logs"
+```bash
+# 1. Attendre plus longtemps (15-20 min)
+#    Docker pull image + démarrage services
+#    Normal si première fois
 
-# 2. Vérifier l'image Docker existe
+# 2. Vérifier logs via RunPod dashboard
+#    Chercher erreurs dans container output
 
-# Sur Docker Hub : https://hub.docker.com/r/votreusername/comfy_img_to_loop
-
-# 3. Vérifier les variables d'environnement
-
-# OwnCloud credentials corrects ?
-```
-
-### Erreur "Modèles introuvables"
-
-```
-# Se connecter au Pod via SSH (bouton "Connect")
-
-# Vérifier la présence des modèles
-
-ls -lh /app/models/wan2.2-i2v-a5b/high_noise_model/
-
-# Si absents, l'image Docker n'a pas inclus les modèles
-
-# → Rebuild l'image avec les modèles en local
+# 3. Si bloqué:
+#    - Pause Pod
+#    - Resume Pod
+#    - Redémarrage complet
 ```
 
-### ComfyUI ne répond pas
+### Modèles ne téléchargent pas
 
-```
-# SSH dans le Pod
+**Symptôme:** Erreur "Models not found" après 10 min démarrage
 
-# Vérifier le processus ComfyUI
+```bash
+# 1. Vérifier logs
+#    RunPod dashboard → Logs
+#    Chercher "download" ou "rclone"
 
-ps aux | grep "python main.py"
+# 2. Vérifier OwnCloud accessible
+#    - Credentials corrects?
+#    - URL OwnCloud valide?
+#    - Modèles présents sur OwnCloud?
 
-# Voir les logs ComfyUI
+# 3. Tester rclone localement
+rclone ls owncloud:/GEGM_ComfyUI/Models/
 
-cat /workspace/logs/comfyui.log
-
-# Redémarrer ComfyUI
-
-pkill -f "python main.py"
-cd /workspace/comfyui/ComfyUI
-python main.py --listen 0.0.0.0 --port 8188
-```
-
-### Upload OwnCloud échoue
-
-```
-# Tester la connexion depuis le Pod
-
-curl -u username:password https://www.cloud-gegm.com/remote.php/dav/files/username/
-
-# Vérifier les credentials dans les variables d'environnement
-
-env | grep OWNCLOUD
+# 4. Si erreur connexion OwnCloud:
+#    - Vérifier .env dans container
+#    - docker-entrypoint.sh lance le download
 ```
 
-### Interface web inaccessible
+### Interface ne répond pas
 
+**Symptôme:** `connection refused` ou timeout
+
+```bash
+# 1. Attendre 20+ minutes
+#    Modèles téléchargement + reconstitution longue
+
+# 2. Vérifier Pod statut
+#    RunPod dashboard → Voir si "Running"
+
+# 3. Tester health check
+curl pod-url-5000.proxy.runpod.net/health
+
+# 4. Si timeout timeout:
+#    - Vérifier bande passante OwnCloud
+#    - Vérifier taille Pod disk restante
+#    - Pause/Resume Pod
 ```
-# Vérifier que le port 5000 est exposé
 
-# Dans RunPod : Container Configuration → Expose HTTP Ports : 5000
+### VRAM insuffisante
 
-# Tester en local dans le Pod
+**Symptôme:** `CUDA out of memory` lors génération
 
-curl http://localhost:5000/health
+```bash
+# 1. Vérifier GPU utilisée
+#    RTX 6000 Ada (48GB) pour 5B? OK
+#    H100 SXM (80GB) pour 14B? OK
 
-# Si OK en local mais pas accessible de l'extérieur
+# 2. Réduire steps dans interface
+#    20 steps → 15 steps
 
-# → Problème de configuration RunPod proxy
+# 3. Réduire résolution image
+#    Source 4K → 1280x720
+
+# 4. Dernier recours:
+#    Changer vers GPU supérieur (plus cher)
 ```
 
----
+### OwnCloud erreur connexion
 
-## 🔒 Sécurité
+**Symptôme:** Logs montrent "OwnCloud auth failed"
 
-### Best Practices
+```bash
+# 1. Vérifier credentials .env
+OWNCLOUD_SERVER_URL=https://www.cloud-gegm.com
+OWNCLOUD_USERNAME=correct?
+OWNCLOUD_PASSWORD=correct?
 
-- ✅ **Variables d'environnement** : Pas de credentials hardcodés
-- ✅ **HTTPS uniquement** : OwnCloud via HTTPS
-- ✅ **Utilisateur non-root** : UID 1000 dans Docker
-- ✅ **Pas de données sensibles** : Dans l'image Docker
-- ✅ **Secrets RunPod** : Utiliser "Secure Cloud" pour credentials
+# 2. Tester rclone localement
+rclone ls owncloud:/
 
----
+# 3. Vérifier OwnCloud serveur
+#    - Serveur accessible via HTTPS?
+#    - URL valide?
+#    - Credentials actifs?
 
-## ✅ Checklist de Déploiement
-
-**Préparation Locale :**
-
-- [ ] Modèles uploadés sur OwnCloud (via make sequential-upload-workflow)
-- [ ] Vérification upload OwnCloud (make rclone-verify)
-- [ ] Image Docker buildée (make runpod-deploy)
-- [ ] Image pushée sur Docker Hub
-
-**Configuration RunPod :**
-
-- [ ] Pod créé avec GPU approprié (RTX 6000 Ada ou H100 SXM)
-- [ ] Container Image configurée (votreusername/comfy_img_to_loop:latest)
-- [ ] Container Disk : 100GB minimum
-- [ ] Port 5000 exposé
-- [ ] Variables d'environnement OwnCloud configurées
-- [ ] Pod démarré avec succès
-
-**Validation :**
-
-- [ ] Health check répond "healthy"
-- [ ] Interface web accessible
-- [ ] ComfyUI fonctionne
-- [ ] Test de génération réussi
-- [ ] Upload OwnCloud manuel fonctionne
-- [ ] Téléchargement local fonctionne
-- [ ] Suppression de job fonctionne
-
----
-
-## 🎯 Workflow Complet Résumé
-
+# 4. Solution temporaire:
+#    Modèles pré-téléchargés sur NAS/cloud
+#    Uploader via S3 au lieu OwnCloud
 ```
-# ═══════════════════════════════════════════════════════
 
-# 1. PRÉPARATION LOCALE (une fois seulement)
+### Génération très lente
 
-# ═══════════════════════════════════════════════════════
+**Symptôme:** 5 min → 15+ min pour génération
 
-# Télécharger les modèles
+```bash
+# 1. Vérifier GPU utilisée
+nvidia-smi
+# "No GPU" → Pod GPU défaillante, stop/resume
 
-source .venv/bin/activate
-./scripts/setup_wan22_native.sh \# Choisir option 1 ou 2
+# 2. Vérifier temp GPU
+# > 75°C → Thermal throttling, normal
 
-# Nettoyer
+# 3. Vérifier VRAM utilisation
+# > 95% → Spilling en RAM, lent
 
-rm -rf models/wan2.2-i2v-_/.cache/
-rm -rf models/wan2.2-i2v-_/low_noise_model/
+# 4. Vérifier CPU/memory Pod
+# > 90% → Ressources insuffisantes
 
-# Vérifier
+# 5. Solution:
+#    - Réduire steps (20 → 15)
+#    - Changer GPU vers plus puissante
+```
 
-du -sh models/wan2.2-i2v-\* \# Devrait afficher ~11GB ou ~28GB
+### Coûts plus élevés que prévu
 
-# Build Docker avec modèles inclus
+**Symptôme:** Bills RunPod > estimation
 
-docker buildx build \
---platform linux/amd64 \
---tag votreusername/comfy_img_to_loop:latest \
---push \
-.
+```bash
+# 1. Vérifier Pod reste-t-elle active
+#    Dashboard → Voir si running 24/7?
+#    → Détruire Pod après usage!
 
-# Push vers Docker Hub
+# 2. Vérifier GPU facturée
+#    Pod details → Voir GPU selectionnée
+#    Dépend GPU: $0.77-$3.59/h
 
-docker push votreusername/comfy_img_to_loop:latest
+# 3. Optimiser:
+#    - Utiliser RTX 6000 Ada pour 5B (moins cher)
+#    - Créer Pod seulement si besoin
+#    - Pause Pod si pas utilisation prolongée
 
-# ═══════════════════════════════════════════════════════
-
-# 2. DÉPLOIEMENT RUNPOD
-
-# ═══════════════════════════════════════════════════════
-
-# Interface web RunPod :
-
-# - GPU : RTX 6000 Ada (5B) ou H100 SXM 80GB (14B)
-
-# - Image : votreusername/comfy_img_to_loop:latest
-
-# - Container Disk : 100GB
-
-# - Port : 5000
-
-# - Env vars : OwnCloud credentials
-
-# Démarrer le Pod → Attendre 30-60 minutes
-
-# ═══════════════════════════════════════════════════════
-
-# 3. UTILISATION
-
-# ═══════════════════════════════════════════════════════
-
-# Accéder à l'interface
-
-https://xxxxx-5000.proxy.runpod.net
-
-# Upload image → Choisir preset → Générer
-
-# Résultat satisfait ?
-
-# ✅ Télécharger (local)
-
-# ✅ Sauvegarder (OwnCloud)
-
-# ✅ Noter le seed (reproductibilité)
-
-# Résultat non satisfait ?
-
-# ❌ Supprimer (libérer Pod)
-
-# 🔄 Nouvelle génération
+# 4. Voir facturation
+#    RunPod dashboard → Billing
+#    Détail coûts par Pod
 ```
 
 ---
 
-## 📚 Ressources Complémentaires
+## Checklist préalable
 
-- **[README Principal](README.md)** : Vue d'ensemble du projet
-- **[Guide Docker](README_DOCKER.md)** : Déploiement local
-- **RunPod Documentation** : https://docs.runpod.io
-- **WAN 2.2 GitHub** : https://github.com/Wan-Video/Wan2.2
+Avant créer Pod en production:
 
----
-
-## 🆘 Support
-
-- **Documentation** : Voir `/docs`
-- **RunPod Discord** : https://discord.gg/runpod
-- **Issues GitHub** : GitHub Issues (projet privé)
-- **Contact** : arnaud.boy@gegmgroup.com
+- [ ] Modèles uploadés sur OwnCloud (41GB)
+- [ ] rclone configuré et testé localement
+- [ ] Image Docker buildée et testée localement
+- [ ] Credentials OwnCloud validés
+- [ ] Compte RunPod créé avec crédits
+- [ ] GPU choisi et coûts calculés
+- [ ] Docstring UI comprise (presets, paramètres)
+- [ ] Plan de nettoyage OwnCloud (après sessions)
 
 ---
 
-**© 2025 by KaRn1zC for GEGM Group - RunPod deployment guide v2.0**
+## Ressources
 
-**Développé avec ❤️ pour la création de cinemagraphs sur cloud GPU professionnel**
+### Documentation
+
+- [README.md](README.md) - Documentation principale
+- [README_DOCKER.md](README_DOCKER.md) - Déploiement Docker local
+- [GEGM_MotionLab_Documentation.md](GEGM_MotionLab_Documentation.md) - Documentation exhaustive
+
+### Services externes
+
+- [RunPod](https://runpod.io) - GPU cloud platform
+- [OwnCloud](https://owncloud.com) - Self-hosted cloud storage
+- [rclone](https://rclone.org) - File sync tool
+- [Docker Hub](https://hub.docker.com) - Container registry
+
+### Modèles et tools
+
+- [WAN 2.2 (Hugging Face)](https://huggingface.co/wanx) - Modèles IA
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) - Workflow engine
+- [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper) - WAN nodes
+
+---
+
+**Last Updated:** 7 novembre 2025  
+**Status:** ✅ Production Ready
