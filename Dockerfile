@@ -51,15 +51,15 @@ RUN mkdir -p /workspace /runpod-volume
 # Définir le workspace comme répertoire de travail
 WORKDIR /workspace
 
-# Copier et installer les dépendances Python
-COPY requirements.txt .
-
 # Installer PyTorch AVANT les autres dépendances
 RUN pip install --upgrade --pre torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/nightly/cu128
 
-# Installer les dépendances de base (sans WAN pour l'instant)
-RUN pip install --no-cache-dir -r requirements.txt
+# Copier requirements-base (sans PyTorch)
+COPY requirements-base.txt .
+
+# Installer les dépendances de base
+RUN pip install --no-cache-dir -r requirements-base.txt
 
 # Installer bitsandbytes après PyTorch
 RUN pip install --upgrade bitsandbytes
