@@ -48,6 +48,36 @@ if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
     
     if [ $? -eq 0 ]; then
         echo "✅ Modèle téléchargé"
+
+        echo ""
+        echo "🔍 Vérification des fichiers téléchargés..."
+
+        # Vérifier les 3 fichiers du modèle
+        for part in 1 2 3; do
+            file="$MODEL_DIR/diffusion_pytorch_model-0000${part}-of-00003.safetensors"
+            
+            if [ ! -f "$file" ]; then
+                echo "❌ Fichier manquant: $(basename $file)"
+                exit 1
+            fi
+            
+            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+            size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
+            
+            if [ $part -lt 3 ] && [ $size -lt 8000000000 ]; then
+                echo "❌ Fichier incomplet: $(basename $file) ($size_gb GB, minimum 8GB)"
+                exit 1
+            fi
+            
+            if [ $part -eq 3 ] && [ $size -lt 100000000 ]; then
+                echo "❌ Fichier 3 incomplet: ($size_gb GB, minimum 0.1GB)"
+                exit 1
+            fi
+            
+            echo "✅ $(basename $file): $size_gb GB"
+        done
+
+        echo "✅ Tous les fichiers sont complets"
         
         # ============================================
         # RECONSTITUTION DES FICHIERS DÉCOUPÉS

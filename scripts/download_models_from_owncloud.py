@@ -20,6 +20,50 @@ setup_logger(level="INFO")
 logger = get_logger(__name__)
 
 
+# Vérification d'intégrité des fichiers du modèle
+def verify_model_files(model_target: Path) -> bool:
+    """Vérifie que tous les fichiers du modèle sont présents et corrects"""
+    logger.info("🔍 Vérification des fichiers téléchargés...")
+
+    # Tailles minimales acceptables pour chaque fichier
+    required_files = {
+        "diffusion_pytorch_model-00001-of-00003.safetensors": 8
+        * 1024**3,  # 8 GB minimum
+        "diffusion_pytorch_model-00002-of-00003.safetensors": 8
+        * 1024**3,  # 8 GB minimum
+        "diffusion_pytorch_model-00003-of-00003.safetensors": 100
+        * 1024**2,  # 100 MB minimum
+    }
+
+    all_ok = True
+    for filename, min_size in required_files.items():
+        filepath = model_target / filename
+
+        if not filepath.exists():
+            logger.error(f"❌ Fichier manquant: {filename}")
+            all_ok = False
+            continue
+
+        actual_size = filepath.stat().st_size
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ {filename} incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            all_ok = False
+        else:
+            logger.info(f"✅ {filename}: {actual_size / 1024**3:.2f} GB")
+
+    if all_ok:
+        logger.success("✅ Tous les fichiers sont complets")
+    else:
+        logger.error("❌ Vérification échouée - fichiers incomplets")
+
+    return all_ok
+
+
 def setup_rclone_config() -> bool:
     """Configure rclone pour OwnCloud"""
     server_url = os.getenv("OWNCLOUD_SERVER_URL", "").rstrip("/")
@@ -142,11 +186,19 @@ def download_model_from_owncloud(
         if process.returncode == 0:
             logger.info(f"✅ Modèle {model_name} téléchargé !")
 
-            # Vérifier la taille
+            # Vérifier la taille totale
             total_size = sum(
                 f.stat().st_size for f in model_target.rglob("*") if f.is_file()
             )
             logger.info(f"📊 Taille totale: {total_size / 1024**3:.2f} GB")
+
+            # 🔍 Vérification d'intégrité des fichiers
+            logger.info("")
+            if not verify_model_files(model_target):
+                logger.error("⚠️  Les fichiers téléchargés sont incomplets!")
+                logger.error("    Action requise: Supprimer les fichiers incomplets")
+                logger.error("    et relancer le téléchargement")
+                return False, "Fichiers incomplets après téléchargement"
 
             return True, None
         else:
