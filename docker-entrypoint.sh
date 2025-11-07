@@ -99,7 +99,18 @@ fi
 
 echo ""
 echo "✅ VAE 48 canaux inclus dans le modèle WAN 2.2 (déjà downloadé)"
-echo "   Chemin: $MODEL_DIR/Wan2.2_VAE.pth"
+echo "   Chemin source: $MODEL_DIR/Wan2.2_VAE.pth"
+
+# Créer symlink vers /models/vae/ pour WanVideoVAELoader
+VAE_DIR="/workspace/comfyui/ComfyUI/models/vae"
+mkdir -p "$VAE_DIR"
+
+if [ -f "$MODEL_DIR/Wan2.2_VAE.pth" ]; then
+    ln -sf "$MODEL_DIR/Wan2.2_VAE.pth" "$VAE_DIR/Wan2.2_VAE.pth"
+    echo "   ✅ Symlink créé: $VAE_DIR/Wan2.2_VAE.pth"
+else
+    echo "   ⚠️ VAE non trouvé dans le modèle"
+fi
 
 # Télécharger CLIP Vision si absent
 CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
