@@ -37,7 +37,11 @@ MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
 
-if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
+# Vérifier la présence des fichiers safetensors reconstitués (pas juste le dossier)
+# Si l'un des 3 fichiers manque, télécharger et reconstituer
+if [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00001-of-00003.safetensors" ] || \
+   [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00002-of-00003.safetensors" ] || \
+   [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00003-of-00003.safetensors" ]; then
     echo ""
     echo "📥 Téléchargement du modèle depuis OwnCloud..."
     echo "   Ceci peut prendre 5-15 minutes..."
@@ -191,6 +195,83 @@ if [ ! -f "$UPSCALE_FILE" ]; then
 else
     echo ""
     echo "✅ RealESRGAN déjà présent: $(du -h $UPSCALE_FILE | cut -f1)"
+fi
+
+# ============================================
+# T5 ENCODER (CRITICAL pour WAN 2.2)
+# ============================================
+
+T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
+T5_FILE="$T5_DIR/umt5-xxl-enc-bf16.pth"
+
+if [ ! -f "$T5_FILE" ]; then
+    echo ""
+    echo "📥 Téléchargement de T5 Encoder (requis pour WAN 2.2, ~9.5GB)..."
+    echo "   ⚠️  Ceci peut prendre 10-20 minutes..."
+    mkdir -p "$T5_DIR"
+
+    # Télécharger depuis OwnCloud (chunks)
+    if [ -n "$OWNCLOUD_SERVER_URL" ] && [ -n "$OWNCLOUD_USERNAME" ] && [ -n "$OWNCLOUD_PASSWORD" ]; then
+        echo "   Source: OwnCloud"
+
+        MODEL_FOLDER="${OWNCLOUD_MODEL_FOLDER:-/GEGM_ComfyUI/Models}"
+
+        # Télécharger le dossier t5 complet (avec chunks)
+        rclone copy \
+            "owncloud:${MODEL_FOLDER}/t5/" \
+            "$T5_DIR/" \
+            --progress \
+            --transfers 4 \
+            --retries 10 \
+            --low-level-retries 10 \
+            --timeout 1h \
+            --contimeout 60s \
+            --stats 30s \
+            -v
+
+        if [ $? -eq 0 ]; then
+            echo "✅ T5 téléchargé depuis OwnCloud"
+
+            # Reconstituer les chunks si présents
+            CHUNKS_DIR="$T5_DIR/chunks"
+            if [ -d "$CHUNKS_DIR" ] && [ -f "$CHUNKS_DIR/mapping.txt" ]; then
+                echo ""
+                echo "🔧 Reconstitution du T5 Encoder..."
+
+                if [ -f "/workspace/scripts/reassemble_models.sh" ]; then
+                    /workspace/scripts/reassemble_models.sh "$T5_DIR"
+
+                    if [ $? -eq 0 ]; then
+                        echo "✅ T5 Encoder reconstitué"
+
+                        # Vérifier le fichier final
+                        if [ -f "$T5_FILE" ]; then
+                            FILE_SIZE=$(du -h "$T5_FILE" | cut -f1)
+                            echo "✅ T5 Encoder prêt: $FILE_SIZE"
+                        else
+                            echo "❌ T5 Encoder non trouvé après reconstitution"
+                            echo "⚠️  WAN 2.2 ne fonctionnera pas!"
+                        fi
+                    else
+                        echo "❌ Échec de la reconstitution du T5 Encoder"
+                        echo "⚠️  WAN 2.2 ne fonctionnera pas!"
+                    fi
+                else
+                    echo "❌ Script reassemble_models.sh non trouvé"
+                fi
+            else
+                echo "⚠️  Pas de chunks T5 trouvés"
+            fi
+        else
+            echo "⚠️  Échec téléchargement T5 depuis OwnCloud"
+        fi
+    else
+        echo "⚠️  Credentials OwnCloud manquants, T5 non téléchargé"
+        echo "⚠️  WAN 2.2 ne fonctionnera pas sans T5 Encoder!"
+    fi
+else
+    echo ""
+    echo "✅ T5 Encoder déjà présent: $(du -h $T5_FILE | cut -f1)"
 fi
 
 # ============================================

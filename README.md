@@ -61,7 +61,7 @@
 > Le projet utilise deux fichiers de dépendances :
 > - **`requirements.txt`** contient l’ensemble des dépendances, y compris PyTorch et ses modules (torch, torchvision, torchaudio).
 > - **`requirements-base.txt`** est identique à `requirements.txt` SANS ces trois lignes :
->   ```>   torch==2.10.0.dev20251106 >   torchaudio==2.10.0.dev20251106 >   torchvision==0.25.0.dev20251106 >  ```
+>   ```>   torch>=2.5.0,<2.6.0 >   torchaudio>=2.5.0,<2.6.0 >   torchvision>=0.20.0,<0.21.0 >  ```
 >
 > Cette organisation permet :
 > - **En local** : Utiliser `requirements.txt` pour que `pip install -r requirements.txt` installe également PyTorch, nécessaire pour exécuter les scripts d’upload/download, VAE, découpage/reconstitution, etc.
@@ -180,9 +180,13 @@ GEGM_MotionLab/
 │       └── wan22_with_upscale.json   # Workflow avec upscale
 │
 ├── 📁 src/
+│   ├── 📁 models/                    # Modèles de données
+│   │   ├── __init__.py
+│   │   └── owncloud_models.py        # OwnCloudConfig, VideoMetadata
 │   ├── logger.py                     # Logging Loguru
 │   ├── comfyui_client.py             # WebSocket ComfyUI
 │   ├── owncloud_uploader.py          # Upload OwnCloud
+│   ├── owncloud_config.py            # Gestionnaire config OwnCloud
 │   └── config.py                     # Config app
 │
 ├── 📁 scripts/
@@ -607,6 +611,13 @@ rclone config show owncloud
 
 ## Changelog
 
+### Version 3.1.1 (12 Novembre 2025)
+- ✅ Extraction OwnCloudConfig en module séparé (`src/models/owncloud_models.py`)
+- ✅ Correction race condition JobManager (thread-safety)
+- ✅ Remplacement PyTorch pre-release par versions stables
+- ✅ Élimination import circulaire owncloud_uploader/owncloud_config
+- ✅ Architecture code améliorée (meilleure testabilité)
+
 ### Version 3.1.0 (7 Novembre 2025)
 - ✅ Documentation consolidée et mise à jour
 - ✅ VAE conversion 96→48 canaux en production
@@ -622,6 +633,7 @@ rclone config show owncloud
 
 ---
 
-**Last Updated:** 7 novembre 2025, 15:00 CET  
-**Status:** ✅ Production Ready  
+**Last Updated:** 12 novembre 2025
+**Status:** ✅ Production Ready
+**Version:** 3.1.1
 **Maintained by:** GEGM MotionLab Team

@@ -192,7 +192,39 @@ def download_model_from_owncloud(
             )
             logger.info(f"📊 Taille totale: {total_size / 1024**3:.2f} GB")
 
-            # 🔍 Vérification d'intégrité des fichiers
+            # 🔧 RECONSTITUTION DES CHUNKS SI PRÉSENTS
+            chunks_dir = model_target / "chunks"
+            if chunks_dir.exists() and (chunks_dir / "mapping.txt").exists():
+                logger.info("")
+                logger.info("🔧 Reconstitution des fichiers découpés...")
+
+                # Appeler le script de reconstitution
+                reassemble_script = Path(__file__).parent / "reassemble_models.sh"
+
+                if reassemble_script.exists():
+                    result = subprocess.run(
+                        ["bash", str(reassemble_script), str(model_target)],
+                        capture_output=True,
+                        text=True
+                    )
+
+                    if result.returncode == 0:
+                        logger.success("✅ Fichiers reconstitués avec succès")
+                        # Afficher la sortie
+                        for line in result.stdout.split('\n'):
+                            if line.strip():
+                                logger.info(f"   {line}")
+                    else:
+                        logger.error(f"❌ Échec de la reconstitution:")
+                        logger.error(result.stderr)
+                        return False, "Échec reconstitution des chunks"
+                else:
+                    logger.error(f"❌ Script reassemble_models.sh non trouvé: {reassemble_script}")
+                    return False, "Script de reconstitution manquant"
+            else:
+                logger.info("   Pas de chunks à reconstituer")
+
+            # 🔍 Vérification d'intégrité des fichiers (APRÈS reconstitution)
             logger.info("")
             if not verify_model_files(model_target):
                 logger.error("⚠️  Les fichiers téléchargés sont incomplets!")

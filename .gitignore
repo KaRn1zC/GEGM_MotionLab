@@ -160,3 +160,6 @@ nohup.out
 .env.local
 .env.*.local
 .env.production
+
+# Claude Code
+Claude.md

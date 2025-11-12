@@ -107,7 +107,8 @@ class JobManager:
 
     def get_job(self, job_id: str) -> Optional[Job]:
         """Récupère un job par son ID"""
-        return self.jobs.get(job_id)
+        with self._lock:
+            return self.jobs.get(job_id)
 
     def update_job(
         self,
