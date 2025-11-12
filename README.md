@@ -182,7 +182,7 @@ GEGM_MotionLab/
 ├── 📁 src/
 │   ├── 📁 models/                    # Modèles de données
 │   │   ├── __init__.py
-│   │   └── owncloud_models.py        # OwnCloudConfig, VideoMetadata
+│   │   └── owncloud_models.py        # OwnCloudConfig, VideoMetadata (résout imports circulaires)
 │   ├── logger.py                     # Logging Loguru
 │   ├── comfyui_client.py             # WebSocket ComfyUI
 │   ├── owncloud_uploader.py          # Upload OwnCloud
@@ -192,8 +192,8 @@ GEGM_MotionLab/
 ├── 📁 scripts/
 │   ├── setup_wan22_native.sh         # Download HF
 │   ├── upload_models_to_owncloud.py  # Upload + VAE convert
-│   ├── download_models_from_owncloud.py # Download + reconstitue
-│   └── reassemble_models.sh          # Reconstitue chunks
+│   ├── download_models_from_owncloud.py # Download, auto-reconstitue chunks, verify
+│   └── reassemble_models.sh          # Reconstitue safetensors depuis chunks
 │
 ├── 📁 config/
 │   ├── model_versions.yaml           # URLs modèles
@@ -611,6 +611,16 @@ rclone config show owncloud
 
 ## Changelog
 
+### Version 3.1.2 (12 Novembre 2025)
+- ✅ Installation package `bc` dans Dockerfile (calculs de taille corrects)
+- ✅ Reconstitution automatique des chunks AVANT vérification fichiers (`download_models_from_owncloud.py`)
+- ✅ Amélioration vérification "modèle déjà présent" (vérifie 3 fichiers safetensors reconstitués)
+- ✅ Correction T5 Encoder corrompu (téléchargement depuis `/GEGM_ComfyUI/Models/t5/`)
+- ✅ Réorganisation ordre de téléchargement T5 (avant `setup_diffusion_models.sh`)
+- ✅ Suppression symlinks T5 corrompus dans `setup_diffusion_models.sh`
+- ✅ Ajout thread-safety lock à JobManager.get_job() (protection race condition)
+- ✅ Génération de cinemagraphs fonctionnelle sur RunPod
+
 ### Version 3.1.1 (12 Novembre 2025)
 - ✅ Extraction OwnCloudConfig en module séparé (`src/models/owncloud_models.py`)
 - ✅ Correction race condition JobManager (thread-safety)
@@ -635,5 +645,5 @@ rclone config show owncloud
 
 **Last Updated:** 12 novembre 2025
 **Status:** ✅ Production Ready
-**Version:** 3.1.1
+**Version:** 3.1.2
 **Maintained by:** GEGM MotionLab Team
