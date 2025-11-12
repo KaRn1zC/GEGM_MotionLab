@@ -414,14 +414,13 @@ T+0s:       Pod boot
 T+10s:      Docker container starts
 T+60s:      docker-entrypoint.sh executes
 T+60-70s:   Vérification modèles présents (3 fichiers safetensors)
-T+70-150s:  Si absents: Download WAN model depuis OwnCloud
-T+150-200s: Download T5 Encoder depuis /GEGM_ComfyUI/Models/t5/ (nouveau)
-T+200-250s: Reconstitution automatique chunks (si chunks/mapping.txt détecté)
-T+250-260s: Exécution setup_diffusion_models.sh (vérifie T5, crée symlinks VAE/WAN)
-T+260-310s: Download VAE, CLIP Vision, RealESRGAN
-T+310-320s: Vérification intégrité fichiers reconstitués
-T+320-370s: ComfyUI startup
-T+370s:     Flask app ready
+T+70-150s:  Si absents: Download WAN model depuis OwnCloud (inclut T5 Encoder)
+T+150-200s: Reconstitution automatique chunks (safetensors + T5)
+T+200-210s: Exécution setup_diffusion_models.sh (crée symlinks VAE/WAN/T5)
+T+210-260s: Download VAE, CLIP Vision, RealESRGAN
+T+260-270s: Vérification intégrité fichiers reconstitués
+T+270-320s: ComfyUI startup
+T+320s:     Flask app ready
 ────────────────────────────
 T+120-600s: GEGM MotionLab accessible
 Total: 15-20 minutes before interface available
@@ -778,4 +777,4 @@ Avant créer Pod en production:
 
 **Last Updated:** 12 novembre 2025
 **Status:** ✅ Production Ready
-**Version:** 3.1.2
+**Version:** 3.1.3

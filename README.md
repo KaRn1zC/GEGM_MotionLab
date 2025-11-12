@@ -611,13 +611,15 @@ rclone config show owncloud
 
 ## Changelog
 
+### Version 3.1.3 (12 Novembre 2025)
+- ✅ Correction gestion T5 Encoder : symlink depuis dossier modèle WAN (inclus dans téléchargement)
+- ✅ Suppression tentative téléchargement T5 depuis dossier inexistant sur OwnCloud
+- ✅ T5 Encoder reconstitué automatiquement avec les chunks du modèle WAN
+
 ### Version 3.1.2 (12 Novembre 2025)
 - ✅ Installation package `bc` dans Dockerfile (calculs de taille corrects)
 - ✅ Reconstitution automatique des chunks AVANT vérification fichiers (`download_models_from_owncloud.py`)
 - ✅ Amélioration vérification "modèle déjà présent" (vérifie 3 fichiers safetensors reconstitués)
-- ✅ Correction T5 Encoder corrompu (téléchargement depuis `/GEGM_ComfyUI/Models/t5/`)
-- ✅ Réorganisation ordre de téléchargement T5 (avant `setup_diffusion_models.sh`)
-- ✅ Suppression symlinks T5 corrompus dans `setup_diffusion_models.sh`
 - ✅ Ajout thread-safety lock à JobManager.get_job() (protection race condition)
 - ✅ Génération de cinemagraphs fonctionnelle sur RunPod
 

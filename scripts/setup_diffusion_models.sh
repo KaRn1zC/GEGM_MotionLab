@@ -23,22 +23,21 @@ fi
 # Gestion du T5 Encoder
 echo "📂 Configuration du T5 Encoder..."
 
-# Note: Le T5 Encoder est maintenant téléchargé séparément depuis OwnCloud
-# par docker-entrypoint.sh AVANT l'exécution de ce script.
-# Les anciennes lignes qui créaient des symlinks vers les T5 dans les dossiers
-# des modèles ont été supprimées car ces fichiers T5 sont incorrects/corrompus.
-
-# Le T5 Encoder correct se trouve désormais à:
-# /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
-
-# Créer le dossier text_encoders/t5 au cas où
+# Créer le dossier text_encoders/t5
 mkdir -p /workspace/comfyui/ComfyUI/models/text_encoders/t5
 
-# Vérifier que le T5 encoder a bien été téléchargé
-if [ -f "/workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth" ]; then
-    echo "✅ T5 Encoder détecté: $(du -h /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth | cut -f1)"
-else
-    echo "⚠️  T5 Encoder non trouvé - WAN 2.2 ne fonctionnera pas!"
+# Symlink du T5 pour 5B
+if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth" ]; then
+    ln -sf ../../checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
+    echo "✅ Symlink T5 créé: umt5-xxl-enc-bf16.pth (5B)"
+fi
+
+# Symlink du T5 pour 14B
+if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth" ]; then
+    if [ ! -L "/workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth" ]; then
+        ln -sf ../../checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16_14B.pth
+        echo "✅ Symlink T5 créé: umt5-xxl-enc-bf16_14B.pth (14B)"
+    fi
 fi
 
 echo "✅ Configuration terminée"
