@@ -777,4 +777,4 @@ Avant créer Pod en production:
 
 **Last Updated:** 12 novembre 2025
 **Status:** ✅ Production Ready
-**Version:** 3.1.3
+**Version:** 3.1.4
