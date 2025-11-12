@@ -36,28 +36,60 @@ if [ "$MODEL" = "all" ]; then
     echo ""
     echo "📥 Téléchargement des deux modèles..."
     echo ""
-    
+
     echo "📦 Modèle 1/2: WAN 2.2 TI2V 5B (9.4GB)..."
     hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b
     echo "✅ WAN 2.2 5B téléchargé"
-    
+
+    echo ""
+    echo "🔍 Vérification intégrité T5 Encoder (5B)..."
+    python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: T5 Encoder 5B corrompu ou incomplet"
+        exit 1
+    fi
+
     echo ""
     echo "📦 Modèle 2/2: WAN 2.2 I2V 14B (27.8GB)..."
     hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
     echo "✅ WAN 2.2 14B téléchargé"
-    
+
+    echo ""
+    echo "🔍 Vérification intégrité T5 Encoder (14B)..."
+    python scripts/verify_t5_integrity.py wan2.2-i2v-a14b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: T5 Encoder 14B corrompu ou incomplet"
+        exit 1
+    fi
+
 elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 I2V 14B (27.8GB)..."
     hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
     echo "✅ WAN 2.2 14B téléchargé"
-    
+
+    echo ""
+    echo "🔍 Vérification intégrité T5 Encoder..."
+    python scripts/verify_t5_integrity.py wan2.2-i2v-a14b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: T5 Encoder corrompu ou incomplet"
+        exit 1
+    fi
+
 elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 TI2V 5B (9.4GB)..."
     hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b
     echo "✅ WAN 2.2 5B téléchargé"
-    
+
+    echo ""
+    echo "🔍 Vérification intégrité T5 Encoder..."
+    python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: T5 Encoder corrompu ou incomplet"
+        exit 1
+    fi
+
 else
     echo "❌ Modèle invalide: $MODEL"
     echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"

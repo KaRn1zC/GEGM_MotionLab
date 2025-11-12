@@ -611,6 +611,12 @@ rclone config show owncloud
 
 ## Changelog
 
+### Version 3.1.4 (12 Novembre 2025)
+- ✅ Ajout vérification automatique de l'intégrité du T5 Encoder après téléchargement
+- ✅ Script `verify_t5_integrity.py` : vérifie taille, format PyTorch, et clés critiques du modèle
+- ✅ Intégration dans `setup_wan22_native.sh` : le workflow s'arrête si T5 corrompu/incomplet
+- ✅ Protection contre l'upload de fichiers T5 corrompus sur OwnCloud
+
 ### Version 3.1.3 (12 Novembre 2025)
 - ✅ Correction gestion T5 Encoder : symlink depuis dossier modèle WAN (inclus dans téléchargement)
 - ✅ Suppression tentative téléchargement T5 depuis dossier inexistant sur OwnCloud
