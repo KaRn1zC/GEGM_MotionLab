@@ -15,7 +15,8 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
-from src.owncloud_uploader import OwnCloudUploader, OwnCloudConfig
+from src.owncloud_uploader import OwnCloudUploader
+from src.models.owncloud_models import OwnCloudConfig
 
 from dotenv import load_dotenv
 

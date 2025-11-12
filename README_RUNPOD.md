@@ -288,7 +288,7 @@ rclone size owncloud:/GEGM_ComfyUI/Models/
 > Le projet utilise deux fichiers de dépendances :
 > - **`requirements.txt`** contient l’ensemble des dépendances, y compris PyTorch et ses modules (torch, torchvision, torchaudio).
 > - **`requirements-base.txt`** est identique à `requirements.txt` SANS ces trois lignes :
->   ```>   torch==2.10.0.dev20251106 >   torchaudio==2.10.0.dev20251106 >   torchvision==0.25.0.dev20251106 >  ```
+>   ```>   torch>=2.5.0,<2.6.0 >   torchaudio>=2.5.0,<2.6.0 >   torchvision>=0.20.0,<0.21.0 >  ```
 >
 > Cette organisation permet :
 > - **En local** : Utiliser `requirements.txt` pour que `pip install -r requirements.txt` installe également PyTorch, nécessaire pour exécuter les scripts d’upload/download, VAE, découpage/reconstitution, etc.
@@ -755,5 +755,6 @@ Avant créer Pod en production:
 
 ---
 
-**Last Updated:** 7 novembre 2025  
+**Last Updated:** 12 novembre 2025
 **Status:** ✅ Production Ready
+**Version:** 3.1.1

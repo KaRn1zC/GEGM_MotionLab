@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger
-from src.owncloud_uploader import OwnCloudConfig
+from src.models.owncloud_models import OwnCloudConfig
 
 logger = get_logger("owncloud_config")
 
