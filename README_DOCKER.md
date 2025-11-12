@@ -576,6 +576,8 @@ docker-compose exec comfy_img_to_loop \
     python scripts/setup_wan22_native.sh"
 
 # 3. OU télécharger depuis OwnCloud
+# Note: Ce script détecte automatiquement chunks/mapping.txt et
+# reconstitue les fichiers safetensors AVANT la vérification d'intégrité
 docker-compose exec comfy_img_to_loop \
   python scripts/download_models_from_owncloud.py
 
@@ -593,7 +595,10 @@ docker-compose exec comfy_img_to_loop \
 docker-compose exec comfy_img_to_loop \
   ls -l /workspace/comfyui/ComfyUI/models/vae/
 
-# 2. Si pas présent, créer symlink
+# 2. Si pas présent, créer symlinks (VAE, modèles WAN)
+# Note: T5 Encoder est maintenant téléchargé directement vers
+# /workspace/comfyui/ComfyUI/models/text_encoders/t5/ par docker-entrypoint.sh
+# setup_diffusion_models.sh ne crée plus de symlinks T5
 docker-compose exec comfy_img_to_loop \
   bash -c "cd /app && \
     bash scripts/setup_diffusion_models.sh"
@@ -754,4 +759,4 @@ make help
 
 **Last Updated:** 12 novembre 2025
 **Status:** ✅ Production Ready
-**Version:** 3.1.1
+**Version:** 3.1.2

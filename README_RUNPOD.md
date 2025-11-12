@@ -170,6 +170,10 @@ Workflow séquentiel (30GB espace local)
 ├─ Supprimer fichiers locaux ✓ Libère 11GB
 │
 └─ Upload script reassemble_models.sh
+
+Note: Sur le Pod RunPod, download_models_from_owncloud.py détecte
+automatiquement chunks/mapping.txt et reconstitue les fichiers
+safetensors AVANT la vérification d'intégrité.
 ```
 
 **Commandes individuelles (si besoin):**
@@ -399,16 +403,25 @@ Connection Status: Running
 Pod URL: https://abc-1234-xyz-5000.proxy.runpod.net
 ```
 
+**Vérification automatique des modèles:**
+
+Au démarrage, `docker-entrypoint.sh` vérifie la présence des 3 fichiers safetensors reconstitués (`diffusion_pytorch_model-0000X-of-00003.safetensors`) pour déterminer si le modèle doit être téléchargé. Cette vérification garantit que les fichiers complets existent (pas seulement le dossier ou les chunks).
+
 **Durée démarrage Pod:**
 
 ```
-T+0s:    Pod boot
-T+10s:   Docker container starts
-T+60s:   docker-entrypoint.sh executes
-T+60-70s: Models downloading from OwnCloud (~5-10 min)
-T+70-80s: Models reconstituting
-T+80-90s: ComfyUI startup
-T+90s:   Flask app ready
+T+0s:       Pod boot
+T+10s:      Docker container starts
+T+60s:      docker-entrypoint.sh executes
+T+60-70s:   Vérification modèles présents (3 fichiers safetensors)
+T+70-150s:  Si absents: Download WAN model depuis OwnCloud
+T+150-200s: Download T5 Encoder depuis /GEGM_ComfyUI/Models/t5/ (nouveau)
+T+200-250s: Reconstitution automatique chunks (si chunks/mapping.txt détecté)
+T+250-260s: Exécution setup_diffusion_models.sh (vérifie T5, crée symlinks VAE/WAN)
+T+260-310s: Download VAE, CLIP Vision, RealESRGAN
+T+310-320s: Vérification intégrité fichiers reconstitués
+T+320-370s: ComfyUI startup
+T+370s:     Flask app ready
 ────────────────────────────
 T+120-600s: GEGM MotionLab accessible
 Total: 15-20 minutes before interface available
@@ -605,6 +618,14 @@ rclone ls owncloud:/GEGM_ComfyUI/Models/
 # 4. Si erreur connexion OwnCloud:
 #    - Vérifier .env dans container
 #    - docker-entrypoint.sh lance le download
+
+# 5. Vérifier reconstitution automatique des chunks
+#    Si chunks/mapping.txt présent, reassemble_models.sh est appelé automatiquement
+#    Chercher dans logs: "Reconstitution des fichiers découpés..."
+#    Vérifier que les 3 fichiers safetensors sont créés:
+#      - diffusion_pytorch_model-00001-of-00003.safetensors
+#      - diffusion_pytorch_model-00002-of-00003.safetensors
+#      - diffusion_pytorch_model-00003-of-00003.safetensors
 ```
 
 ### Interface ne répond pas
@@ -757,4 +778,4 @@ Avant créer Pod en production:
 
 **Last Updated:** 12 novembre 2025
 **Status:** ✅ Production Ready
-**Version:** 3.1.1
+**Version:** 3.1.2
