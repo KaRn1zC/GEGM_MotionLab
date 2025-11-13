@@ -9,7 +9,8 @@
       "Bash(python scripts/verify_t5_integrity.py:*)",
       "Bash(python:*)",
       "Bash(tee:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

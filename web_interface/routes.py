@@ -306,6 +306,34 @@ def generate_cinemagraph():
         - fps: Images par seconde
         - parameters: Autres paramètres JSON
     """
+    # Vérifier que ComfyUI est accessible AVANT de créer le job
+    try:
+        comfyui_accessible = asyncio.run(
+            test_comfyui_connection(current_app.comfyui_config)
+        )
+        if not comfyui_accessible:
+            logger.error("ComfyUI inaccessible lors de la requête de génération")
+            return (
+                jsonify(
+                    {
+                        "error": "ComfyUI n'est pas accessible. Veuillez réessayer dans quelques instants.",
+                        "details": "Le service de génération n'est pas prêt. Cela peut arriver au démarrage.",
+                    }
+                ),
+                503,
+            )
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification de ComfyUI: {e}")
+        return (
+            jsonify(
+                {
+                    "error": "Impossible de vérifier l'état de ComfyUI",
+                    "details": str(e),
+                }
+            ),
+            503,
+        )
+
     # Vérifier l'image
     if "image" not in request.files:
         return jsonify({"error": "Aucune image fournie"}), 400
