@@ -27,15 +27,19 @@ echo "📂 Configuration du T5 Encoder..."
 mkdir -p /workspace/comfyui/ComfyUI/models/text_encoders/t5
 
 # Symlink du T5 pour 5B
+# IMPORTANT: Utiliser chemin ABSOLU pour éviter problèmes de symlink cassé
 if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth" ]; then
-    ln -sf ../../checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
+    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth \
+           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
     echo "✅ Symlink T5 créé: umt5-xxl-enc-bf16.pth (5B)"
 fi
 
 # Symlink du T5 pour 14B
+# IMPORTANT: Utiliser chemin ABSOLU pour éviter problèmes de symlink cassé
 if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth" ]; then
     if [ ! -L "/workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth" ]; then
-        ln -sf ../../checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16_14B.pth
+        ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth \
+               /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16_14B.pth
         echo "✅ Symlink T5 créé: umt5-xxl-enc-bf16_14B.pth (14B)"
     fi
 fi

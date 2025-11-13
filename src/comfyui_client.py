@@ -113,62 +113,77 @@ class ComfyUIClient:
 
     async def connect(self) -> bool:
         """
-        Établit la connexion WebSocket avec ComfyUI
+        Établit la connexion WebSocket avec ComfyUI avec retry automatique
 
         Returns:
             bool: True si la connexion est établie avec succès
         """
-        try:
-            logger.info(f"Connexion à ComfyUI: {self.config.websocket_url}")
-
-            # Créer la session HTTP
-            if not self.session:
-                self.session = aiohttp.ClientSession()
-
-            # Test de connectivité HTTP d'abord
-            await self._test_http_connection()
-
-            # Connexion WebSocket avec timeout correct
+        for attempt in range(1, self.config.max_retries + 1):
             try:
-                self.websocket = await asyncio.wait_for(
-                    websockets.connect(
-                        f"{self.config.websocket_url}?clientId={self.client_id}",
-                        open_timeout=30,  # Timeout d'ouverture de connexion
-                        ping_timeout=20,  # Timeout pour les pings
-                        close_timeout=10,  # Timeout pour la fermeture
-                    ),
-                    timeout=self.config.timeout,
+                logger.info(
+                    f"Connexion à ComfyUI (tentative {attempt}/{self.config.max_retries}): {self.config.websocket_url}"
                 )
+
+                # Créer la session HTTP
+                if not self.session:
+                    self.session = aiohttp.ClientSession()
+
+                # Test de connectivité HTTP d'abord
+                await self._test_http_connection()
+
+                # Connexion WebSocket avec timeout correct
+                try:
+                    self.websocket = await asyncio.wait_for(
+                        websockets.connect(
+                            f"{self.config.websocket_url}?clientId={self.client_id}",
+                            open_timeout=30,  # Timeout d'ouverture de connexion
+                            ping_timeout=20,  # Timeout pour les pings
+                            close_timeout=10,  # Timeout pour la fermeture
+                        ),
+                        timeout=self.config.timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"Timeout lors de la connexion WebSocket ({self.config.timeout}s)"
+                    )
+                    raise ComfyUIError(
+                        f"Timeout de connexion après {self.config.timeout}s"
+                    )
+
+                self.is_connected = True
+                logger.success(
+                    f"✅ Connexion WebSocket établie avec ComfyUI (tentative {attempt})"
+                )
+
+                # Démarrer le monitoring des messages
+                self._monitoring_task = asyncio.create_task(self._monitor_messages())
+
+                return True
+
+            except websockets.ConnectionClosed as e:
+                logger.error(f"Connexion WebSocket fermée: {e}")
+                self.is_connected = False
             except asyncio.TimeoutError:
+                logger.error("Timeout lors de la connexion à ComfyUI")
+            except ComfyUIError as e:
+                logger.error(f"Erreur ComfyUI: {e}")
+            except Exception as e:
+                logger.error(f"Erreur lors de la connexion à ComfyUI: {e}")
+                import traceback
+
+                logger.error(traceback.format_exc())
+
+            # Si ce n'est pas la dernière tentative, attendre avant de réessayer
+            if attempt < self.config.max_retries:
+                wait_time = self.config.retry_delay * attempt
+                logger.info(f"Nouvelle tentative dans {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
                 logger.error(
-                    f"Timeout lors de la connexion WebSocket ({self.config.timeout}s)"
+                    f"❌ Échec de connexion après {self.config.max_retries} tentatives"
                 )
-                raise ComfyUIError(f"Timeout de connexion après {self.config.timeout}s")
 
-            self.is_connected = True
-            logger.success("✅ Connexion WebSocket établie avec ComfyUI")
-
-            # Démarrer le monitoring des messages
-            self._monitoring_task = asyncio.create_task(self._monitor_messages())
-
-            return True
-
-        except websockets.ConnectionClosed as e:
-            logger.error(f"Connexion WebSocket fermée: {e}")
-            self.is_connected = False
-            return False
-        except asyncio.TimeoutError:
-            logger.error("Timeout lors de la connexion à ComfyUI")
-            return False
-        except ComfyUIError:
-            # Déjà loggué dans le try ci-dessus
-            return False
-        except Exception as e:
-            logger.error(f"Erreur lors de la connexion à ComfyUI: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return False
+        return False
 
     async def _test_http_connection(self):
         """Test la connexion HTTP avec ComfyUI"""
@@ -568,7 +583,13 @@ class ComfyUISession:
         self.client = ComfyUIClient(config)
 
     async def __aenter__(self):
-        await self.client.connect()
+        connected = await self.client.connect()
+        if not connected:
+            raise ComfyUIError(
+                "Impossible de se connecter à ComfyUI. "
+                "Vérifiez que ComfyUI est démarré et accessible sur "
+                f"{self.client.config.base_url}"
+            )
         return self.client
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

@@ -223,6 +223,9 @@ echo ""
 echo "🎨 Starting ComfyUI on port 8188..."
 cd /workspace/comfyui/ComfyUI
 
+# Créer le dossier de logs
+mkdir -p /workspace/logs
+
 nohup python main.py \
     --listen 0.0.0.0 \
     --port 8188 \
@@ -232,17 +235,51 @@ nohup python main.py \
 COMFYUI_PID=$!
 echo "   ComfyUI PID: $COMFYUI_PID"
 
-echo "   Waiting for ComfyUI..."
-for i in {1..30}; do
-    if curl -s http://localhost:8188 > /dev/null 2>&1; then
+echo "   Waiting for ComfyUI (up to 3 minutes)..."
+COMFYUI_READY=false
+
+for i in {1..90}; do
+    # Vérifier que le processus est toujours actif
+    if ! kill -0 $COMFYUI_PID 2>/dev/null; then
+        echo ""
+        echo "   ❌ ComfyUI process died! Last 20 lines of log:"
+        tail -n 20 /workspace/logs/comfyui.log
+        exit 1
+    fi
+
+    # Tester l'endpoint /system_stats (plus fiable que la racine)
+    if curl -s http://localhost:8188/system_stats > /dev/null 2>&1; then
+        echo ""
         echo "   ✅ ComfyUI ready!"
+        COMFYUI_READY=true
         break
     fi
-    if [ "$i" -eq 30 ]; then
-        echo "   ⚠️  Check logs: /workspace/logs/comfyui.log"
+
+    # Afficher un point de progression toutes les 10 secondes
+    if [ $((i % 5)) -eq 0 ]; then
+        echo -n "."
     fi
+
     sleep 2
 done
+
+echo ""
+
+if [ "$COMFYUI_READY" = false ]; then
+    echo ""
+    echo "   ❌ ComfyUI failed to start after 3 minutes"
+    echo "   📋 Last 30 lines of ComfyUI log:"
+    echo "   ================================================"
+    tail -n 30 /workspace/logs/comfyui.log
+    echo "   ================================================"
+    echo ""
+    echo "   💡 Common issues:"
+    echo "      - Missing dependencies (check requirements.txt)"
+    echo "      - GPU not available (check nvidia-smi)"
+    echo "      - Model files corrupted or missing"
+    echo "      - Out of memory"
+    exit 1
+fi
 
 cd /workspace
 
