@@ -99,16 +99,15 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print("🔍 Vérification des clés critiques...")
     logger.info("🔍 Vérification des clés critiques du modèle...")
 
-    # Clés critiques qui doivent être présentes dans UMT5-XXL-Encoder
-    # Le modèle UMT5-XXL a 24 layers (blocks.0 à blocks.23)
-    # WAN 2.2 utilise uniquement l'encoder (pas de decoder)
+    # Clés critiques qui doivent être présentes dans le T5 WAN 2.2
+    # WAN 2.2 utilise un T5 modifié avec une structure de clés spécifique
+    # Le modèle a 24 layers (blocks.0 à blocks.23)
     critical_keys = [
         "token_embedding.weight",  # Embeddings principaux
-        "blocks.0.ffn.gate.0.weight",  # Premier bloc
-        "blocks.0.ffn.fc1.weight",  # Premier bloc FFN
-        "blocks.14.ffn.gate.0.weight",  # Bloc milieu (celui qui causait l'erreur)
-        "blocks.23.ffn.gate.0.weight",  # Dernier bloc
-        "blocks.23.ffn.fc2.weight",  # Dernier bloc FFN
+        "blocks.0.ffn.0.weight",  # Premier bloc FFN (format WAN 2.2)
+        "blocks.14.ffn.0.weight",  # Bloc milieu (celui qui causait l'erreur)
+        "blocks.23.ffn.0.weight",  # Dernier bloc FFN
+        "final_norm.weight",  # Layer norm final
     ]
 
     missing_keys = []
@@ -151,8 +150,8 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
 
     expected_dims = {
         "token_embedding.weight": 2,  # (vocab_size, hidden_dim)
-        "blocks.14.ffn.gate.0.weight": 2,  # (ffn_dim, hidden_dim)
-        "blocks.14.ffn.fc1.weight": 2,  # (ffn_dim, hidden_dim)
+        "blocks.14.ffn.0.weight": 2,  # (ffn_dim, hidden_dim) - format WAN 2.2
+        "final_norm.weight": 1,  # (hidden_dim,)
     }
 
     for key, expected_ndim in expected_dims.items():
