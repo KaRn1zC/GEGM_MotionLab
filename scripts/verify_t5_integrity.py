@@ -16,17 +16,18 @@ from src.logger import get_logger
 logger = get_logger("t5_verification")
 
 
-def verify_t5_encoder(model_name: str) -> bool:
+def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     """
     Vérifie l'intégrité du T5 Encoder
 
     Args:
         model_name: Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
+        base_dir: Répertoire de base contenant les modèles (défaut: "models")
 
     Returns:
         True si le T5 est valide, False sinon
     """
-    model_dir = Path(f"models/{model_name}")
+    model_dir = Path(base_dir) / model_name
     t5_file = model_dir / "models_t5_umt5-xxl-enc-bf16.pth"
 
     print(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
@@ -200,9 +201,14 @@ def main():
         "model_name",
         help="Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)",
     )
+    parser.add_argument(
+        "--base-dir",
+        default="models",
+        help="Répertoire de base contenant les modèles (défaut: models)",
+    )
     args = parser.parse_args()
 
-    success = verify_t5_encoder(args.model_name)
+    success = verify_t5_encoder(args.model_name, args.base_dir)
 
     if not success:
         logger.error("")

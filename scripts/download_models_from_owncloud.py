@@ -232,6 +232,45 @@ def download_model_from_owncloud(
                 logger.error("    et relancer le téléchargement")
                 return False, "Fichiers incomplets après téléchargement"
 
+            # 🔍 Vérification d'intégrité du T5 Encoder (CRITIQUE)
+            logger.info("")
+            logger.info("🔍 Vérification de l'intégrité du T5 Encoder...")
+
+            verify_script = Path(__file__).parent / "verify_t5_integrity.py"
+            if verify_script.exists():
+                result = subprocess.run(
+                    [
+                        "python3",
+                        str(verify_script),
+                        model_name,
+                        "--base-dir",
+                        str(target_dir)
+                    ],
+                    capture_output=True,
+                    text=True
+                )
+
+                # Afficher la sortie
+                for line in result.stdout.split('\n'):
+                    if line.strip():
+                        print(f"   {line}")
+
+                if result.returncode != 0:
+                    logger.error("")
+                    logger.error("❌ ÉCHEC DE LA VÉRIFICATION T5 ENCODER")
+                    logger.error("   Le workflow est ARRÊTÉ pour éviter d'utiliser un modèle corrompu")
+                    logger.error("")
+                    if result.stderr:
+                        for line in result.stderr.split('\n'):
+                            if line.strip():
+                                logger.error(f"   {line}")
+                    return False, "T5 Encoder corrompu ou incomplet"
+
+                logger.success("✅ T5 Encoder validé avec succès")
+            else:
+                logger.warning(f"⚠️  Script de vérification T5 non trouvé: {verify_script}")
+                logger.warning("   Impossible de vérifier l'intégrité du T5 Encoder")
+
             return True, None
         else:
             return False, f"rclone failed with code {process.returncode}"
