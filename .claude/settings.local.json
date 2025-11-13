@@ -4,7 +4,12 @@
       "Bash(find:*)",
       "Bash(mkdir:*)",
       "Bash(python3:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(source .venv/bin/activate:*)",
+      "Bash(python scripts/verify_t5_integrity.py:*)",
+      "Bash(python:*)",
+      "Bash(tee:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

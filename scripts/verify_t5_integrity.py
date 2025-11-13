@@ -29,20 +29,24 @@ def verify_t5_encoder(model_name: str) -> bool:
     model_dir = Path(f"models/{model_name}")
     t5_file = model_dir / "models_t5_umt5-xxl-enc-bf16.pth"
 
+    print(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
     logger.info(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
     logger.info(f"📂 Fichier: {t5_file}")
 
     # 1. Vérifier que le fichier existe
     if not t5_file.exists():
+        print(f"❌ Fichier T5 introuvable: {t5_file}")
         logger.error(f"❌ Fichier T5 introuvable: {t5_file}")
         return False
 
+    print(f"✅ Fichier T5 trouvé")
     logger.success(f"✅ Fichier T5 trouvé")
 
     # 2. Vérifier la taille du fichier (devrait être ~9.5GB)
     file_size_bytes = t5_file.stat().st_size
     file_size_gb = file_size_bytes / (1024**3)
 
+    print(f"📊 Taille du fichier: {file_size_gb:.2f} GB")
     logger.info(f"📊 Taille du fichier: {file_size_gb:.2f} GB")
 
     # Le T5 UMT5-XXL devrait faire entre 9GB et 11GB
@@ -63,6 +67,7 @@ def verify_t5_encoder(model_name: str) -> bool:
     logger.success(f"✅ Taille du fichier valide")
 
     # 3. Essayer de charger le fichier avec PyTorch
+    print("🔄 Chargement du fichier T5 avec PyTorch...")
     logger.info("🔄 Chargement du fichier T5 avec PyTorch...")
 
     try:
@@ -72,39 +77,49 @@ def verify_t5_encoder(model_name: str) -> bool:
         state_dict = torch.load(t5_file, map_location="cpu", weights_only=True)
 
         if not isinstance(state_dict, dict):
+            print(f"❌ Format incorrect: attendu un dict, obtenu {type(state_dict)}")
             logger.error(
                 f"❌ Format incorrect: attendu un dict, obtenu {type(state_dict)}"
             )
             return False
 
+        print(f"✅ Fichier T5 chargé avec succès ({len(state_dict)} clés)")
         logger.success(f"✅ Fichier T5 chargé avec succès")
         logger.info(f"📊 Nombre de clés: {len(state_dict)}")
 
     except Exception as e:
+        print(f"❌ Erreur lors du chargement du fichier T5: {e}")
+        print("   Le fichier est probablement corrompu")
         logger.error(f"❌ Erreur lors du chargement du fichier T5: {e}")
         logger.error("   Le fichier est probablement corrompu")
         return False
 
     # 4. Vérifier les clés critiques
+    print("🔍 Vérification des clés critiques...")
     logger.info("🔍 Vérification des clés critiques du modèle...")
 
-    # Clés critiques qui doivent être présentes dans UMT5-XXL
+    # Clés critiques qui doivent être présentes dans UMT5-XXL-Encoder
     # Le modèle UMT5-XXL a 24 layers (blocks.0 à blocks.23)
+    # WAN 2.2 utilise uniquement l'encoder (pas de decoder)
     critical_keys = [
-        "blocks.0.ffn.0.weight",  # Premier bloc
-        "blocks.14.ffn.0.weight",  # Bloc qui causait l'erreur
-        "blocks.23.ffn.0.weight",  # Dernier bloc
-        "encoder.embed_tokens.weight",  # Embeddings
-        "decoder.embed_tokens.weight",  # Embeddings decoder
+        "token_embedding.weight",  # Embeddings principaux
+        "blocks.0.ffn.gate.0.weight",  # Premier bloc
+        "blocks.0.ffn.fc1.weight",  # Premier bloc FFN
+        "blocks.14.ffn.gate.0.weight",  # Bloc milieu (celui qui causait l'erreur)
+        "blocks.23.ffn.gate.0.weight",  # Dernier bloc
+        "blocks.23.ffn.fc2.weight",  # Dernier bloc FFN
     ]
 
     missing_keys = []
     for key in critical_keys:
         if key not in state_dict:
             missing_keys.append(key)
+            print(f"   ❌ Clé manquante: {key}")
             logger.error(f"   ❌ Clé manquante: {key}")
 
     if missing_keys:
+        print(f"❌ {len(missing_keys)} clé(s) critique(s) manquante(s)")
+        print("   Le fichier T5 est INCOMPLET ou CORROMPU")
         logger.error(f"❌ {len(missing_keys)} clé(s) critique(s) manquante(s)")
         logger.error("   Le fichier T5 est INCOMPLET ou CORROMPU")
         logger.error("")
@@ -127,14 +142,16 @@ def verify_t5_encoder(model_name: str) -> bool:
         )
         return False
 
+    print(f"✅ Toutes les clés critiques sont présentes")
     logger.success(f"✅ Toutes les clés critiques sont présentes")
 
     # 5. Vérifier quelques dimensions de tenseurs
     logger.info("🔍 Vérification des dimensions des tenseurs...")
 
     expected_dims = {
-        "encoder.embed_tokens.weight": 2,  # (vocab_size, hidden_dim)
-        "blocks.14.ffn.0.weight": 2,  # (ffn_dim, hidden_dim)
+        "token_embedding.weight": 2,  # (vocab_size, hidden_dim)
+        "blocks.14.ffn.gate.0.weight": 2,  # (ffn_dim, hidden_dim)
+        "blocks.14.ffn.fc1.weight": 2,  # (ffn_dim, hidden_dim)
     }
 
     for key, expected_ndim in expected_dims.items():
@@ -152,6 +169,16 @@ def verify_t5_encoder(model_name: str) -> bool:
     logger.success("✅ Dimensions des tenseurs valides")
 
     # 6. Vérification finale
+    print("")
+    print("=" * 70)
+    print("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
+    print(f"   Fichier: {t5_file.name}")
+    print(f"   Taille: {file_size_gb:.2f} GB")
+    print(f"   Clés: {len(state_dict)}")
+    print("   Le T5 Encoder est COMPLET et VALIDE")
+    print("=" * 70)
+    print("")
+
     logger.info("")
     logger.success("=" * 70)
     logger.success("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
