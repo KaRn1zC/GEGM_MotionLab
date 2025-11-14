@@ -42,6 +42,22 @@ if [ "$MODEL" = "all" ]; then
     echo "✅ WAN 2.2 5B téléchargé"
 
     echo ""
+    echo "🔧 Fusion des fichiers safetensors (5B)..."
+    python scripts/merge_safetensors.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Fusion safetensors 5B"
+        exit 1
+    fi
+
+    echo ""
+    echo "🔍 Vérification intégrité modèle de diffusion (5B)..."
+    python scripts/verify_diffusion_model.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Modèle de diffusion 5B corrompu ou incomplet"
+        exit 1
+    fi
+
+    echo ""
     echo "🔍 Vérification intégrité T5 Encoder (5B)..."
     python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
@@ -50,9 +66,31 @@ if [ "$MODEL" = "all" ]; then
     fi
 
     echo ""
+    echo "🗑️  Suppression des fichiers sharded (5B)..."
+    rm -f models/wan2.2-ti2v-5b/diffusion_pytorch_model-0000[123]-of-00003.safetensors
+    rm -f models/wan2.2-ti2v-5b/diffusion_pytorch_model.safetensors.index.json
+    echo "✅ Fichiers sharded supprimés (économie ~18.5 GB)"
+
+    echo ""
     echo "📦 Modèle 2/2: WAN 2.2 I2V 14B (27.8GB)..."
     hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
     echo "✅ WAN 2.2 14B téléchargé"
+
+    echo ""
+    echo "🔧 Fusion des fichiers safetensors (14B)..."
+    python scripts/merge_safetensors.py wan2.2-i2v-a14b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Fusion safetensors 14B"
+        exit 1
+    fi
+
+    echo ""
+    echo "🔍 Vérification intégrité modèle de diffusion (14B)..."
+    python scripts/verify_diffusion_model.py wan2.2-i2v-a14b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Modèle de diffusion 14B corrompu ou incomplet"
+        exit 1
+    fi
 
     echo ""
     echo "🔍 Vérification intégrité T5 Encoder (14B)..."
@@ -62,11 +100,33 @@ if [ "$MODEL" = "all" ]; then
         exit 1
     fi
 
+    echo ""
+    echo "🗑️  Suppression des fichiers sharded (14B)..."
+    rm -f models/wan2.2-i2v-a14b/diffusion_pytorch_model-*-of-*.safetensors
+    rm -f models/wan2.2-i2v-a14b/diffusion_pytorch_model.safetensors.index.json
+    echo "✅ Fichiers sharded supprimés"
+
 elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 I2V 14B (27.8GB)..."
     hf download Wan-AI/Wan2.2-I2V-A14B --local-dir ./models/wan2.2-i2v-a14b
     echo "✅ WAN 2.2 14B téléchargé"
+
+    echo ""
+    echo "🔧 Fusion des fichiers safetensors..."
+    python scripts/merge_safetensors.py wan2.2-i2v-a14b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Fusion safetensors"
+        exit 1
+    fi
+
+    echo ""
+    echo "🔍 Vérification intégrité modèle de diffusion..."
+    python scripts/verify_diffusion_model.py wan2.2-i2v-a14b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
+        exit 1
+    fi
 
     echo ""
     echo "🔍 Vérification intégrité T5 Encoder..."
@@ -76,11 +136,33 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
         exit 1
     fi
 
+    echo ""
+    echo "🗑️  Suppression des fichiers sharded..."
+    rm -f models/wan2.2-i2v-a14b/diffusion_pytorch_model-*-of-*.safetensors
+    rm -f models/wan2.2-i2v-a14b/diffusion_pytorch_model.safetensors.index.json
+    echo "✅ Fichiers sharded supprimés"
+
 elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 TI2V 5B (9.4GB)..."
     hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ./models/wan2.2-ti2v-5b
     echo "✅ WAN 2.2 5B téléchargé"
+
+    echo ""
+    echo "🔧 Fusion des fichiers safetensors..."
+    python scripts/merge_safetensors.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Fusion safetensors"
+        exit 1
+    fi
+
+    echo ""
+    echo "🔍 Vérification intégrité modèle de diffusion..."
+    python scripts/verify_diffusion_model.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
+        exit 1
+    fi
 
     echo ""
     echo "🔍 Vérification intégrité T5 Encoder..."
@@ -89,6 +171,12 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
         echo "❌ ÉCHEC: T5 Encoder corrompu ou incomplet"
         exit 1
     fi
+
+    echo ""
+    echo "🗑️  Suppression des fichiers sharded..."
+    rm -f models/wan2.2-ti2v-5b/diffusion_pytorch_model-0000[123]-of-00003.safetensors
+    rm -f models/wan2.2-ti2v-5b/diffusion_pytorch_model.safetensors.index.json
+    echo "✅ Fichiers sharded supprimés (économie ~18.5 GB)"
 
 else
     echo "❌ Modèle invalide: $MODEL"

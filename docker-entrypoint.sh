@@ -37,11 +37,12 @@ MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
 
-# Vérifier la présence des fichiers safetensors reconstitués (pas juste le dossier)
-# Si l'un des 3 fichiers manque, télécharger et reconstituer
-if [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00001-of-00003.safetensors" ] || \
-   [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00002-of-00003.safetensors" ] || \
-   [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00003-of-00003.safetensors" ]; then
+# Vérifier la présence du fichier safetensors fusionné (v3.1.8+)
+# Fallback: vérifier les fichiers sharded (v3.1.7 et antérieures - obsolète)
+if [ ! -f "$MODEL_DIR/diffusion_pytorch_model.safetensors" ] && \
+   { [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00001-of-00003.safetensors" ] || \
+     [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00002-of-00003.safetensors" ] || \
+     [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00003-of-00003.safetensors" ]; }; then
     echo ""
     echo "📥 Téléchargement du modèle depuis OwnCloud..."
     echo "   Ceci peut prendre 5-15 minutes..."

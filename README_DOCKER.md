@@ -607,9 +607,9 @@ docker-compose exec comfy_img_to_loop \
 docker-compose exec comfy_img_to_loop \
   ls -l /workspace/comfyui/ComfyUI/models/checkpoints/wan*/Wan2.2_VAE.pth
 
-# 4. Si pas converti, reconvertir
+# 4. Si pas converti, reconvertir avec le script dédié
 docker-compose exec comfy_img_to_loop \
-  python -c "from upload_models_to_owncloud import convert_vae_96_to_48; ..."
+  python scripts/convert_vae_channels.py wan2.2-ti2v-5b
 ```
 
 ### Connexion ComfyUI échoue

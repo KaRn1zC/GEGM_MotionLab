@@ -73,16 +73,6 @@ download-models: ## Télécharger les modèles WAN 2.2 localement
 	@echo "📥 Téléchargement des modèles..."
 	./scripts/setup_wan22_native.sh
 
-upload-models: ## Uploader les modèles vers OwnCloud (Python)
-	@echo "📤 Upload des modèles vers OwnCloud..."
-	python scripts/upload_models_to_owncloud.py --model wan2.2-i2v-a14b
-
-upload-models-clean: ## Upload + suppression locale (libère 117GB)
-	@echo "📤 Upload + nettoyage..."
-	@echo "⚠️  Ceci va supprimer les modèles locaux après upload !"
-	@read -p "Êtes-vous sûr? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 1
-	python scripts/upload_models_to_owncloud.py --model wan2.2-i2v-a14b --clean --confirm-clean
-
 test-download-models: ## Tester le téléchargement depuis OwnCloud
 	@echo "🧪 Test téléchargement OwnCloud..."
 	python scripts/download_models_from_owncloud.py --model wan2.2-i2v-a14b --target-dir ./test_models

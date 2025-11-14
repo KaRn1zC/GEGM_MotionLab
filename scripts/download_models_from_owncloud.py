@@ -25,14 +25,34 @@ def verify_model_files(model_target: Path) -> bool:
     """Vérifie que tous les fichiers du modèle sont présents et corrects"""
     logger.info("🔍 Vérification des fichiers téléchargés...")
 
-    # Tailles minimales acceptables pour chaque fichier
+    # v3.1.8+ : Vérifier le fichier fusionné unique (format préféré)
+    merged_file = model_target / "diffusion_pytorch_model.safetensors"
+
+    if merged_file.exists():
+        # Format v3.1.8+ : fichier fusionné unique
+        actual_size = merged_file.stat().st_size
+        min_size = 15 * 1024**3  # 15 GB minimum (18.63 GB attendu pour 5B)
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ diffusion_pytorch_model.safetensors incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            return False
+        else:
+            logger.info(f"✅ diffusion_pytorch_model.safetensors: {actual_size / 1024**3:.2f} GB")
+            logger.success("✅ Fichier fusionné complet (format v3.1.8+)")
+            return True
+
+    # Fallback : vérifier les fichiers sharded (format v3.1.7 et antérieures - obsolète)
+    logger.warning("⚠️  Format sharded détecté (v3.1.7 et antérieures - obsolète)")
+    logger.warning("   Recommandation: re-télécharger depuis HuggingFace avec setup_wan22_native.sh")
+
     required_files = {
-        "diffusion_pytorch_model-00001-of-00003.safetensors": 8
-        * 1024**3,  # 8 GB minimum
-        "diffusion_pytorch_model-00002-of-00003.safetensors": 8
-        * 1024**3,  # 8 GB minimum
-        "diffusion_pytorch_model-00003-of-00003.safetensors": 100
-        * 1024**2,  # 100 MB minimum
+        "diffusion_pytorch_model-00001-of-00003.safetensors": 8 * 1024**3,  # 8 GB minimum
+        "diffusion_pytorch_model-00002-of-00003.safetensors": 8 * 1024**3,  # 8 GB minimum
+        "diffusion_pytorch_model-00003-of-00003.safetensors": 100 * 1024**2,  # 100 MB minimum
     }
 
     all_ok = True
@@ -57,7 +77,7 @@ def verify_model_files(model_target: Path) -> bool:
             logger.info(f"✅ {filename}: {actual_size / 1024**3:.2f} GB")
 
     if all_ok:
-        logger.success("✅ Tous les fichiers sont complets")
+        logger.success("✅ Tous les fichiers sharded sont complets")
     else:
         logger.error("❌ Vérification échouée - fichiers incomplets")
 
