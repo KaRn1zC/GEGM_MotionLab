@@ -10,7 +10,14 @@
       "Bash(python:*)",
       "Bash(tee:*)",
       "Bash(echo:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "WebSearch",
+      "Bash(ls:*)",
+      "Bash(make rclone-list:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(rm:*)",
+      "Bash(./scripts/setup_wan22_native.sh:*)"
     ],
     "deny": [],
     "ask": []

@@ -190,10 +190,13 @@ GEGM_MotionLab/
 │   └── config.py                     # Config app
 │
 ├── 📁 scripts/
-│   ├── setup_wan22_native.sh         # Download HF
-│   ├── upload_models_to_owncloud.py  # Upload + VAE convert
+│   ├── setup_wan22_native.sh         # Download HF + fusion safetensors
+│   ├── merge_safetensors.py          # Fusionne fichiers sharded en un seul
+│   ├── split_and_upload.py           # Découpe chunks + upload OwnCloud
+│   ├── convert_vae_channels.py       # Conversion VAE 96→48ch
 │   ├── download_models_from_owncloud.py # Download, auto-reconstitue chunks, verify
-│   └── reassemble_models.sh          # Reconstitue safetensors depuis chunks
+│   ├── reassemble_models.sh          # Reconstitue safetensors depuis chunks
+│   └── verify_t5_integrity.py        # Vérification T5 Encoder
 │
 ├── 📁 config/
 │   ├── model_versions.yaml           # URLs modèles
@@ -224,18 +227,18 @@ expected input[1, 48, 60, 90] to have 96 channels, but got 48 channels instead
 
 ### La solution (Novembre 2025)
 
-La solution implémentée en production consiste à **convertir le VAE de 96 à 48 canaux** via script intégré dans le pipeline upload OwnCloud.
+La solution implémentée en production consiste à **convertir le VAE de 96 à 48 canaux** via script dédié.
 
 **Étapes:**
 
-1. **Conversion** : Script `convert_vae_96_to_48()` dans `upload_models_to_owncloud.py`
+1. **Conversion** : Script `scripts/convert_vae_channels.py` (exécuté automatiquement par `setup_wan22_native.sh`)
    - Réduit `encoder.conv_in.weight`: [96, 48, 3, 3] → [48, 48, 3, 3]
    - Réduit `decoder.conv_out.weight`: [96, 3, 3, 3] → [48, 3, 3, 3]
    - Autres poids: conservés intacts
 
 2. **Suppression original** : VAE non modifié (96 canaux) supprimé pour éviter duplication
 
-3. **Upload OwnCloud** : VAE converti inclus (pas d'exclusion)
+3. **Upload OwnCloud** : VAE converti inclus dans les chunks uploadés par `split_and_upload.py`
 
 4. **Workflow** : Utilise nodes corrects:
    ```json

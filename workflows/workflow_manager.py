@@ -96,18 +96,32 @@ class WorkflowTemplate:
 
         # Détection automatique selon la structure des fichiers
         if "5b" in model_name.lower():
-            # Modèle 5B : chercher le premier fichier safetensors (format sharded)
+            # Modèle 5B : chercher le fichier fusionné unique
+            merged_checkpoint = model_path / "diffusion_pytorch_model.safetensors"
+            if merged_checkpoint.exists():
+                logger.info(f"✅ Modèle 5B fusionné détecté : {merged_checkpoint.name}")
+                return f"{model_name}/{merged_checkpoint.name}"
+
+            # Fallback : si fichiers sharded encore présents (ancienne version)
             checkpoint_files = list(
                 model_path.glob("diffusion_pytorch_model-*.safetensors")
             )
             if checkpoint_files:
-                # Utiliser le premier fichier (00001)
                 first_checkpoint = sorted(checkpoint_files)[0]
-                logger.info(f"✅ Modèle 5B détecté : {first_checkpoint.name}")
+                logger.warning(
+                    f"⚠️  Fichiers sharded détectés (obsolète) : {first_checkpoint.name}"
+                )
+                logger.warning("   Recommandation : fusionner avec merge_safetensors.py")
                 return f"{model_name}/{first_checkpoint.name}"
 
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
-            # Modèle 14B : chercher high_noise_model.safetensors (architecture MoE)
+            # Modèle 14B : d'abord chercher le fichier fusionné
+            merged_checkpoint = model_path / "diffusion_pytorch_model.safetensors"
+            if merged_checkpoint.exists():
+                logger.info(f"✅ Modèle 14B fusionné détecté : {merged_checkpoint.name}")
+                return f"{model_name}/{merged_checkpoint.name}"
+
+            # Fallback : architecture MoE avec high_noise_model.safetensors
             checkpoint_file = model_path / "high_noise_model.safetensors"
             if checkpoint_file.exists():
                 logger.info("✅ Modèle 14B détecté : architecture MoE")

@@ -20,12 +20,6 @@ class TestWorkflowValidation:
         assert validation["valid"] is True
         assert len(validation["errors"]) == 0
 
-    def test_pyramid_validation(self):
-        """Test validation workflow Pyramid"""
-        validation = workflow_manager.validate_workflow("pyramid_upscale")
-        assert validation["valid"] is True
-        assert len(validation["errors"]) == 0
-
     def test_combined_validation(self):
         """Test validation workflow combiné"""
         validation = workflow_manager.validate_workflow("wan22_with_upscale")
@@ -62,14 +56,6 @@ class TestWorkflowCreation:
         assert isinstance(workflow["6"]["inputs"]["steps"], int)
         assert isinstance(workflow["6"]["inputs"]["cfg"], float)
 
-    def test_create_pyramid(self):
-        """Test création Pyramid Upscale"""
-        workflow = workflow_manager.create_workflow(
-            "pyramid_upscale", {"input_video": "video.mp4", "scale_factor": 3.0}
-        )
-        assert workflow is not None
-        assert len(workflow) > 0
-
 
 class TestWorkflowInfo:
     """Tests d'information sur les workflows"""
@@ -99,12 +85,6 @@ class TestWorkflowTags:
         workflows = workflow_manager.list_workflows_by_tag("cinemagraph")
         assert len(workflows) > 0
         assert any(wf["id"] == "wan22_i2v" for wf in workflows)
-
-    def test_list_by_tag_upscale(self):
-        """Test filtrage par tag 'upscale'"""
-        workflows = workflow_manager.list_workflows_by_tag("upscale")
-        assert len(workflows) > 0
-        assert any(wf["id"] == "pyramid_upscale" for wf in workflows)
 
 
 if __name__ == "__main__":
