@@ -35,7 +35,7 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
     elif model_name == "wan2.2-i2v-a14b":
         diffusion_files = [
             model_dir / "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
-            model_dir / "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+            model_dir / "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
         ]
     else:
         print(f"❌ Modèle inconnu: {model_name}")
@@ -94,7 +94,7 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
 
     print(f"📊 Taille totale: {total_size_gb:.2f} GB")
     logger.info(f"📊 Taille totale: {total_size_gb:.2f} GB")
-    logger.success(f"✅ Taille des fichiers valide")
+    logger.success("✅ Taille des fichiers valide")
 
     # 3. Charger avec safetensors
     print("🔄 Chargement du modèle avec safetensors...")
@@ -159,8 +159,8 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
         logger.error(f"         ./scripts/setup_wan22_native.sh {model_name}")
         return False
 
-    print(f"✅ Toutes les clés critiques sont présentes")
-    logger.success(f"✅ Toutes les clés critiques sont présentes")
+    print("✅ Toutes les clés critiques sont présentes")
+    logger.success("✅ Toutes les clés critiques sont présentes")
 
     # 5. Vérifier quelques dimensions de tenseurs
     logger.info("🔍 Vérification des dimensions des tenseurs...")
@@ -182,9 +182,7 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
                                 f"❌ Dimension invalide pour {key}: {tensor.ndim}"
                             )
                             return False
-                        logger.info(
-                            f"   ✅ {key}: shape={tuple(tensor.shape)}"
-                        )
+                        logger.info(f"   ✅ {key}: shape={tuple(tensor.shape)}")
 
     except Exception as e:
         logger.error(f"❌ Erreur vérification dimensions: {e}")

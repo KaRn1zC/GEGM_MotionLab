@@ -41,18 +41,25 @@ def verify_model_files(model_target: Path) -> bool:
             )
             return False
         else:
-            logger.info(f"✅ diffusion_pytorch_model.safetensors: {actual_size / 1024**3:.2f} GB")
+            logger.info(
+                f"✅ diffusion_pytorch_model.safetensors: {actual_size / 1024**3:.2f} GB"
+            )
             logger.success("✅ Fichier fusionné complet (format v3.1.8+)")
             return True
 
     # Fallback : vérifier les fichiers sharded (format v3.1.7 et antérieures - obsolète)
     logger.warning("⚠️  Format sharded détecté (v3.1.7 et antérieures - obsolète)")
-    logger.warning("   Recommandation: re-télécharger depuis HuggingFace avec setup_wan22_native.sh")
+    logger.warning(
+        "   Recommandation: re-télécharger depuis HuggingFace avec setup_wan22_native.sh"
+    )
 
     required_files = {
-        "diffusion_pytorch_model-00001-of-00003.safetensors": 8 * 1024**3,  # 8 GB minimum
-        "diffusion_pytorch_model-00002-of-00003.safetensors": 8 * 1024**3,  # 8 GB minimum
-        "diffusion_pytorch_model-00003-of-00003.safetensors": 100 * 1024**2,  # 100 MB minimum
+        "diffusion_pytorch_model-00001-of-00003.safetensors": 8
+        * 1024**3,  # 8 GB minimum
+        "diffusion_pytorch_model-00002-of-00003.safetensors": 8
+        * 1024**3,  # 8 GB minimum
+        "diffusion_pytorch_model-00003-of-00003.safetensors": 100
+        * 1024**2,  # 100 MB minimum
     }
 
     all_ok = True
@@ -225,21 +232,23 @@ def download_model_from_owncloud(
                     result = subprocess.run(
                         ["bash", str(reassemble_script), str(model_target)],
                         capture_output=True,
-                        text=True
+                        text=True,
                     )
 
                     if result.returncode == 0:
                         logger.success("✅ Fichiers reconstitués avec succès")
                         # Afficher la sortie
-                        for line in result.stdout.split('\n'):
+                        for line in result.stdout.split("\n"):
                             if line.strip():
                                 logger.info(f"   {line}")
                     else:
-                        logger.error(f"❌ Échec de la reconstitution:")
+                        logger.error("❌ Échec de la reconstitution:")
                         logger.error(result.stderr)
                         return False, "Échec reconstitution des chunks"
                 else:
-                    logger.error(f"❌ Script reassemble_models.sh non trouvé: {reassemble_script}")
+                    logger.error(
+                        f"❌ Script reassemble_models.sh non trouvé: {reassemble_script}"
+                    )
                     return False, "Script de reconstitution manquant"
             else:
                 logger.info("   Pas de chunks à reconstituer")
@@ -264,31 +273,35 @@ def download_model_from_owncloud(
                         str(verify_script),
                         model_name,
                         "--base-dir",
-                        str(target_dir)
+                        str(target_dir),
                     ],
                     capture_output=True,
-                    text=True
+                    text=True,
                 )
 
                 # Afficher la sortie
-                for line in result.stdout.split('\n'):
+                for line in result.stdout.split("\n"):
                     if line.strip():
                         print(f"   {line}")
 
                 if result.returncode != 0:
                     logger.error("")
                     logger.error("❌ ÉCHEC DE LA VÉRIFICATION T5 ENCODER")
-                    logger.error("   Le workflow est ARRÊTÉ pour éviter d'utiliser un modèle corrompu")
+                    logger.error(
+                        "   Le workflow est ARRÊTÉ pour éviter d'utiliser un modèle corrompu"
+                    )
                     logger.error("")
                     if result.stderr:
-                        for line in result.stderr.split('\n'):
+                        for line in result.stderr.split("\n"):
                             if line.strip():
                                 logger.error(f"   {line}")
                     return False, "T5 Encoder corrompu ou incomplet"
 
                 logger.success("✅ T5 Encoder validé avec succès")
             else:
-                logger.warning(f"⚠️  Script de vérification T5 non trouvé: {verify_script}")
+                logger.warning(
+                    f"⚠️  Script de vérification T5 non trouvé: {verify_script}"
+                )
                 logger.warning("   Impossible de vérifier l'intégrité du T5 Encoder")
 
             return True, None

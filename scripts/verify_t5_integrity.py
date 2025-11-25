@@ -32,7 +32,9 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     t5_file = model_dir / "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
 
     print(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
-    logger.info(f"🔍 Vérification de l'intégrité du T5 Encoder (ComfyUI Native - FP8)...")
+    logger.info(
+        "🔍 Vérification de l'intégrité du T5 Encoder (ComfyUI Native - FP8)..."
+    )
     logger.info(f"📂 Fichier: {t5_file}")
 
     # 1. Vérifier que le fichier existe
@@ -44,7 +46,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
         return False
 
     print(f"✅ Fichier T5 trouvé: {t5_file.name}")
-    logger.success(f"✅ Fichier T5 trouvé")
+    logger.success("✅ Fichier T5 trouvé")
 
     # 2. Vérifier la taille du fichier (FP8 quantized: ~4GB au lieu de ~10GB en BF16)
     file_size_bytes = t5_file.stat().st_size
@@ -68,7 +70,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
             f"⚠️  Fichier T5 plus gros que prévu: {file_size_gb:.2f} GB (attendu: ~3-5 GB pour FP8)"
         )
 
-    logger.success(f"✅ Taille du fichier valide (FP8 quantized)")
+    logger.success("✅ Taille du fichier valide (FP8 quantized)")
 
     # 3. Essayer de charger le fichier avec safetensors
     print("🔄 Chargement du fichier T5 avec safetensors...")
@@ -81,7 +83,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
             keys = list(f.keys())
 
         print(f"✅ Fichier T5 chargé avec succès ({len(keys)} clés)")
-        logger.success(f"✅ Fichier T5 chargé avec succès")
+        logger.success("✅ Fichier T5 chargé avec succès")
         logger.info(f"📊 Nombre de clés: {len(keys)}")
 
     except Exception as e:
@@ -136,8 +138,8 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
         logger.error(f"         ./scripts/setup_wan22_native.sh {model_name}")
         return False
 
-    print(f"✅ Toutes les clés critiques sont présentes")
-    logger.success(f"✅ Toutes les clés critiques sont présentes")
+    print("✅ Toutes les clés critiques sont présentes")
+    logger.success("✅ Toutes les clés critiques sont présentes")
 
     # 5. Vérifier quelques dimensions de tenseurs
     logger.info("🔍 Vérification des dimensions des tenseurs...")
@@ -176,7 +178,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print("=" * 70)
     print("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
     print(f"   Fichier: {t5_file.name}")
-    print(f"   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
+    print("   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
     print(f"   Taille: {file_size_gb:.2f} GB")
     print(f"   Clés: {len(keys)}")
     print("   Le T5 Encoder est COMPLET et VALIDE")
@@ -187,7 +189,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     logger.success("=" * 70)
     logger.success("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
     logger.success(f"   Fichier: {t5_file.name}")
-    logger.success(f"   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
+    logger.success("   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
     logger.success(f"   Taille: {file_size_gb:.2f} GB")
     logger.success(f"   Clés: {len(keys)}")
     logger.success("   Le T5 Encoder est COMPLET et VALIDE")
@@ -198,9 +200,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Vérifie l'intégrité du T5 Encoder"
-    )
+    parser = argparse.ArgumentParser(description="Vérifie l'intégrité du T5 Encoder")
     parser.add_argument(
         "model_name",
         help="Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)",

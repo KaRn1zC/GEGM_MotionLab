@@ -34,15 +34,11 @@ def merge_safetensors(model_name: str, base_dir: str = "models") -> bool:
     logger.info(f"📂 Dossier: {model_dir}")
 
     # 1. Détecter les fichiers safetensors sharded
-    sharded_files = sorted(
-        model_dir.glob("diffusion_pytorch_model-*-of-*.safetensors")
-    )
+    sharded_files = sorted(model_dir.glob("diffusion_pytorch_model-*-of-*.safetensors"))
 
     if not sharded_files:
         logger.warning(f"⚠️  Aucun fichier sharded trouvé dans {model_dir}")
-        logger.info(
-            "   Vérification si le fichier fusionné existe déjà..."
-        )
+        logger.info("   Vérification si le fichier fusionné existe déjà...")
         merged_file = model_dir / "diffusion_pytorch_model.safetensors"
         if merged_file.exists():
             file_size_gb = merged_file.stat().st_size / (1024**3)

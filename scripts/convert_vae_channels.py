@@ -47,13 +47,17 @@ def convert_vae_96_to_48ch(model_dir=None, model_name="wan2.2-ti2v-5b"):
             if param.dim() >= 2 and param.shape[0] == 96:
                 vae_state[key] = param[:48, ...]
                 channels_reduced += 1
-                print(f"   🔧 Réduit {key}: {list(param.shape)} → {list(vae_state[key].shape)}")
+                print(
+                    f"   🔧 Réduit {key}: {list(param.shape)} → {list(vae_state[key].shape)}"
+                )
 
             # Réduire couches avec 96 canaux en entrée (shape[1] pour conv)
             elif param.dim() >= 2 and param.shape[1] == 96:
                 vae_state[key] = param[:, :48, ...]
                 channels_reduced += 1
-                print(f"   🔧 Réduit {key}: {list(param.shape)} → {list(vae_state[key].shape)}")
+                print(
+                    f"   🔧 Réduit {key}: {list(param.shape)} → {list(vae_state[key].shape)}"
+                )
 
         if channels_reduced == 0:
             print("   ⚠️  Aucune couche 96ch détectée (peut-être déjà converti)")
@@ -73,6 +77,7 @@ def convert_vae_96_to_48ch(model_dir=None, model_name="wan2.2-ti2v-5b"):
     except Exception as e:
         print(f"   ❌ Erreur conversion: {e}")
         import traceback
+
         traceback.print_exc()
         if os.path.exists(vae_temp):
             os.remove(vae_temp)
