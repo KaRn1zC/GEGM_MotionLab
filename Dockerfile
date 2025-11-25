@@ -97,7 +97,8 @@ RUN mkdir -p \
 
 # Rendre les scripts exécutables
 RUN chmod +x /workspace/docker-entrypoint.sh && \
-    chmod +x /workspace/scripts/download_models_from_owncloud.py
+    chmod +x /workspace/scripts/download_models_from_owncloud.py && \
+    chmod +x /workspace/scripts/reassemble_models.sh
 
 # Exposer les ports
 EXPOSE 5000 8188

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Découpe automatiquement les fichiers >8GB et upload sur OwnCloud
+Découpe automatiquement les fichiers >4GB et upload sur OwnCloud
 Usage: python scripts/split_and_upload.py --model wan2.2-i2v-a14b
 """
 
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.logger import get_logger
 
 # Configuration
-MAX_FILE_SIZE = 8 * 1024 * 1024 * 1024  # 8GB
+MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024  # 4GB
 CHUNK_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 
 
@@ -28,22 +28,6 @@ def get_file_size(file_path):
 def format_size(size_bytes):
     """Format size en GB"""
     return f"{size_bytes / 1e9:.2f} GB"
-
-
-def ensure_vae_converted(model_name):
-    """Vérifie que le VAE est converti avant upload"""
-    logger = get_logger("vae_conversion")
-    logger.info(f"🔄 Vérification conversion VAE pour {model_name}...")
-    result = subprocess.run(
-        [sys.executable, "scripts/convert_vae_channels.py", model_name],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        logger.error(f"❌ Conversion VAE échouée: {result.stderr}")
-        return False
-    logger.success("✅ VAE converti et prêt pour upload")
-    return True
 
 
 def split_large_file(file_path, chunks_dir):
@@ -104,7 +88,7 @@ def process_model_dir(model_dir, owncloud_remote):
 
     print(f"\n🔍 Scan de {model_dir}...")
 
-    # Trouver les fichiers >8GB
+    # Trouver les fichiers >4GB
     files_to_split = []
     for file_path in model_dir.rglob("*"):
         if file_path.is_file() and file_path.parent.name != "chunks":
@@ -124,7 +108,7 @@ def process_model_dir(model_dir, owncloud_remote):
 
         create_mapping_file(mapping, chunks_dir)
     else:
-        print("✅ Aucun fichier >8GB à découper")
+        print("✅ Aucun fichier >4GB à découper")
 
     # 🗑️ SUPPRIMER les fichiers d'origine découpés (garder que les chunks)
     if files_to_split:
@@ -170,7 +154,7 @@ def process_model_dir(model_dir, owncloud_remote):
         "nohup.out",
         "--exclude",
         ".cache/**",
-        "--skip-links",
+        "--copy-links",  # Suit les symlinks et copie le contenu réel
         "-vv",
     ]
 
@@ -200,13 +184,7 @@ def main():
     print("🚀 Démarrage de l'upload avec découpe automatique")
     print(f"📂 Source: {model_dir}")
     print(f"☁️  Destination: {owncloud_remote}")
-
-    # 🔄 Conversion VAE AVANT split/upload
-    print("\n" + "=" * 60)
-    if not ensure_vae_converted(args.model):
-        print("❌ Impossible de continuer sans conversion VAE")
-        sys.exit(1)
-    print("=" * 60 + "\n")
+    print()
 
     process_model_dir(model_dir, owncloud_remote)
 

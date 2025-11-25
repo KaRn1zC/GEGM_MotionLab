@@ -37,12 +37,12 @@ MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
 
-# Vérifier la présence du fichier safetensors fusionné (v3.1.8+)
-# Fallback: vérifier les fichiers sharded (v3.1.7 et antérieures - obsolète)
-if [ ! -f "$MODEL_DIR/diffusion_pytorch_model.safetensors" ] && \
-   { [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00001-of-00003.safetensors" ] || \
-     [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00002-of-00003.safetensors" ] || \
-     [ ! -f "$MODEL_DIR/diffusion_pytorch_model-00003-of-00003.safetensors" ]; }; then
+# Vérifier la présence des fichiers ComfyUI Native (Comfy-Org)
+# 5B: wan2.2_ti2v_5B_fp16.safetensors
+# 14B: wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors + wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
+   { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" ] || \
+                                                  [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ]; }; }; then
     echo ""
     echo "📥 Téléchargement du modèle depuis OwnCloud..."
     echo "   Ceci peut prendre 5-15 minutes..."
@@ -55,34 +55,47 @@ if [ ! -f "$MODEL_DIR/diffusion_pytorch_model.safetensors" ] && \
         echo "✅ Modèle téléchargé"
 
         echo ""
-        echo "🔍 Vérification des fichiers téléchargés..."
+        echo "🔍 Vérification des fichiers téléchargés (ComfyUI Native)..."
 
-        # Vérifier les 3 fichiers du modèle
-        for part in 1 2 3; do
-            file="$MODEL_DIR/diffusion_pytorch_model-0000${part}-of-00003.safetensors"
-            
-            if [ ! -f "$file" ]; then
-                echo "❌ Fichier manquant: $(basename $file)"
+        # Vérifier selon le modèle (ComfyUI Native format from Comfy-Org)
+        if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+            # 5B: vérifier wan2.2_ti2v_5B_fp16.safetensors (~9.3GB)
+            if [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; then
+                echo "❌ Fichier manquant: wan2.2_ti2v_5B_fp16.safetensors"
                 exit 1
             fi
-            
-            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+
+            size=$(stat -f%z "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" 2>/dev/null || stat -c%s "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" 2>/dev/null)
             size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
-            
-            if [ $part -lt 3 ] && [ $size -lt 8000000000 ]; then
-                echo "❌ Fichier incomplet: $(basename $file) ($size_gb GB, minimum 8GB)"
-                exit 1
-            fi
-            
-            if [ $part -eq 3 ] && [ $size -lt 100000000 ]; then
-                echo "❌ Fichier 3 incomplet: ($size_gb GB, minimum 0.1GB)"
-                exit 1
-            fi
-            
-            echo "✅ $(basename $file): $size_gb GB"
-        done
 
-        echo "✅ Tous les fichiers sont complets"
+            if [ $size -lt 8000000000 ]; then
+                echo "❌ Modèle diffusion 5B incomplet: $size_gb GB (minimum 8GB)"
+                exit 1
+            fi
+
+            echo "✅ wan2.2_ti2v_5B_fp16.safetensors: $size_gb GB"
+
+        elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
+            # 14B: vérifier les deux fichiers high/low noise (~14GB chacun)
+            for file in "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"; do
+                if [ ! -f "$MODEL_DIR/$file" ]; then
+                    echo "❌ Fichier manquant: $file"
+                    exit 1
+                fi
+
+                size=$(stat -f%z "$MODEL_DIR/$file" 2>/dev/null || stat -c%s "$MODEL_DIR/$file" 2>/dev/null)
+                size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
+
+                if [ $size -lt 12000000000 ]; then
+                    echo "❌ $file incomplet: $size_gb GB (minimum 12GB)"
+                    exit 1
+                fi
+
+                echo "✅ $file: $size_gb GB"
+            done
+        fi
+
+        echo "✅ Tous les fichiers diffusion sont complets (ComfyUI Native)"
         
         # ============================================
         # RECONSTITUTION DES FICHIERS DÉCOUPÉS
@@ -137,22 +150,62 @@ if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
 fi
 
 # ============================================
-# VAE COMFYUI (48 canaux - depuis le modèle WAN uploadé)
+# VAE COMFYUI (ComfyUI Native - déjà compatible 48 canaux)
 # ============================================
 
 echo ""
-echo "✅ VAE 48 canaux inclus dans le modèle WAN 2.2 (déjà downloadé)"
-echo "   Chemin source: $MODEL_DIR/Wan2.2_VAE.pth"
+echo "✅ VAE ComfyUI Native inclus dans le modèle (déjà compatible 48 canaux)"
 
-# Créer symlink vers /models/vae/ pour WanVideoVAELoader
+# Créer symlinks vers /models/vae/ pour WanVideoVAELoader
 VAE_DIR="/workspace/comfyui/ComfyUI/models/vae"
 mkdir -p "$VAE_DIR"
 
-if [ -f "$MODEL_DIR/Wan2.2_VAE.pth" ]; then
-    ln -sf "$MODEL_DIR/Wan2.2_VAE.pth" "$VAE_DIR/Wan2.2_VAE.pth"
-    echo "   ✅ Symlink créé: $VAE_DIR/Wan2.2_VAE.pth"
+# Déterminer le nom du fichier VAE selon le modèle
+if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+    VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
+    echo "   Chemin source 5B: $VAE_SOURCE"
+elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
+    VAE_SOURCE="$MODEL_DIR/wan_2.1_vae.safetensors"
+    echo "   Chemin source 14B: $VAE_SOURCE"
+fi
+
+if [ -f "$VAE_SOURCE" ]; then
+    # Créer symlink avec le nouveau nom
+    ln -sf "$VAE_SOURCE" "$VAE_DIR/$(basename $VAE_SOURCE)"
+    echo "   ✅ Symlink créé: $VAE_DIR/$(basename $VAE_SOURCE)"
+
+    # Créer symlink de compatibilité avec l'ancien nom pour les workflows
+    ln -sf "$VAE_SOURCE" "$VAE_DIR/Wan2.2_VAE.pth"
+    echo "   ✅ Symlink de compatibilité: $VAE_DIR/Wan2.2_VAE.pth"
 else
-    echo "   ⚠️ VAE non trouvé dans le modèle"
+    echo "   ⚠️ VAE non trouvé: $VAE_SOURCE"
+fi
+
+# ============================================
+# T5 ENCODER (ComfyUI Native - FP8 Quantized)
+# ============================================
+
+echo ""
+echo "✅ T5 Encoder ComfyUI Native (FP8 Quantized)"
+
+# Créer symlinks pour T5 Encoder
+T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
+mkdir -p "$T5_DIR"
+
+# Le T5 est le même pour 5B et 14B (partagé)
+T5_SOURCE="$MODEL_DIR/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+echo "   Chemin source: $T5_SOURCE"
+
+if [ -f "$T5_SOURCE" ]; then
+    # Créer symlink avec le nouveau nom
+    ln -sf "$T5_SOURCE" "$T5_DIR/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    echo "   ✅ Symlink créé: $T5_DIR/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+
+    # Créer symlink de compatibilité avec l'ancien nom pour les workflows
+    ln -sf "$T5_SOURCE" "$T5_DIR/umt5-xxl-enc-bf16.pth"
+    echo "   ✅ Symlink de compatibilité: $T5_DIR/umt5-xxl-enc-bf16.pth"
+else
+    echo "   ⚠️ T5 Encoder non trouvé: $T5_SOURCE"
 fi
 
 # Télécharger CLIP Vision si absent
