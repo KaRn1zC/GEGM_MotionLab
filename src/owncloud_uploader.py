@@ -8,16 +8,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
-from dataclasses import dataclass, asdict
 from urllib.parse import urljoin, quote
-
-import aiohttp
-
-# Import du système de logging centralisé
-from src.logger import get_logger
-
-logger = get_logger("owncloud_uploader")
-
 
 # Import des modèles depuis le module séparé
 from src.models.owncloud_models import (
@@ -26,6 +17,12 @@ from src.models.owncloud_models import (
     UploadResult,
     OwnCloudError,
 )
+import aiohttp
+
+# Import du système de logging centralisé
+from src.logger import get_logger
+
+logger = get_logger("owncloud_uploader")
 
 
 class OwnCloudUploader:

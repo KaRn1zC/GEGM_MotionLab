@@ -43,7 +43,7 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         return False
 
     print(f"🔍 Vérification de l'intégrité du VAE pour {model_name}...")
-    logger.info(f"🔍 Vérification de l'intégrité du VAE (WanVideoVAE38 - 48 canaux)...")
+    logger.info("🔍 Vérification de l'intégrité du VAE (WanVideoVAE38 - 48 canaux)...")
     logger.info(f"📂 Fichier: {vae_file}")
 
     # 1. Vérifier que le fichier existe
@@ -55,7 +55,7 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         return False
 
     print(f"✅ Fichier VAE trouvé: {vae_file.name}")
-    logger.success(f"✅ Fichier VAE trouvé")
+    logger.success("✅ Fichier VAE trouvé")
 
     # 2. Vérifier la taille du fichier (~600 MB pour WanVideoVAE38)
     file_size_bytes = vae_file.stat().st_size
@@ -78,7 +78,7 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
             f"⚠️  Fichier VAE plus gros que prévu: {file_size_gb:.2f} GB (attendu: ~{expected_size_min}-{expected_size_max} GB)"
         )
 
-    logger.success(f"✅ Taille du fichier valide")
+    logger.success("✅ Taille du fichier valide")
 
     # 3. Essayer de charger le fichier avec safetensors
     print("🔄 Chargement du fichier VAE avec safetensors...")
@@ -91,7 +91,7 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
             keys = list(f.keys())
 
         print(f"✅ Fichier VAE chargé avec succès ({len(keys)} clés)")
-        logger.success(f"✅ Fichier VAE chargé avec succès")
+        logger.success("✅ Fichier VAE chargé avec succès")
         logger.info(f"📊 Nombre de clés: {len(keys)}")
 
     except Exception as e:
@@ -143,8 +143,8 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         logger.error(f"         ./scripts/setup_wan22_native.sh {model_name}")
         return False
 
-    print(f"✅ Toutes les clés critiques sont présentes")
-    logger.success(f"✅ Toutes les clés critiques sont présentes")
+    print("✅ Toutes les clés critiques sont présentes")
+    logger.success("✅ Toutes les clés critiques sont présentes")
 
     # 5. VÉRIFICATION CRITIQUE: Nombre de canaux (48 pour WanVideoVAE38)
     # Source: https://github.com/kijai/ComfyUI-WanVideoWrapper/blob/main/nodes_model_loading.py
@@ -165,9 +165,7 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
             decoder_conv1_weight = f.get_tensor("decoder.conv1.weight")
             decoder_in_channels = decoder_conv1_weight.shape[1]  # dimension [1]
 
-            print(
-                f"   decoder.conv1.weight: shape={tuple(decoder_conv1_weight.shape)}"
-            )
+            print(f"   decoder.conv1.weight: shape={tuple(decoder_conv1_weight.shape)}")
             logger.info(
                 f"   decoder.conv1.weight: shape={tuple(decoder_conv1_weight.shape)}"
             )
@@ -242,10 +240,10 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     print("=" * 70)
     print("✅ VÉRIFICATION VAE RÉUSSIE")
     print(f"   Fichier: {vae_file.name}")
-    print(f"   Format: SafeTensors WanVideoVAE38 (ComfyUI Native)")
+    print("   Format: SafeTensors WanVideoVAE38 (ComfyUI Native)")
     print(f"   Taille: {file_size_gb:.2f} GB")
     print(f"   Clés: {len(keys)}")
-    print(f"   Canaux: 48 (compatible ComfyUI)")
+    print("   Canaux: 48 (compatible ComfyUI)")
     print("   Le VAE est COMPLET et VALIDE")
     print("=" * 70)
     print("")
@@ -254,10 +252,10 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     logger.success("=" * 70)
     logger.success("✅ VÉRIFICATION VAE RÉUSSIE")
     logger.success(f"   Fichier: {vae_file.name}")
-    logger.success(f"   Format: SafeTensors WanVideoVAE38 (ComfyUI Native)")
+    logger.success("   Format: SafeTensors WanVideoVAE38 (ComfyUI Native)")
     logger.success(f"   Taille: {file_size_gb:.2f} GB")
     logger.success(f"   Clés: {len(keys)}")
-    logger.success(f"   Canaux: 48 (compatible ComfyUI)")
+    logger.success("   Canaux: 48 (compatible ComfyUI)")
     logger.success("   Le VAE est COMPLET et VALIDE")
     logger.success("=" * 70)
     logger.info("")

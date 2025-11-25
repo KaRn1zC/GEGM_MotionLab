@@ -13,7 +13,6 @@ from pathlib import Path
 # Ajouter le répertoire parent au path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.logger import get_logger
 
 # Configuration
 MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024  # 4GB
