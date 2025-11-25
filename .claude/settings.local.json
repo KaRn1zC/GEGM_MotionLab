@@ -17,7 +17,11 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(rm:*)",
-      "Bash(./scripts/setup_wan22_native.sh:*)"
+      "Bash(./scripts/setup_wan22_native.sh:*)",
+      "WebFetch(domain:docs.comfy.org)",
+      "WebFetch(domain:comfyanonymous.github.io)",
+      "Bash(source:*)",
+      "Bash(hf download --help:*)"
     ],
     "deny": [],
     "ask": []

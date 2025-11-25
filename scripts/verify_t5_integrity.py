@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vérifie l'intégrité du T5 Encoder après téléchargement
+Vérifie l'intégrité du T5 Encoder (ComfyUI Native - FP8 Quantized)
 Usage: python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
 """
 
@@ -18,7 +18,7 @@ logger = get_logger("t5_verification")
 
 def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     """
-    Vérifie l'intégrité du T5 Encoder
+    Vérifie l'intégrité du T5 Encoder (ComfyUI Native - FP8 Quantized)
 
     Args:
         model_name: Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
@@ -28,65 +28,61 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
         True si le T5 est valide, False sinon
     """
     model_dir = Path(base_dir) / model_name
-    t5_file = model_dir / "models_t5_umt5-xxl-enc-bf16.pth"
+    # Nouveau format ComfyUI: safetensors FP8 quantized
+    t5_file = model_dir / "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
 
     print(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
-    logger.info(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
+    logger.info(f"🔍 Vérification de l'intégrité du T5 Encoder (ComfyUI Native - FP8)...")
     logger.info(f"📂 Fichier: {t5_file}")
 
     # 1. Vérifier que le fichier existe
     if not t5_file.exists():
-        print(f"❌ Fichier T5 introuvable: {t5_file}")
+        print(f"❌ Fichier T5 introuvable: {t5_file.name}")
+        print("   Le modèle doit être téléchargé depuis HuggingFace")
+        print("   Exécutez: ./scripts/setup_wan22_native.sh " + model_name)
         logger.error(f"❌ Fichier T5 introuvable: {t5_file}")
         return False
 
-    print(f"✅ Fichier T5 trouvé")
+    print(f"✅ Fichier T5 trouvé: {t5_file.name}")
     logger.success(f"✅ Fichier T5 trouvé")
 
-    # 2. Vérifier la taille du fichier (devrait être ~9.5GB)
+    # 2. Vérifier la taille du fichier (FP8 quantized: ~4GB au lieu de ~10GB en BF16)
     file_size_bytes = t5_file.stat().st_size
     file_size_gb = file_size_bytes / (1024**3)
 
     print(f"📊 Taille du fichier: {file_size_gb:.2f} GB")
     logger.info(f"📊 Taille du fichier: {file_size_gb:.2f} GB")
 
-    # Le T5 UMT5-XXL devrait faire entre 9GB et 11GB
-    if file_size_gb < 9.0:
+    # Le T5 UMT5-XXL FP8 devrait faire entre 3GB et 5GB (~4GB)
+    if file_size_gb < 3.0:
         logger.error(
-            f"❌ Fichier T5 trop petit: {file_size_gb:.2f} GB (attendu: ~9.5-11 GB)"
+            f"❌ Fichier T5 trop petit: {file_size_gb:.2f} GB (attendu: ~3-5 GB pour FP8)"
         )
         logger.error(
             "   Le téléchargement est probablement incomplet ou le fichier est corrompu"
         )
         return False
 
-    if file_size_gb > 12.0:
+    if file_size_gb > 6.0:
         logger.warning(
-            f"⚠️  Fichier T5 plus gros que prévu: {file_size_gb:.2f} GB (attendu: ~9.5-11 GB)"
+            f"⚠️  Fichier T5 plus gros que prévu: {file_size_gb:.2f} GB (attendu: ~3-5 GB pour FP8)"
         )
 
-    logger.success(f"✅ Taille du fichier valide")
+    logger.success(f"✅ Taille du fichier valide (FP8 quantized)")
 
-    # 3. Essayer de charger le fichier avec PyTorch
-    print("🔄 Chargement du fichier T5 avec PyTorch...")
-    logger.info("🔄 Chargement du fichier T5 avec PyTorch...")
+    # 3. Essayer de charger le fichier avec safetensors
+    print("🔄 Chargement du fichier T5 avec safetensors...")
+    logger.info("🔄 Chargement du fichier T5 avec safetensors...")
 
     try:
-        import torch
+        from safetensors.torch import safe_open
 
-        # Charger uniquement les clés (pas les poids complets pour économiser RAM)
-        state_dict = torch.load(t5_file, map_location="cpu", weights_only=True)
+        with safe_open(t5_file, framework="pt", device="cpu") as f:
+            keys = list(f.keys())
 
-        if not isinstance(state_dict, dict):
-            print(f"❌ Format incorrect: attendu un dict, obtenu {type(state_dict)}")
-            logger.error(
-                f"❌ Format incorrect: attendu un dict, obtenu {type(state_dict)}"
-            )
-            return False
-
-        print(f"✅ Fichier T5 chargé avec succès ({len(state_dict)} clés)")
+        print(f"✅ Fichier T5 chargé avec succès ({len(keys)} clés)")
         logger.success(f"✅ Fichier T5 chargé avec succès")
-        logger.info(f"📊 Nombre de clés: {len(state_dict)}")
+        logger.info(f"📊 Nombre de clés: {len(keys)}")
 
     except Exception as e:
         print(f"❌ Erreur lors du chargement du fichier T5: {e}")
@@ -99,23 +95,26 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print("🔍 Vérification des clés critiques...")
     logger.info("🔍 Vérification des clés critiques du T5 Encoder...")
 
-    # Clés critiques qui doivent être présentes dans le T5 Encoder WAN 2.2
-    # Le T5 Encoder a 24 layers (blocks.0 à blocks.23)
-    # Structure: blocks.*.ffn.gate.0.weight, blocks.*.ffn.fc1.weight, blocks.*.ffn.fc2.weight
+    # Clés critiques selon le format du fichier (Comfy-Org/HuggingFace standard)
+    # Ces clés seront converties par ComfyUI-WanVideoWrapper lors du chargement
+    # Source: https://github.com/kijai/ComfyUI-WanVideoWrapper/blob/main/nodes_model_loading.py
     critical_keys = [
-        "token_embedding.weight",  # Embeddings principaux
-        "blocks.0.ffn.gate.0.weight",  # Premier bloc FFN
-        "blocks.0.ffn.fc1.weight",  # Premier bloc FFN (fc1)
-        "blocks.14.ffn.gate.0.weight",  # Bloc milieu
-        "blocks.14.ffn.fc1.weight",  # Bloc milieu (fc1)
-        "blocks.23.ffn.gate.0.weight",  # Dernier bloc FFN
-        "blocks.23.ffn.fc2.weight",  # Dernier bloc FFN (fc2)
-        "norm.weight",  # Layer norm final
+        "shared.weight",  # Embeddings partagés (sera converti en token_embedding.weight)
+        "encoder.block.0.layer.0.SelfAttention.q.weight",  # Premier bloc attention
+        "encoder.block.0.layer.1.DenseReluDense.wi_0.weight",  # Premier bloc FFN gate
+        "encoder.block.0.layer.1.DenseReluDense.wi_1.weight",  # Premier bloc FFN fc1
+        "encoder.block.0.layer.1.DenseReluDense.wo.weight",  # Premier bloc FFN fc2
+        "encoder.block.11.layer.1.DenseReluDense.wi_0.weight",  # Bloc milieu FFN
+        "encoder.block.23.layer.0.SelfAttention.q.weight",  # Dernier bloc attention
+        "encoder.block.23.layer.1.DenseReluDense.wo.weight",  # Dernier bloc FFN fc2
+        "encoder.final_layer_norm.weight",  # Layer norm final (sera converti en norm.weight)
     ]
+
+    logger.info("Format attendu: HuggingFace/Comfy-Org (sera converti par ComfyUI)")
 
     missing_keys = []
     for key in critical_keys:
-        if key not in state_dict:
+        if key not in keys:
             missing_keys.append(key)
             print(f"   ❌ Clé manquante: {key}")
             logger.error(f"   ❌ Clé manquante: {key}")
@@ -131,18 +130,10 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
             logger.error(f"      - {key}")
         logger.error("")
         logger.error("   💡 Solution:")
-        logger.error(
-            "      1. Supprimer le dossier models/{model_name} complètement"
-        )
-        logger.error(
-            f"         rm -rf models/{model_name}"
-        )
-        logger.error(
-            "      2. Re-télécharger le modèle complet depuis Hugging Face"
-        )
-        logger.error(
-            f"         ./scripts/setup_wan22_native.sh {model_name}"
-        )
+        logger.error(f"      1. Supprimer le dossier models/{model_name}")
+        logger.error(f"         rm -rf models/{model_name}")
+        logger.error("      2. Re-télécharger depuis HuggingFace:")
+        logger.error(f"         ./scripts/setup_wan22_native.sh {model_name}")
         return False
 
     print(f"✅ Toutes les clés critiques sont présentes")
@@ -151,23 +142,32 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     # 5. Vérifier quelques dimensions de tenseurs
     logger.info("🔍 Vérification des dimensions des tenseurs...")
 
+    # Clés au format HuggingFace (qui seront dans le fichier)
     expected_dims = {
-        "token_embedding.weight": 2,  # (vocab_size, hidden_dim)
-        "blocks.14.ffn.fc1.weight": 2,  # (ffn_dim, hidden_dim)
-        "norm.weight": 1,  # (hidden_dim,)
+        "shared.weight": 2,  # (vocab_size, hidden_dim)
+        "encoder.block.11.layer.1.DenseReluDense.wi_1.weight": 2,  # (ffn_dim, hidden_dim)
+        "encoder.final_layer_norm.weight": 1,  # (hidden_dim,)
     }
 
-    for key, expected_ndim in expected_dims.items():
-        if key in state_dict:
-            tensor = state_dict[key]
-            if tensor.ndim != expected_ndim:
-                logger.error(
-                    f"❌ Dimension incorrecte pour {key}: {tensor.ndim} (attendu: {expected_ndim})"
-                )
-                return False
-            logger.info(
-                f"   ✅ {key}: shape={tuple(tensor.shape)} ({'x'.join(map(str, tensor.shape))})"
-            )
+    try:
+        from safetensors.torch import safe_open
+
+        with safe_open(t5_file, framework="pt", device="cpu") as f:
+            for key, expected_ndim in expected_dims.items():
+                if key in keys:
+                    tensor = f.get_tensor(key)
+                    if tensor.ndim != expected_ndim:
+                        logger.error(
+                            f"❌ Dimension incorrecte pour {key}: {tensor.ndim} (attendu: {expected_ndim})"
+                        )
+                        return False
+                    logger.info(
+                        f"   ✅ {key}: shape={tuple(tensor.shape)} ({'x'.join(map(str, tensor.shape))})"
+                    )
+
+    except Exception as e:
+        logger.error(f"❌ Erreur vérification dimensions: {e}")
+        return False
 
     logger.success("✅ Dimensions des tenseurs valides")
 
@@ -176,8 +176,9 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print("=" * 70)
     print("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
     print(f"   Fichier: {t5_file.name}")
+    print(f"   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
     print(f"   Taille: {file_size_gb:.2f} GB")
-    print(f"   Clés: {len(state_dict)}")
+    print(f"   Clés: {len(keys)}")
     print("   Le T5 Encoder est COMPLET et VALIDE")
     print("=" * 70)
     print("")
@@ -186,8 +187,9 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     logger.success("=" * 70)
     logger.success("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
     logger.success(f"   Fichier: {t5_file.name}")
+    logger.success(f"   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
     logger.success(f"   Taille: {file_size_gb:.2f} GB")
-    logger.success(f"   Clés: {len(state_dict)}")
+    logger.success(f"   Clés: {len(keys)}")
     logger.success("   Le T5 Encoder est COMPLET et VALIDE")
     logger.success("=" * 70)
     logger.info("")

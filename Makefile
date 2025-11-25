@@ -121,19 +121,6 @@ models-list: ## Lister les modèles locaux
 	@echo "📂 Modèles locaux disponibles:"
 	@ls -lh models/ 2>/dev/null || echo "Aucun modèle trouvé"
 
-# ==================== VAE Conversion ====================
-
-convert-vae-channels-5b: ## Convertir VAE 96ch → 48ch (modèle 5B)
-	@echo "🔄 Conversion VAE WAN 5B (96ch → 48ch)..."
-	python scripts/convert_vae_channels.py wan2.2-ti2v-5b
-	@echo "✅ Conversion terminée"
-
-
-convert-vae-channels-14b: ## Convertir VAE 96ch → 48ch (modèle 14B)
-	@echo "🔄 Conversion VAE WAN 14B (96ch → 48ch)..."
-	python scripts/convert_vae_channels.py wan2.2-i2v-a14b
-	@echo "✅ Conversion terminée"
-
 # ==================== rclone Commands (avec auto-split) ====================
 
 rclone-check: ## Vérifier que rclone est configuré
@@ -141,25 +128,19 @@ rclone-check: ## Vérifier que rclone est configuré
 	@rclone lsd owncloud:/ > /dev/null 2>&1 || (echo "❌ rclone non configuré"; exit 1)
 	@echo "✅ rclone est configuré et fonctionnel"
 
-rclone-upload-14b: rclone-check convert-vae-channels-14b ## Upload modèle 14B (découpe auto >8GB et VAE converti)
-	@echo "📤 Upload du modèle 14B avec découpe automatique et VAE corrigé..."
-	@echo "   Fichiers >8GB seront découpés en morceaux de 2GB"
+rclone-upload-14b: rclone-check ## Upload modèle 14B ComfyUI Native (découpe auto >4GB)
+	@echo "📤 Upload du modèle 14B ComfyUI Native avec découpe automatique..."
+	@echo "   Fichiers >4GB seront découpés en morceaux de 2GB"
 	python scripts/split_and_upload.py --model wan2.2-i2v-a14b
 	@echo "✅ Modèle 14B uploadé"
 
-rclone-upload-5b: rclone-check convert-vae-channels-5b ## Upload modèle 5B (découpe auto >8GB et VAE converti)
-	@echo "📤 Upload du modèle 5B avec découpe automatique et VAE corrigé..."
-	@echo "   Fichiers >8GB seront découpés en morceaux de 2GB"
+rclone-upload-5b: rclone-check ## Upload modèle 5B ComfyUI Native (découpe auto >4GB)
+	@echo "📤 Upload du modèle 5B ComfyUI Native avec découpe automatique..."
+	@echo "   Fichiers >4GB seront découpés en morceaux de 2GB"
 	python scripts/split_and_upload.py --model wan2.2-ti2v-5b
 	@echo "✅ Modèle 5B uploadé"
 
-rclone-upload-reassemble-script: ## Upload le script de reconstitution
-	@echo "📤 Upload du script de reconstitution..."
-	@chmod +x scripts/reassemble_models.sh
-	rclone copy scripts/reassemble_models.sh owncloud:/GEGM_ComfyUI/scripts/
-	@echo "✅ Script uploadé"
-
-rclone-upload-all: rclone-upload-14b rclone-upload-5b rclone-upload-reassemble-script ## Upload TOUS les modèles
+rclone-upload-all: rclone-upload-14b rclone-upload-5b ## Upload TOUS les modèles
 	@echo "🎉 Tous les modèles sont uploadés sur OwnCloud"
 
 rclone-verify: rclone-check ## Vérifier les fichiers sur OwnCloud
@@ -186,54 +167,47 @@ full-upload-workflow: download-models rclone-upload-all models-clean ## Workflow
 
 # ==================== Sequential Upload (Low Disk Space) ====================
 
-full-workflow-14b: rclone-check ## 14B: Download → Convert VAE → Split (delete originals) → Upload (chunks only) → Verify → Clean
-	@echo "🔄 Workflow complet modèle 14B (download → convert VAE → split (delete originals) → upload (chunks) → verify → clean)"
+full-workflow-14b: rclone-check ## 14B: Download (ComfyUI Native) → Split (delete originals) → Upload (chunks only) → Verify → Clean
+	@echo "🔄 Workflow complet modèle 14B (download ComfyUI Native → split (delete originals) → upload (chunks) → verify → clean)"
 	@echo ""
-	@echo "📥 1/6: Téléchargement du modèle 14B..."
+	@echo "📥 1/5: Téléchargement du modèle 14B (ComfyUI Native)..."
 	./scripts/setup_wan22_native.sh wan2.2-i2v-a14b
 	@echo ""
-	@echo "🔄 2/6: Conversion VAE (96ch → 48ch)..."
-	python scripts/convert_vae_channels.py wan2.2-i2v-a14b
-	@echo ""
-	@echo "📦 3/6: Découpe et upload du modèle 14B..."
+	@echo "📦 2/5: Découpe et upload du modèle 14B..."
 	python scripts/split_and_upload.py --model wan2.2-i2v-a14b
 	@echo ""
-	@echo "🔍 4/6: Vérification de l'upload..."
+	@echo "🔍 3/5: Vérification de l'upload..."
 	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-i2v-a14b/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
 	@echo ""
-	@echo "✅ 5/6: Upload vérifié, nettoyage local..."
+	@echo "✅ 4/5: Upload vérifié, nettoyage local..."
 	rm -rf models/wan2.2-i2v-a14b
 	@echo ""
-	@echo "✅ 6/6: Modèle 14B uploadé et nettoyé"
+	@echo "✅ 5/5: Modèle 14B uploadé et nettoyé"
 	@df -h . | tail -1
 
-full-workflow-5b: rclone-check ## 5B: Download → Convert VAE → Split (delete originals) → Upload (chunks only) → Verify → Clean
-	@echo "🔄 Workflow complet modèle 5B (download → convert VAE → split (delete originals) → upload (chunks) → verify → clean)"
+full-workflow-5b: rclone-check ## 5B: Download (ComfyUI Native) → Split (delete originals) → Upload (chunks only) → Verify → Clean
+	@echo "🔄 Workflow complet modèle 5B (download ComfyUI Native → split (delete originals) → upload (chunks) → verify → clean)"
 	@echo ""
-	@echo "📥 1/6: Téléchargement du modèle 5B..."
+	@echo "📥 1/5: Téléchargement du modèle 5B (ComfyUI Native)..."
 	./scripts/setup_wan22_native.sh wan2.2-ti2v-5b
 	@echo ""
-	@echo "🔄 2/6: Conversion VAE (96ch → 48ch)..."
-	python scripts/convert_vae_channels.py wan2.2-ti2v-5b
-	@echo ""
-	@echo "📦 3/6: Découpe et upload du modèle 5B..."
+	@echo "📦 2/5: Découpe et upload du modèle 5B..."
 	python scripts/split_and_upload.py --model wan2.2-ti2v-5b
 	@echo ""
-	@echo "🔍 4/6: Vérification de l'upload..."
+	@echo "🔍 3/5: Vérification de l'upload..."
 	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-ti2v-5b/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
 	@echo ""
-	@echo "✅ 5/6: Upload vérifié, nettoyage local..."
+	@echo "✅ 4/5: Upload vérifié, nettoyage local..."
 	rm -rf models/wan2.2-ti2v-5b
 	@echo ""
-	@echo "✅ 6/6: Modèle 5B uploadé et nettoyé"
+	@echo "✅ 5/5: Modèle 5B uploadé et nettoyé"
 	@df -h . | tail -1
 
-sequential-upload-workflow: full-workflow-14b full-workflow-5b rclone-upload-reassemble-script ## Workflow séquentiel (espace disque limité <54GB)
+sequential-upload-workflow: full-workflow-14b full-workflow-5b ## Workflow séquentiel (espace disque limité <54GB)
 	@echo ""
 	@echo "🎉 Workflow séquentiel terminé !"
 	@echo "✅ Modèle 14B uploadé et nettoyé (~28GB)"
 	@echo "✅ Modèle 5B uploadé et nettoyé (~9GB)"
-	@echo "✅ Script de reconstitution uploadé"
 	@echo ""
 	@echo "📊 Vérification finale:"
 	@echo ""
