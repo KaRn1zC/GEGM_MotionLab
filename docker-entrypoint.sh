@@ -272,6 +272,18 @@ else
     echo "✅ ComfyUI installed"
 fi
 
+# ============================================
+# PATCH COMFYUI POUR SAFETENSORS FP8
+# ============================================
+echo ""
+echo "🔧 Application du patch PyTorch pour safetensors FP8..."
+python /workspace/scripts/patch_comfyui_torch_load.py
+if [ $? -ne 0 ]; then
+    echo "❌ ERREUR: Patch ComfyUI obligatoire non appliqué"
+    echo "   Le T5 Encoder FP8 ne pourra pas être chargé sans ce patch"
+    exit 1
+fi
+
 # Démarrer ComfyUI
 echo ""
 echo "🎨 Starting ComfyUI on port 8188..."
