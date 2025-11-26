@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vérifie l'intégrité du T5 Encoder (ComfyUI Native - FP8 Quantized)
+Vérifie l'intégrité du T5 Encoder (ComfyUI Native - FP16)
 Usage: python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
 """
 
@@ -18,7 +18,7 @@ logger = get_logger("t5_verification")
 
 def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     """
-    Vérifie l'intégrité du T5 Encoder (ComfyUI Native - FP8 Quantized)
+    Vérifie l'intégrité du T5 Encoder (ComfyUI Native - FP16)
 
     Args:
         model_name: Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
@@ -28,12 +28,12 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
         True si le T5 est valide, False sinon
     """
     model_dir = Path(base_dir) / model_name
-    # Nouveau format ComfyUI: safetensors FP8 quantized
-    t5_file = model_dir / "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    # Format ComfyUI: safetensors FP16 (compatible WanVideoWrapper)
+    t5_file = model_dir / "umt5_xxl_fp16.safetensors"
 
     print(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
     logger.info(
-        "🔍 Vérification de l'intégrité du T5 Encoder (ComfyUI Native - FP8)..."
+        "🔍 Vérification de l'intégrité du T5 Encoder (ComfyUI Native - FP16)..."
     )
     logger.info(f"📂 Fichier: {t5_file}")
 
@@ -48,29 +48,29 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print(f"✅ Fichier T5 trouvé: {t5_file.name}")
     logger.success("✅ Fichier T5 trouvé")
 
-    # 2. Vérifier la taille du fichier (FP8 quantized: ~4GB au lieu de ~10GB en BF16)
+    # 2. Vérifier la taille du fichier (FP16: ~11.4 GB)
     file_size_bytes = t5_file.stat().st_size
     file_size_gb = file_size_bytes / (1024**3)
 
     print(f"📊 Taille du fichier: {file_size_gb:.2f} GB")
     logger.info(f"📊 Taille du fichier: {file_size_gb:.2f} GB")
 
-    # Le T5 UMT5-XXL FP8 devrait faire entre 3GB et 5GB (~4GB)
-    if file_size_gb < 3.0:
+    # Le T5 UMT5-XXL FP16 devrait faire entre 10GB et 12GB (~11.4 GB)
+    if file_size_gb < 10.0:
         logger.error(
-            f"❌ Fichier T5 trop petit: {file_size_gb:.2f} GB (attendu: ~3-5 GB pour FP8)"
+            f"❌ Fichier T5 trop petit: {file_size_gb:.2f} GB (attendu: ~10-12 GB pour FP16)"
         )
         logger.error(
             "   Le téléchargement est probablement incomplet ou le fichier est corrompu"
         )
         return False
 
-    if file_size_gb > 6.0:
+    if file_size_gb > 13.0:
         logger.warning(
-            f"⚠️  Fichier T5 plus gros que prévu: {file_size_gb:.2f} GB (attendu: ~3-5 GB pour FP8)"
+            f"⚠️  Fichier T5 plus gros que prévu: {file_size_gb:.2f} GB (attendu: ~10-12 GB pour FP16)"
         )
 
-    logger.success("✅ Taille du fichier valide (FP8 quantized)")
+    logger.success("✅ Taille du fichier valide (FP16)")
 
     # 3. Essayer de charger le fichier avec safetensors
     print("🔄 Chargement du fichier T5 avec safetensors...")
@@ -178,7 +178,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print("=" * 70)
     print("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
     print(f"   Fichier: {t5_file.name}")
-    print("   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
+    print("   Format: SafeTensors FP16 (ComfyUI Native)")
     print(f"   Taille: {file_size_gb:.2f} GB")
     print(f"   Clés: {len(keys)}")
     print("   Le T5 Encoder est COMPLET et VALIDE")
@@ -189,7 +189,7 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     logger.success("=" * 70)
     logger.success("✅ VÉRIFICATION T5 ENCODER RÉUSSIE")
     logger.success(f"   Fichier: {t5_file.name}")
-    logger.success("   Format: SafeTensors FP8 Quantized (ComfyUI Native)")
+    logger.success("   Format: SafeTensors FP16 (ComfyUI Native)")
     logger.success(f"   Taille: {file_size_gb:.2f} GB")
     logger.success(f"   Clés: {len(keys)}")
     logger.success("   Le T5 Encoder est COMPLET et VALIDE")
