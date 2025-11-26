@@ -57,12 +57,12 @@ if [ "$MODEL" = "all" ]; then
         --local-dir "$TEMP_DL"
     mv "$TEMP_DL/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors" ./models/diffusion_models/
 
-    # 2. Text encoder (~4 GB) - partagé entre 5B et 14B
-    echo "  2/3: Text encoder (~4 GB)..."
+    # 2. Text encoder (~11.4 GB) - partagé entre 5B et 14B
+    echo "  2/3: Text encoder FP16 (~11.4 GB)..."
     hf download "$REPO" \
-        split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors \
+        split_files/text_encoders/umt5_xxl_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors" ./models/text_encoders/
+    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp16.safetensors" ./models/text_encoders/
 
     # 3. VAE 5B (~600 MB)
     echo "  3/3: VAE 5B (~600 MB)..."
@@ -81,7 +81,7 @@ if [ "$MODEL" = "all" ]; then
     echo "🔗 Création de symlinks pour compatibilité upload/download..."
     mkdir -p models/wan2.2-ti2v-5b
     ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors models/wan2.2-ti2v-5b/
-    ln -sf ../text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors models/wan2.2-ti2v-5b/
+    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-ti2v-5b/
     ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-ti2v-5b/
     echo "✅ Symlinks créés"
 
@@ -129,8 +129,8 @@ if [ "$MODEL" = "all" ]; then
         --local-dir "$TEMP_DL"
     mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ./models/diffusion_models/
 
-    # 3. Text encoder (déjà téléchargé pour 5B)
-    echo "  3/4: Text encoder (déjà téléchargé)"
+    # 3. Text encoder FP16 (déjà téléchargé pour 5B)
+    echo "  3/4: Text encoder FP16 (déjà téléchargé)"
 
     # 4. VAE 14B
     echo "  4/4: VAE 14B..."
@@ -150,7 +150,7 @@ if [ "$MODEL" = "all" ]; then
     mkdir -p models/wan2.2-i2v-a14b
     ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
-    ln -sf ../text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../vae/wan_2.1_vae.safetensors models/wan2.2-i2v-a14b/
     echo "✅ Symlinks créés"
 
@@ -195,12 +195,12 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
         --local-dir "$TEMP_DL"
     mv "$TEMP_DL/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors" ./models/diffusion_models/
 
-    # 2. Text encoder (~4 GB)
-    echo "  2/3: Text encoder (~4 GB)..."
+    # 2. Text encoder FP16 (~11.4 GB)
+    echo "  2/3: Text encoder FP16 (~11.4 GB)..."
     hf download "$REPO" \
-        split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors \
+        split_files/text_encoders/umt5_xxl_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors" ./models/text_encoders/
+    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp16.safetensors" ./models/text_encoders/
 
     # 3. VAE (~600 MB)
     echo "  3/3: VAE 5B (~600 MB)..."
@@ -219,7 +219,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
     echo "🔗 Création de symlinks pour compatibilité..."
     mkdir -p models/wan2.2-ti2v-5b
     ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors models/wan2.2-ti2v-5b/
-    ln -sf ../text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors models/wan2.2-ti2v-5b/
+    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-ti2v-5b/
     ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-ti2v-5b/
     echo "✅ Symlinks créés"
 
@@ -271,12 +271,12 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
         --local-dir "$TEMP_DL"
     mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ./models/diffusion_models/
 
-    # 3. Text encoder
-    echo "  3/4: Text encoder (~4 GB)..."
+    # 3. Text encoder FP16
+    echo "  3/4: Text encoder FP16 (~11.4 GB)..."
     hf download "$REPO" \
-        split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors \
+        split_files/text_encoders/umt5_xxl_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors" ./models/text_encoders/
+    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp16.safetensors" ./models/text_encoders/
 
     # 4. VAE 14B
     echo "  4/4: VAE 14B..."
@@ -296,7 +296,7 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     mkdir -p models/wan2.2-i2v-a14b
     ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
-    ln -sf ../text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../vae/wan_2.1_vae.safetensors models/wan2.2-i2v-a14b/
     echo "✅ Symlinks créés"
 

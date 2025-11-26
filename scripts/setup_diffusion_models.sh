@@ -26,22 +26,26 @@ echo "📂 Configuration du T5 Encoder..."
 # Créer le dossier text_encoders/t5
 mkdir -p /workspace/comfyui/ComfyUI/models/text_encoders/t5
 
-# Symlink du T5 pour 5B
+# Symlink du T5 FP16 (partagé entre 5B et 14B)
 # IMPORTANT: Utiliser chemin ABSOLU pour éviter problèmes de symlink cassé
-if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth" ]; then
-    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/models_t5_umt5-xxl-enc-bf16.pth \
-           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
-    echo "✅ Symlink T5 créé: umt5-xxl-enc-bf16.pth (5B)"
-fi
+if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/umt5_xxl_fp16.safetensors" ]; then
+    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/umt5_xxl_fp16.safetensors \
+           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5_xxl_fp16.safetensors
+    echo "✅ Symlink T5 créé: umt5_xxl_fp16.safetensors"
 
-# Symlink du T5 pour 14B
-# IMPORTANT: Utiliser chemin ABSOLU pour éviter problèmes de symlink cassé
-if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth" ]; then
-    if [ ! -L "/workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth" ]; then
-        ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth \
-               /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16_14B.pth
-        echo "✅ Symlink T5 créé: umt5-xxl-enc-bf16_14B.pth (14B)"
-    fi
+    # Créer symlink de compatibilité
+    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/umt5_xxl_fp16.safetensors \
+           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
+    echo "✅ Symlink de compatibilité: umt5-xxl-enc-bf16.pth"
+elif [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/umt5_xxl_fp16.safetensors" ]; then
+    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/umt5_xxl_fp16.safetensors \
+           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5_xxl_fp16.safetensors
+    echo "✅ Symlink T5 créé: umt5_xxl_fp16.safetensors (14B)"
+
+    # Créer symlink de compatibilité
+    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/umt5_xxl_fp16.safetensors \
+           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
+    echo "✅ Symlink de compatibilité: umt5-xxl-enc-bf16.pth"
 fi
 
 echo "✅ Configuration terminée"

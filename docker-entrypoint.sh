@@ -182,24 +182,24 @@ else
 fi
 
 # ============================================
-# T5 ENCODER (ComfyUI Native - FP8 Quantized)
+# T5 ENCODER (ComfyUI Native - FP16)
 # ============================================
 
 echo ""
-echo "✅ T5 Encoder ComfyUI Native (FP8 Quantized)"
+echo "✅ T5 Encoder ComfyUI Native (FP16)"
 
 # Créer symlinks pour T5 Encoder
 T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
 mkdir -p "$T5_DIR"
 
 # Le T5 est le même pour 5B et 14B (partagé)
-T5_SOURCE="$MODEL_DIR/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+T5_SOURCE="$MODEL_DIR/umt5_xxl_fp16.safetensors"
 echo "   Chemin source: $T5_SOURCE"
 
 if [ -f "$T5_SOURCE" ]; then
-    # Créer symlink avec le nouveau nom
-    ln -sf "$T5_SOURCE" "$T5_DIR/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
-    echo "   ✅ Symlink créé: $T5_DIR/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    # Créer symlink avec le nom officiel
+    ln -sf "$T5_SOURCE" "$T5_DIR/umt5_xxl_fp16.safetensors"
+    echo "   ✅ Symlink créé: $T5_DIR/umt5_xxl_fp16.safetensors"
 
     # Créer symlink de compatibilité avec l'ancien nom pour les workflows
     ln -sf "$T5_SOURCE" "$T5_DIR/umt5-xxl-enc-bf16.pth"
@@ -273,17 +273,6 @@ else
 fi
 
 # ============================================
-# PATCH COMFYUI POUR SAFETENSORS FP8
-# ============================================
-echo ""
-echo "🔧 Application du patch PyTorch pour safetensors FP8..."
-python /workspace/scripts/patch_comfyui_torch_load.py
-if [ $? -ne 0 ]; then
-    echo "❌ ERREUR: Patch ComfyUI obligatoire non appliqué"
-    echo "   Le T5 Encoder FP8 ne pourra pas être chargé sans ce patch"
-    exit 1
-fi
-
 # Démarrer ComfyUI
 echo ""
 echo "🎨 Starting ComfyUI on port 8188..."
