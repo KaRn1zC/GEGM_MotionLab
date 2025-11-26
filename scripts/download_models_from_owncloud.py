@@ -25,7 +25,47 @@ def verify_model_files(model_target: Path) -> bool:
     """Vérifie que tous les fichiers du modèle sont présents et corrects"""
     logger.info("🔍 Vérification des fichiers téléchargés...")
 
-    # v3.1.8+ : Vérifier le fichier fusionné unique (format préféré)
+    # PRIORITÉ 1 : Format ComfyUI Native (OwnCloud)
+    native_5b_file = model_target / "wan2.2_ti2v_5B_fp16.safetensors"
+    native_14b_file = model_target / "wan_2.2_i2v_a14b_fp16_fixed.safetensors"
+
+    if native_5b_file.exists():
+        actual_size = native_5b_file.stat().st_size
+        min_size = 8 * 1024**3  # 8 GB minimum (9.4 GB attendu pour 5B)
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ wan2.2_ti2v_5B_fp16.safetensors incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            return False
+        else:
+            logger.info(
+                f"✅ wan2.2_ti2v_5B_fp16.safetensors: {actual_size / 1024**3:.2f} GB"
+            )
+            logger.success("✅ Format ComfyUI Native détecté (5B - compatible)")
+            return True
+
+    if native_14b_file.exists():
+        actual_size = native_14b_file.stat().st_size
+        min_size = 25 * 1024**3  # 25 GB minimum pour 14B
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ wan_2.2_i2v_a14b_fp16_fixed.safetensors incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            return False
+        else:
+            logger.info(
+                f"✅ wan_2.2_i2v_a14b_fp16_fixed.safetensors: {actual_size / 1024**3:.2f} GB"
+            )
+            logger.success("✅ Format ComfyUI Native détecté (14B - compatible)")
+            return True
+
+    # PRIORITÉ 2 : v3.1.8+ Format fusionné (LOCAL uniquement)
     merged_file = model_target / "diffusion_pytorch_model.safetensors"
 
     if merged_file.exists():
@@ -44,7 +84,7 @@ def verify_model_files(model_target: Path) -> bool:
             logger.info(
                 f"✅ diffusion_pytorch_model.safetensors: {actual_size / 1024**3:.2f} GB"
             )
-            logger.success("✅ Fichier fusionné complet (format v3.1.8+)")
+            logger.success("✅ Fichier fusionné complet (format v3.1.8+ LOCAL)")
             return True
 
     # Fallback : vérifier les fichiers sharded (format v3.1.7 et antérieures - obsolète)
