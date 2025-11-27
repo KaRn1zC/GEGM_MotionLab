@@ -170,13 +170,9 @@ elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
 fi
 
 if [ -f "$VAE_SOURCE" ]; then
-    # Créer symlink avec le nouveau nom
+    # Créer symlink
     ln -sf "$VAE_SOURCE" "$VAE_DIR/$(basename $VAE_SOURCE)"
     echo "   ✅ Symlink créé: $VAE_DIR/$(basename $VAE_SOURCE)"
-
-    # Créer symlink de compatibilité avec l'ancien nom pour les workflows
-    ln -sf "$VAE_SOURCE" "$VAE_DIR/Wan2.2_VAE.pth"
-    echo "   ✅ Symlink de compatibilité: $VAE_DIR/Wan2.2_VAE.pth"
 else
     echo "   ⚠️ VAE non trouvé: $VAE_SOURCE"
 fi
@@ -197,13 +193,9 @@ T5_SOURCE="$MODEL_DIR/umt5_xxl_fp16.safetensors"
 echo "   Chemin source: $T5_SOURCE"
 
 if [ -f "$T5_SOURCE" ]; then
-    # Créer symlink avec le nom officiel
+    # Créer symlink
     ln -sf "$T5_SOURCE" "$T5_DIR/umt5_xxl_fp16.safetensors"
     echo "   ✅ Symlink créé: $T5_DIR/umt5_xxl_fp16.safetensors"
-
-    # Créer symlink de compatibilité avec l'ancien nom pour les workflows
-    ln -sf "$T5_SOURCE" "$T5_DIR/umt5-xxl-enc-bf16.pth"
-    echo "   ✅ Symlink de compatibilité: $T5_DIR/umt5-xxl-enc-bf16.pth"
 else
     echo "   ⚠️ T5 Encoder non trouvé: $T5_SOURCE"
 fi

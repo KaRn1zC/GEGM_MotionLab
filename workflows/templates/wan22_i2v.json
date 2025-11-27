@@ -90,7 +90,7 @@
     "3": {
       "class_type": "WanVideoVAELoader",
       "inputs": {
-        "model_name": "Wan2.2_VAE.pth",
+        "model_name": "wan2.2_vae.safetensors",
         "precision": "bf16"
       }
     },
@@ -103,7 +103,7 @@
     "5": {
       "class_type": "WanVideoTextEncodeCached",
       "inputs": {
-        "model_name": "t5/umt5-xxl-enc-bf16.pth",
+        "model_name": "t5/umt5_xxl_fp16.safetensors",
         "precision": "bf16",
         "positive_prompt": "{prompt}",
         "negative_prompt": "{negative_prompt}",
