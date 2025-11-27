@@ -32,20 +32,10 @@ if [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/umt5_xxl_f
     ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/umt5_xxl_fp16.safetensors \
            /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5_xxl_fp16.safetensors
     echo "✅ Symlink T5 créé: umt5_xxl_fp16.safetensors"
-
-    # Créer symlink de compatibilité
-    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/umt5_xxl_fp16.safetensors \
-           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
-    echo "✅ Symlink de compatibilité: umt5-xxl-enc-bf16.pth"
 elif [ -f "/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/umt5_xxl_fp16.safetensors" ]; then
     ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/umt5_xxl_fp16.safetensors \
            /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5_xxl_fp16.safetensors
     echo "✅ Symlink T5 créé: umt5_xxl_fp16.safetensors (14B)"
-
-    # Créer symlink de compatibilité
-    ln -sf /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/umt5_xxl_fp16.safetensors \
-           /workspace/comfyui/ComfyUI/models/text_encoders/t5/umt5-xxl-enc-bf16.pth
-    echo "✅ Symlink de compatibilité: umt5-xxl-enc-bf16.pth"
 fi
 
 echo "✅ Configuration terminée"

@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-11-26
+**Dernière mise à jour** : 2025-11-27
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -160,7 +160,8 @@ COMFYUI_PORT=8188
 
 ## Notes importantes
 
-1. **T5 FP16** : Utilise FP16 (11.4 GB) car FP8 scaled refusé par WanVideoWrapper
-2. **Pas de patch nécessaire** : T5 FP16 se charge nativement
-3. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
-4. **VRAM** : 48GB minimum (5B), 80GB (14B)
+1. **T5 FP16** : Utilise FP16 (11.4 GB) officiellement supporté par WanVideoWrapper
+2. **Workflows JSON** : Référencent les vrais fichiers `.safetensors` (pas de symlinks artificiels)
+3. **Pas de patch nécessaire** : Architecture simplifiée, chargement natif
+4. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
+5. **VRAM** : 48GB minimum (5B), 80GB (14B)

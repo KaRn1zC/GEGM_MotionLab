@@ -10,6 +10,25 @@
 
 ## 📅 Modifications récentes
 
+### [2025-11-27 11:00] - Correction workflows JSON pour refléter noms réels fichiers
+
+**Raison** : UnpicklingError car workflows JSON référençaient noms fictifs `.pth` au lieu des vrais fichiers `.safetensors`
+
+**Fichiers modifiés** :
+- `workflows/templates/wan22_i2v.json` :
+  - VAE: `Wan2.2_VAE.pth` → `wan2.2_vae.safetensors`
+  - T5: `t5/umt5-xxl-enc-bf16.pth` → `t5/umt5_xxl_fp16.safetensors`
+- `workflows/templates/wan22_with_upscale.json` : Idem
+- `docker-entrypoint.sh` : Suppression symlinks de compatibilité (lignes 178, 206)
+- `scripts/setup_diffusion_models.sh` : Suppression symlinks de compatibilité
+
+**Impact** :
+- ✅ Workflows JSON reflètent la réalité des fichiers
+- ✅ Résout UnpicklingError définitivement (pas de patch nécessaire)
+- ✅ Architecture simplifiée (pas de symlinks artificiels)
+
+---
+
 ### [2025-11-26 17:00] - Migration T5 Encoder FP8 scaled → FP16
 
 **Raison** : ComfyUI-WanVideoWrapper refuse les T5 FP8 scaled (ValueError)
@@ -17,19 +36,12 @@
 **Fichiers modifiés** :
 - `scripts/setup_wan22_native.sh` : Download `umt5_xxl_fp16.safetensors` (11.4 GB)
 - `scripts/verify_t5_integrity.py` : Vérification FP16 (10-12 GB attendu)
-- `scripts/setup_diffusion_models.sh` : Symlinks vers FP16
-- `docker-entrypoint.sh` : T5_SOURCE vers FP16, suppression section patch (lignes 276-285)
-- **SUPPRIMÉ** : `scripts/patch_comfyui_torch_load.py` (obsolète avec FP16)
+- `docker-entrypoint.sh` : T5_SOURCE vers FP16
 
 **Impact** :
 - ✅ Résout ValueError "fp8 scaled is not supported by this node"
-- ✅ Solution officielle (pas de patch nécessaire)
+- ✅ Solution officielle T5 FP16
 - ⚠️ T5 plus gros : 11.4 GB vs 6.74 GB (OK avec L40S 44GB)
-
-**Documentation mise à jour** :
-- [x] `CLAUDE.md` (v3.3.0)
-- [x] `docs/ARCHITECTURE.md`
-- [x] `docs/CHANGES_TRACKER.md` (nettoyé)
 
 ---
 
