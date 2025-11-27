@@ -95,6 +95,7 @@ models-deep-clean: ## Nettoyage profond (modèles + chunks + cache)
 	@echo "🧹 Nettoyage profond des modèles..."
 	@echo "⚠️  Ceci va supprimer :"
 	@echo "   - Tous les modèles dans models/"
+	@echo "   - models/vae/, models/text_encoders/, models/diffusion_models/"
 	@echo "   - Tous les chunks (*_chunk_*)"
 	@echo "   - Tous les fichiers mapping.txt"
 	@echo "   - Cache HuggingFace (.cache/)"
@@ -102,6 +103,9 @@ models-deep-clean: ## Nettoyage profond (modèles + chunks + cache)
 	@echo "🗑️  Suppression..."
 	rm -rf models/wan2.2-i2v-a14b
 	rm -rf models/wan2.2-ti2v-5b
+	rm -rf models/vae
+	rm -rf models/text_encoders
+	rm -rf models/diffusion_models
 	find models/ -name "*_chunk_*" -type f -delete 2>/dev/null || true
 	find models/ -name "mapping.txt" -type f -delete 2>/dev/null || true
 	find models/ -type d -name "chunks" -exec rm -rf {} + 2>/dev/null || true
