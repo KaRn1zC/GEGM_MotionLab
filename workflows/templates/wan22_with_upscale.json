@@ -1,10 +1,10 @@
 {
   "name": "WAN 2.2 + Pyramid Upscale",
-  "description": "Pipeline complet : génération + upscaling haute qualité",
-  "version": "1.0.0",
+  "description": "Pipeline complet : génération + upscaling haute qualité - Version corrigée",
+  "version": "2.0.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
-  
+
   "parameters": {
     "input_image": {
       "type": "string",
@@ -84,7 +84,7 @@
       "description": "Hauteur de la vidéo"
     }
   },
-  
+
   "workflow": {
     "1": {
       "class_type": "LoadImage",
@@ -104,7 +104,7 @@
     "3": {
       "class_type": "WanVideoVAELoader",
       "inputs": {
-        "model_name": "Wan2.2_VAE.pth",
+        "model_name": "wan2.2_vae.safetensors",
         "precision": "bf16"
       }
     },
@@ -117,7 +117,7 @@
     "5": {
       "class_type": "WanVideoTextEncodeCached",
       "inputs": {
-        "model_name": "t5/umt5-xxl-enc-bf16.pth",
+        "model_name": "t5/umt5_xxl_fp16.safetensors",
         "precision": "bf16",
         "positive_prompt": "{prompt}",
         "negative_prompt": "{negative_prompt}",
@@ -126,38 +126,34 @@
         "device": "gpu"
       }
     },
-    "6": {
-      "class_type": "WanVideoClipVisionEncode",
+    "7": {
+      "class_type": "WanVideoEncode",
       "inputs": {
-        "clip_vision": ["4", 0],
-        "image_1": ["1", 0],
-        "strength_1": 1.0,
-        "strength_2": 1.0,
-        "crop": "center",
-        "combine_embeds": "average",
-        "force_offload": true
+        "vae": ["3", 0],
+        "image": ["1", 0],
+        "enable_vae_tiling": false,
+        "tile_x": 272,
+        "tile_y": 272,
+        "tile_stride_x": 144,
+        "tile_stride_y": 128,
+        "temporal_compress_level": 0,
+        "spatial_compress_level": 1
       }
     },
-    "7": {
-      "class_type": "WanVideoImageToVideoEncode",
+    "7b": {
+      "class_type": "WanVideoEmptyEmbeds",
       "inputs": {
+        "extra_latents": ["7", 0],
         "width": "{width}",
         "height": "{height}",
-        "num_frames": "{frames}",
-        "noise_aug_strength": 0.0,
-        "start_latent_strength": 1.0,
-        "end_latent_strength": 1.0,
-        "force_offload": true,
-        "vae": ["3", 0],
-        "clip_embeds": ["6", 0],
-        "start_image": ["1", 0]
+        "num_frames": "{frames}"
       }
     },
     "8": {
       "class_type": "WanVideoSampler",
       "inputs": {
         "model": ["2", 0],
-        "image_embeds": ["7", 0],
+        "image_embeds": ["7b", 0],
         "text_embeds": ["5", 0],
         "steps": "{steps_generation}",
         "cfg": "{cfg_scale}",
@@ -214,24 +210,27 @@
       "description": "Cinemagraph upscalé"
     }
   },
-  
+
   "metadata": {
     "comfyui_version": ">=0.3.0",
-    "wanvideowrapper_version": "kijai_oct2025",
+    "wanvideowrapper_version": "kijai_nov2024",
     "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
     "required_nodes": [
       "LoadImage",
       "WanVideoModelLoader",
       "WanVideoVAELoader",
       "CLIPVisionLoader",
-      "WanVideoTextEncode",
-      "WanVideoClipVisionEncode",
-      "WanVideoImageToVideoEncode",
+      "WanVideoTextEncodeCached",
+      "WanVideoEncode",
+      "WanVideoEmptyEmbeds",
       "WanVideoSampler",
       "WanVideoDecode",
       "UpscaleModelLoader",
       "ImageUpscaleWithModel",
       "VHS_VideoCombine"
-    ]
+    ],
+    "changelog": {
+      "v2.0.0": "BREAKING: Remplacé WanVideoImageToVideoEncode par WanVideoEncode + WanVideoEmptyEmbeds (fix erreur 48/96 canaux)"
+    }
   }
 }

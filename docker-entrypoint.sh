@@ -37,7 +37,12 @@ MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
 
-if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
+# Vérifier la présence des fichiers ComfyUI Native (Comfy-Org)
+# 5B: wan2.2_ti2v_5B_fp16.safetensors
+# 14B: wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors + wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
+   { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" ] || \
+                                                  [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ]; }; }; then
     echo ""
     echo "📥 Téléchargement du modèle depuis OwnCloud..."
     echo "   Ceci peut prendre 5-15 minutes..."
@@ -50,34 +55,47 @@ if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A $MODEL_DIR)" ]; then
         echo "✅ Modèle téléchargé"
 
         echo ""
-        echo "🔍 Vérification des fichiers téléchargés..."
+        echo "🔍 Vérification des fichiers téléchargés (ComfyUI Native)..."
 
-        # Vérifier les 3 fichiers du modèle
-        for part in 1 2 3; do
-            file="$MODEL_DIR/diffusion_pytorch_model-0000${part}-of-00003.safetensors"
-            
-            if [ ! -f "$file" ]; then
-                echo "❌ Fichier manquant: $(basename $file)"
+        # Vérifier selon le modèle (ComfyUI Native format from Comfy-Org)
+        if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+            # 5B: vérifier wan2.2_ti2v_5B_fp16.safetensors (~9.3GB)
+            if [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; then
+                echo "❌ Fichier manquant: wan2.2_ti2v_5B_fp16.safetensors"
                 exit 1
             fi
-            
-            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+
+            size=$(stat -f%z "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" 2>/dev/null || stat -c%s "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" 2>/dev/null)
             size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
-            
-            if [ $part -lt 3 ] && [ $size -lt 8000000000 ]; then
-                echo "❌ Fichier incomplet: $(basename $file) ($size_gb GB, minimum 8GB)"
-                exit 1
-            fi
-            
-            if [ $part -eq 3 ] && [ $size -lt 100000000 ]; then
-                echo "❌ Fichier 3 incomplet: ($size_gb GB, minimum 0.1GB)"
-                exit 1
-            fi
-            
-            echo "✅ $(basename $file): $size_gb GB"
-        done
 
-        echo "✅ Tous les fichiers sont complets"
+            if [ $size -lt 8000000000 ]; then
+                echo "❌ Modèle diffusion 5B incomplet: $size_gb GB (minimum 8GB)"
+                exit 1
+            fi
+
+            echo "✅ wan2.2_ti2v_5B_fp16.safetensors: $size_gb GB"
+
+        elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
+            # 14B: vérifier les deux fichiers high/low noise (~14GB chacun)
+            for file in "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"; do
+                if [ ! -f "$MODEL_DIR/$file" ]; then
+                    echo "❌ Fichier manquant: $file"
+                    exit 1
+                fi
+
+                size=$(stat -f%z "$MODEL_DIR/$file" 2>/dev/null || stat -c%s "$MODEL_DIR/$file" 2>/dev/null)
+                size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
+
+                if [ $size -lt 12000000000 ]; then
+                    echo "❌ $file incomplet: $size_gb GB (minimum 12GB)"
+                    exit 1
+                fi
+
+                echo "✅ $file: $size_gb GB"
+            done
+        fi
+
+        echo "✅ Tous les fichiers diffusion sont complets (ComfyUI Native)"
         
         # ============================================
         # RECONSTITUTION DES FICHIERS DÉCOUPÉS
@@ -117,29 +135,69 @@ else
     du -sh "$MODEL_DIR"
 fi
 
-# Configurer les symlinks pour diffusion_models
+# ============================================
+# SETUP DIFFUSION MODELS
+# ============================================
+# Configuration des symlinks pour diffusion_models et T5 Encoder
+# Note: Le T5 Encoder est inclus dans le dossier du modèle WAN
+# et sera symlinké par setup_diffusion_models.sh
+
+echo ""
+echo "🔗 Configuration des modèles et encodeurs..."
+
 if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
-    echo "🔗 Configuration des symlinks modèles..."
     bash /workspace/scripts/setup_diffusion_models.sh
 fi
 
 # ============================================
-# VAE COMFYUI (48 canaux - depuis le modèle WAN uploadé)
+# VAE COMFYUI (ComfyUI Native - déjà compatible 48 canaux)
 # ============================================
 
 echo ""
-echo "✅ VAE 48 canaux inclus dans le modèle WAN 2.2 (déjà downloadé)"
-echo "   Chemin source: $MODEL_DIR/Wan2.2_VAE.pth"
+echo "✅ VAE ComfyUI Native inclus dans le modèle (déjà compatible 48 canaux)"
 
-# Créer symlink vers /models/vae/ pour WanVideoVAELoader
+# Créer symlinks vers /models/vae/ pour WanVideoVAELoader
 VAE_DIR="/workspace/comfyui/ComfyUI/models/vae"
 mkdir -p "$VAE_DIR"
 
-if [ -f "$MODEL_DIR/Wan2.2_VAE.pth" ]; then
-    ln -sf "$MODEL_DIR/Wan2.2_VAE.pth" "$VAE_DIR/Wan2.2_VAE.pth"
-    echo "   ✅ Symlink créé: $VAE_DIR/Wan2.2_VAE.pth"
+# Déterminer le nom du fichier VAE selon le modèle
+if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+    VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
+    echo "   Chemin source 5B: $VAE_SOURCE"
+elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
+    VAE_SOURCE="$MODEL_DIR/wan_2.1_vae.safetensors"
+    echo "   Chemin source 14B: $VAE_SOURCE"
+fi
+
+if [ -f "$VAE_SOURCE" ]; then
+    # Copier le VAE au lieu de créer un symlink (fix: WanVideoVAELoader ne suit pas toujours les symlinks)
+    cp "$VAE_SOURCE" "$VAE_DIR/$(basename $VAE_SOURCE)"
+    echo "   ✅ VAE copié: $VAE_DIR/$(basename $VAE_SOURCE)"
 else
-    echo "   ⚠️ VAE non trouvé dans le modèle"
+    echo "   ⚠️ VAE non trouvé: $VAE_SOURCE"
+fi
+
+# ============================================
+# T5 ENCODER (ComfyUI Native - FP16)
+# ============================================
+
+echo ""
+echo "✅ T5 Encoder ComfyUI Native (FP16)"
+
+# Créer symlinks pour T5 Encoder
+T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
+mkdir -p "$T5_DIR"
+
+# Le T5 est le même pour 5B et 14B (partagé)
+T5_SOURCE="$MODEL_DIR/umt5_xxl_fp16.safetensors"
+echo "   Chemin source: $T5_SOURCE"
+
+if [ -f "$T5_SOURCE" ]; then
+    # Créer symlink
+    ln -sf "$T5_SOURCE" "$T5_DIR/umt5_xxl_fp16.safetensors"
+    echo "   ✅ Symlink créé: $T5_DIR/umt5_xxl_fp16.safetensors"
+else
+    echo "   ⚠️ T5 Encoder non trouvé: $T5_SOURCE"
 fi
 
 # Télécharger CLIP Vision si absent
@@ -206,10 +264,14 @@ else
     echo "✅ ComfyUI installed"
 fi
 
+# ============================================
 # Démarrer ComfyUI
 echo ""
 echo "🎨 Starting ComfyUI on port 8188..."
 cd /workspace/comfyui/ComfyUI
+
+# Créer le dossier de logs
+mkdir -p /workspace/logs
 
 nohup python main.py \
     --listen 0.0.0.0 \
@@ -220,17 +282,51 @@ nohup python main.py \
 COMFYUI_PID=$!
 echo "   ComfyUI PID: $COMFYUI_PID"
 
-echo "   Waiting for ComfyUI..."
-for i in {1..30}; do
-    if curl -s http://localhost:8188 > /dev/null 2>&1; then
+echo "   Waiting for ComfyUI (up to 3 minutes)..."
+COMFYUI_READY=false
+
+for i in {1..90}; do
+    # Vérifier que le processus est toujours actif
+    if ! kill -0 $COMFYUI_PID 2>/dev/null; then
+        echo ""
+        echo "   ❌ ComfyUI process died! Last 20 lines of log:"
+        tail -n 20 /workspace/logs/comfyui.log
+        exit 1
+    fi
+
+    # Tester l'endpoint /system_stats (plus fiable que la racine)
+    if curl -s http://localhost:8188/system_stats > /dev/null 2>&1; then
+        echo ""
         echo "   ✅ ComfyUI ready!"
+        COMFYUI_READY=true
         break
     fi
-    if [ "$i" -eq 30 ]; then
-        echo "   ⚠️  Check logs: /workspace/logs/comfyui.log"
+
+    # Afficher un point de progression toutes les 10 secondes
+    if [ $((i % 5)) -eq 0 ]; then
+        echo -n "."
     fi
+
     sleep 2
 done
+
+echo ""
+
+if [ "$COMFYUI_READY" = false ]; then
+    echo ""
+    echo "   ❌ ComfyUI failed to start after 3 minutes"
+    echo "   📋 Last 30 lines of ComfyUI log:"
+    echo "   ================================================"
+    tail -n 30 /workspace/logs/comfyui.log
+    echo "   ================================================"
+    echo ""
+    echo "   💡 Common issues:"
+    echo "      - Missing dependencies (check requirements.txt)"
+    echo "      - GPU not available (check nvidia-smi)"
+    echo "      - Model files corrupted or missing"
+    echo "      - Out of memory"
+    exit 1
+fi
 
 cd /workspace
 

@@ -25,7 +25,74 @@ def verify_model_files(model_target: Path) -> bool:
     """Vérifie que tous les fichiers du modèle sont présents et corrects"""
     logger.info("🔍 Vérification des fichiers téléchargés...")
 
-    # Tailles minimales acceptables pour chaque fichier
+    # PRIORITÉ 1 : Format ComfyUI Native (OwnCloud)
+    native_5b_file = model_target / "wan2.2_ti2v_5B_fp16.safetensors"
+    native_14b_file = model_target / "wan_2.2_i2v_a14b_fp16_fixed.safetensors"
+
+    if native_5b_file.exists():
+        actual_size = native_5b_file.stat().st_size
+        min_size = 8 * 1024**3  # 8 GB minimum (9.4 GB attendu pour 5B)
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ wan2.2_ti2v_5B_fp16.safetensors incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            return False
+        else:
+            logger.info(
+                f"✅ wan2.2_ti2v_5B_fp16.safetensors: {actual_size / 1024**3:.2f} GB"
+            )
+            logger.success("✅ Format ComfyUI Native détecté (5B - compatible)")
+            return True
+
+    if native_14b_file.exists():
+        actual_size = native_14b_file.stat().st_size
+        min_size = 25 * 1024**3  # 25 GB minimum pour 14B
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ wan_2.2_i2v_a14b_fp16_fixed.safetensors incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            return False
+        else:
+            logger.info(
+                f"✅ wan_2.2_i2v_a14b_fp16_fixed.safetensors: {actual_size / 1024**3:.2f} GB"
+            )
+            logger.success("✅ Format ComfyUI Native détecté (14B - compatible)")
+            return True
+
+    # PRIORITÉ 2 : v3.1.8+ Format fusionné (LOCAL uniquement)
+    merged_file = model_target / "diffusion_pytorch_model.safetensors"
+
+    if merged_file.exists():
+        # Format v3.1.8+ : fichier fusionné unique
+        actual_size = merged_file.stat().st_size
+        min_size = 15 * 1024**3  # 15 GB minimum (18.63 GB attendu pour 5B)
+
+        if actual_size < min_size:
+            logger.error(
+                f"❌ diffusion_pytorch_model.safetensors incomplet ou corrompu:"
+                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
+                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
+            )
+            return False
+        else:
+            logger.info(
+                f"✅ diffusion_pytorch_model.safetensors: {actual_size / 1024**3:.2f} GB"
+            )
+            logger.success("✅ Fichier fusionné complet (format v3.1.8+ LOCAL)")
+            return True
+
+    # Fallback : vérifier les fichiers sharded (format v3.1.7 et antérieures - obsolète)
+    logger.warning("⚠️  Format sharded détecté (v3.1.7 et antérieures - obsolète)")
+    logger.warning(
+        "   Recommandation: re-télécharger depuis HuggingFace avec setup_wan22_native.sh"
+    )
+
     required_files = {
         "diffusion_pytorch_model-00001-of-00003.safetensors": 8
         * 1024**3,  # 8 GB minimum
@@ -57,7 +124,7 @@ def verify_model_files(model_target: Path) -> bool:
             logger.info(f"✅ {filename}: {actual_size / 1024**3:.2f} GB")
 
     if all_ok:
-        logger.success("✅ Tous les fichiers sont complets")
+        logger.success("✅ Tous les fichiers sharded sont complets")
     else:
         logger.error("❌ Vérification échouée - fichiers incomplets")
 
@@ -192,13 +259,90 @@ def download_model_from_owncloud(
             )
             logger.info(f"📊 Taille totale: {total_size / 1024**3:.2f} GB")
 
-            # 🔍 Vérification d'intégrité des fichiers
+            # 🔧 RECONSTITUTION DES CHUNKS SI PRÉSENTS
+            chunks_dir = model_target / "chunks"
+            if chunks_dir.exists() and (chunks_dir / "mapping.txt").exists():
+                logger.info("")
+                logger.info("🔧 Reconstitution des fichiers découpés...")
+
+                # Appeler le script de reconstitution
+                reassemble_script = Path(__file__).parent / "reassemble_models.sh"
+
+                if reassemble_script.exists():
+                    result = subprocess.run(
+                        ["bash", str(reassemble_script), str(model_target)],
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    if result.returncode == 0:
+                        logger.success("✅ Fichiers reconstitués avec succès")
+                        # Afficher la sortie
+                        for line in result.stdout.split("\n"):
+                            if line.strip():
+                                logger.info(f"   {line}")
+                    else:
+                        logger.error("❌ Échec de la reconstitution:")
+                        logger.error(result.stderr)
+                        return False, "Échec reconstitution des chunks"
+                else:
+                    logger.error(
+                        f"❌ Script reassemble_models.sh non trouvé: {reassemble_script}"
+                    )
+                    return False, "Script de reconstitution manquant"
+            else:
+                logger.info("   Pas de chunks à reconstituer")
+
+            # 🔍 Vérification d'intégrité des fichiers (APRÈS reconstitution)
             logger.info("")
             if not verify_model_files(model_target):
                 logger.error("⚠️  Les fichiers téléchargés sont incomplets!")
                 logger.error("    Action requise: Supprimer les fichiers incomplets")
                 logger.error("    et relancer le téléchargement")
                 return False, "Fichiers incomplets après téléchargement"
+
+            # 🔍 Vérification d'intégrité du T5 Encoder (CRITIQUE)
+            logger.info("")
+            logger.info("🔍 Vérification de l'intégrité du T5 Encoder...")
+
+            verify_script = Path(__file__).parent / "verify_t5_integrity.py"
+            if verify_script.exists():
+                result = subprocess.run(
+                    [
+                        "python3",
+                        str(verify_script),
+                        model_name,
+                        "--base-dir",
+                        str(target_dir),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+
+                # Afficher la sortie
+                for line in result.stdout.split("\n"):
+                    if line.strip():
+                        print(f"   {line}")
+
+                if result.returncode != 0:
+                    logger.error("")
+                    logger.error("❌ ÉCHEC DE LA VÉRIFICATION T5 ENCODER")
+                    logger.error(
+                        "   Le workflow est ARRÊTÉ pour éviter d'utiliser un modèle corrompu"
+                    )
+                    logger.error("")
+                    if result.stderr:
+                        for line in result.stderr.split("\n"):
+                            if line.strip():
+                                logger.error(f"   {line}")
+                    return False, "T5 Encoder corrompu ou incomplet"
+
+                logger.success("✅ T5 Encoder validé avec succès")
+            else:
+                logger.warning(
+                    f"⚠️  Script de vérification T5 non trouvé: {verify_script}"
+                )
+                logger.warning("   Impossible de vérifier l'intégrité du T5 Encoder")
 
             return True, None
         else:

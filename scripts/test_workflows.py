@@ -147,17 +147,6 @@ def test_workflow_creation():
     except Exception as e:
         logger.error(f"   ❌ Erreur: {e}")
 
-    # Test Pyramid Upscale
-    logger.info("\n📐 Test Pyramid Upscale")
-    try:
-        workflow = workflow_manager.create_workflow(
-            "pyramid_upscale",
-            {"input_video": "cinemagraph.mp4", "scale_factor": 2.0, "steps": 20},
-        )
-        logger.success(f"   ✅ Workflow créé: {len(workflow)} nœuds")
-    except Exception as e:
-        logger.error(f"   ❌ Erreur: {e}")
-
     # Test Combined
     logger.info("\n🔗 Test WAN 2.2 + Upscale")
     try:

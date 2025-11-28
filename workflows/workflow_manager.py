@@ -94,23 +94,70 @@ class WorkflowTemplate:
 
         model_path = comfyui_models_dir / model_name
 
-        # Détection automatique selon la structure des fichiers
+        # Détection automatique selon la structure des fichiers (ComfyUI Native)
         if "5b" in model_name.lower():
-            # Modèle 5B : chercher le premier fichier safetensors (format sharded)
+            # Modèle 5B : chercher le fichier ComfyUI Native (Comfy-Org)
+            comfyui_native_checkpoint = model_path / "wan2.2_ti2v_5B_fp16.safetensors"
+            if comfyui_native_checkpoint.exists():
+                logger.info(
+                    f"✅ Modèle 5B ComfyUI Native détecté : {comfyui_native_checkpoint.name}"
+                )
+                return f"{model_name}/{comfyui_native_checkpoint.name}"
+
+            # Fallback : ancien format fusionné (v3.1.8)
+            merged_checkpoint = model_path / "diffusion_pytorch_model.safetensors"
+            if merged_checkpoint.exists():
+                logger.warning(
+                    f"⚠️  Ancien format fusionné détecté : {merged_checkpoint.name}"
+                )
+                logger.warning(
+                    "   Recommandation : re-télécharger depuis Comfy-Org avec setup_wan22_native.sh"
+                )
+                return f"{model_name}/{merged_checkpoint.name}"
+
+            # Fallback : si fichiers sharded encore présents (très ancienne version)
             checkpoint_files = list(
                 model_path.glob("diffusion_pytorch_model-*.safetensors")
             )
             if checkpoint_files:
-                # Utiliser le premier fichier (00001)
                 first_checkpoint = sorted(checkpoint_files)[0]
-                logger.info(f"✅ Modèle 5B détecté : {first_checkpoint.name}")
+                logger.warning(
+                    f"⚠️  Fichiers sharded détectés (obsolète) : {first_checkpoint.name}"
+                )
+                logger.warning(
+                    "   Recommandation : re-télécharger depuis Comfy-Org avec setup_wan22_native.sh"
+                )
                 return f"{model_name}/{first_checkpoint.name}"
 
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
-            # Modèle 14B : chercher high_noise_model.safetensors (architecture MoE)
+            # Modèle 14B : chercher les fichiers ComfyUI Native (Comfy-Org)
+            comfyui_native_high = (
+                model_path / "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+            )
+            if comfyui_native_high.exists():
+                logger.info(
+                    f"✅ Modèle 14B ComfyUI Native détecté : {comfyui_native_high.name}"
+                )
+                return f"{model_name}/{comfyui_native_high.name}"
+
+            # Fallback : ancien format fusionné (v3.1.8)
+            merged_checkpoint = model_path / "diffusion_pytorch_model.safetensors"
+            if merged_checkpoint.exists():
+                logger.warning(
+                    f"⚠️  Ancien format fusionné détecté : {merged_checkpoint.name}"
+                )
+                logger.warning(
+                    "   Recommandation : re-télécharger depuis Comfy-Org avec setup_wan22_native.sh"
+                )
+                return f"{model_name}/{merged_checkpoint.name}"
+
+            # Fallback : très ancienne architecture MoE
             checkpoint_file = model_path / "high_noise_model.safetensors"
             if checkpoint_file.exists():
-                logger.info("✅ Modèle 14B détecté : architecture MoE")
+                logger.warning("⚠️ Ancienne architecture MoE détectée")
+                logger.warning(
+                    "   Recommandation : re-télécharger depuis Comfy-Org avec setup_wan22_native.sh"
+                )
                 return f"{model_name}/high_noise_model.safetensors"
 
         # Fallback : retourner le premier safetensors trouvé

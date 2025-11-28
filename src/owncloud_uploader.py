@@ -7,142 +7,22 @@ import io
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
-from dataclasses import dataclass, asdict
+from typing import Dict, Any, Optional, List, Union, Callable, AsyncIterator, cast
 from urllib.parse import urljoin, quote
 
+# Import des modèles depuis le module séparé
+from src.models.owncloud_models import (
+    OwnCloudConfig,
+    VideoMetadata,
+    UploadResult,
+    OwnCloudError,
+)
 import aiohttp
 
 # Import du système de logging centralisé
 from src.logger import get_logger
 
 logger = get_logger("owncloud_uploader")
-
-
-@dataclass
-class OwnCloudConfig:
-    """Configuration pour OwnCloud - Créée depuis .env + YAML"""
-
-    server_url: str
-    username: str
-    password: str
-    upload_folder: str
-    chunk_size: int = 8192
-    timeout: int = 300
-    max_retries: int = 3
-    retry_delay: float = 1.0
-
-    @property
-    def webdav_url(self) -> str:
-        """URL WebDAV complète"""
-        # Nettoyer l'URL de base
-        base = self.server_url.rstrip("/")
-        return f"{base}/remote.php/dav/files/{self.username}"
-
-    @property
-    def sharing_api_url(self) -> str:
-        """URL de l'API de partage OCS"""
-        base = self.server_url.rstrip("/")
-        return f"{base}/ocs/v2.php/apps/files_sharing/api/v1/shares"
-
-    def validate(self) -> List[str]:
-        """Valide la configuration"""
-        errors = []
-
-        if not self.server_url or not self.server_url.startswith(
-            ("http://", "https://")
-        ):
-            errors.append("server_url doit être une URL valide (http:// ou https://)")
-
-        if not self.username:
-            errors.append("username est requis")
-
-        if not self.password:
-            errors.append("password est requis")
-
-        if not self.upload_folder or not self.upload_folder.startswith("/"):
-            errors.append("upload_folder doit commencer par '/'")
-
-        if self.chunk_size <= 0:
-            errors.append("chunk_size doit être positif")
-
-        if self.timeout <= 0:
-            errors.append("timeout doit être positif")
-
-        return errors
-
-
-@dataclass
-class VideoMetadata:
-    """Métadonnées d'une vidéo uploadée"""
-
-    filename: str
-    original_name: str
-    file_size: int
-    duration: Optional[float] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    fps: Optional[float] = None
-    format: Optional[str] = None
-    codec: Optional[str] = None
-    created_at: Optional[datetime] = None
-    workflow_id: Optional[str] = None
-    prompt: Optional[str] = None
-    model_used: Optional[str] = None
-    generation_params: Optional[Dict[str, Any]] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convertit en dictionnaire sérialisable"""
-        data = asdict(self)
-        if self.created_at:
-            data["created_at"] = self.created_at.isoformat()
-        return data
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "VideoMetadata":
-        """Crée une instance depuis un dictionnaire"""
-        if "created_at" in data and isinstance(data["created_at"], str):
-            data["created_at"] = datetime.fromisoformat(data["created_at"])
-        return cls(**data)
-
-
-@dataclass
-class UploadResult:
-    """Résultat d'un upload"""
-
-    success: bool
-    file_path: str
-    file_size: int
-    upload_duration: Optional[timedelta] = None
-    share_link: Optional[str] = None
-    metadata: Optional[VideoMetadata] = None
-    error_message: Optional[str] = None
-    owncloud_url: Optional[str] = None
-
-    @property
-    def upload_speed_mbps(self) -> Optional[float]:
-        """Vitesse d'upload en Mbps"""
-        if self.upload_duration and self.file_size > 0:
-            seconds = self.upload_duration.total_seconds()
-            if seconds > 0:
-                return (self.file_size * 8) / (
-                    seconds * 1_000_000
-                )  # bits per second to Mbps
-        return None
-
-
-class OwnCloudError(Exception):
-    """Exception personnalisée pour les erreurs OwnCloud"""
-
-    def __init__(
-        self,
-        message: str,
-        status_code: Optional[int] = None,
-        details: Optional[Dict] = None,
-    ):
-        super().__init__(message)
-        self.status_code = status_code
-        self.details = details or {}
 
 
 class OwnCloudUploader:
@@ -163,16 +43,17 @@ class OwnCloudUploader:
         logger.info(f"OwnCloud Uploader initialisé - Serveur: {self.config.server_url}")
         logger.info(f"Dossier d'upload: {self.config.upload_folder}")
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "OwnCloudUploader":
         """Entrée du context manager"""
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
         """Sortie du context manager"""
+        # Les paramètres exc_* sont requis par le protocole context manager mais non utilisés ici
         await self.disconnect()
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Établit la connexion HTTP"""
         if not self.session:
             # Configuration TCP keep-alive
@@ -192,12 +73,20 @@ class OwnCloudUploader:
             await self.test_connection()
             logger.info("✅ Connexion OwnCloud établie")
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Ferme la connexion HTTP"""
         if self.session:
             await self.session.close()
             self.session = None
             logger.info("Connexion OwnCloud fermée")
+
+    def _ensure_session(self) -> aiohttp.ClientSession:
+        """Vérifie que la session est initialisée et la retourne"""
+        if not self.session:
+            raise OwnCloudError(
+                "Session non initialisée. Utilisez 'async with OwnCloudUploader(config)' ou appelez connect() d'abord."
+            )
+        return self.session
 
     async def test_connection(self) -> bool:
         """
@@ -206,10 +95,12 @@ class OwnCloudUploader:
         Returns:
             bool: True si la connexion fonctionne
         """
+        session = self._ensure_session()
+
         try:
             url = urljoin(self.config.server_url, "status.php")
 
-            async with self.session.get(url) as response:
+            async with session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
                     version = data.get("version", "unknown")
@@ -234,6 +125,8 @@ class OwnCloudUploader:
         Returns:
             bool: True si créé avec succès
         """
+        session = self._ensure_session()
+
         try:
             # Normaliser le chemin
             folder_path = folder_path.strip("/")
@@ -246,7 +139,7 @@ class OwnCloudUploader:
                 current_path = f"{current_path}/{part}" if current_path else part
                 part_url = urljoin(self.config.webdav_url + "/", quote(current_path))
 
-                async with self.session.request("MKCOL", part_url) as response:
+                async with session.request("MKCOL", part_url) as response:
                     if response.status in [201, 405]:  # 201=créé, 405=existe déjà
                         continue
                     elif response.status == 401:
@@ -270,7 +163,7 @@ class OwnCloudUploader:
         file_data: Union[bytes, Path, io.IOBase],
         remote_path: str,
         metadata: Optional[VideoMetadata] = None,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable[[int, int, float], None]] = None,
     ) -> UploadResult:
         """
         Upload un fichier vers OwnCloud (version standard, sans chunking)
@@ -287,7 +180,11 @@ class OwnCloudUploader:
         Returns:
             UploadResult: Résultat de l'upload
         """
+        session = self._ensure_session()
         start_time = datetime.now()
+        file_size: int
+        file_obj: io.IOBase
+        close_file: bool
 
         try:
             # Préparer les données
@@ -300,7 +197,8 @@ class OwnCloudUploader:
                 file_obj = io.BytesIO(file_data)
                 close_file = False
             else:
-                file_obj = file_data
+                # file_data est déjà un IOBase
+                file_obj = cast(io.IOBase, file_data)
                 file_obj.seek(0, 2)  # Aller à la fin
                 file_size = file_obj.tell()
                 file_obj.seek(0)  # Retourner au début
@@ -325,7 +223,7 @@ class OwnCloudUploader:
             last_log_time = datetime.now()
             LOG_INTERVAL = 10  # Log toutes les 10 secondes
 
-            async def upload_generator():
+            async def upload_generator() -> AsyncIterator[bytes]:
                 nonlocal uploaded_bytes, last_log_time
                 while True:
                     chunk = file_obj.read(self.config.chunk_size)
@@ -369,7 +267,7 @@ class OwnCloudUploader:
                 f"   Timeout configuré: {upload_timeout}s ({upload_timeout / 60:.1f} min)"
             )
 
-            async with self.session.put(
+            async with session.put(
                 upload_url,
                 data=upload_generator(),
                 headers={"Content-Length": str(file_size)},
@@ -446,6 +344,10 @@ class OwnCloudUploader:
             UploadResult
         """
         try:
+            # Convertir str en Path si nécessaire
+            if isinstance(file_data, str):
+                file_data = Path(file_data)
+
             # Déterminer le dossier de base selon le type
             if folder_type == "model":
                 import os
@@ -479,7 +381,7 @@ class OwnCloudUploader:
                 success=False, file_path=remote_path, file_size=0, error_message=str(e)
             )
 
-    async def save_metadata(self, file_path: str, metadata: VideoMetadata):
+    async def save_metadata(self, file_path: str, metadata: VideoMetadata) -> None:
         """
         Sauvegarde les métadonnées d'un fichier
 
@@ -522,6 +424,8 @@ class OwnCloudUploader:
         Returns:
             Optional[str]: URL du lien de partage
         """
+        session = self._ensure_session()
+
         try:
             # Préparer les données de partage
             share_data = {
@@ -539,7 +443,7 @@ class OwnCloudUploader:
                 share_data["expireDate"] = expire_date.strftime("%Y-%m-%d")
 
             # Créer le partage
-            async with self.session.post(
+            async with session.post(
                 self.config.sharing_api_url,
                 data=share_data,
                 headers={"OCS-APIRequest": "true", "Accept": "application/json"},
@@ -549,7 +453,7 @@ class OwnCloudUploader:
 
                     if data.get("ocs", {}).get("meta", {}).get("status") == "ok":
                         share_data = data["ocs"]["data"]
-                        share_url = share_data.get("url")
+                        share_url: Optional[str] = share_data.get("url")
 
                         logger.success(f"✅ Lien de partage créé: {share_url}")
                         return share_url
@@ -579,12 +483,14 @@ class OwnCloudUploader:
         Returns:
             List[Dict]: Liste des fichiers avec métadonnées
         """
+        session = self._ensure_session()
+
         try:
             folder_url = urljoin(
                 self.config.webdav_url + "/", quote(folder_path.lstrip("/"))
             )
 
-            async with self.session.request(
+            async with session.request(
                 "PROPFIND", folder_url, headers={"Depth": "1"}
             ) as response:
                 if response.status == 207:  # Multi-Status
@@ -621,12 +527,14 @@ class OwnCloudUploader:
         Returns:
             bool: True si supprimé avec succès
         """
+        session = self._ensure_session()
+
         try:
             file_url = urljoin(
                 self.config.webdav_url + "/", quote(file_path.lstrip("/"))
             )
 
-            async with self.session.delete(file_url) as response:
+            async with session.delete(file_url) as response:
                 if response.status == 204:  # No Content = succès
                     logger.info(f"Fichier supprimé: {file_path}")
                     return True
@@ -810,7 +718,7 @@ async def upload_cinemagraph(
     remote_path = uploader.generate_filename(original_name, workflow_id)
 
     # Upload avec callback de progression
-    def progress_callback(uploaded: int, total: int, percent: float):
+    def progress_callback(uploaded: int, total: int, percent: float) -> None:
         logger.info(f"Upload progression: {percent:.1f}% ({uploaded}/{total} bytes)")
 
     # Effectuer l'upload
@@ -840,7 +748,7 @@ if __name__ == "__main__":
     setup_logger(level="INFO")
     logger.info("🧪 Test du module OwnCloud Uploader")
 
-    async def test_owncloud():
+    async def test_owncloud() -> None:
         # Configuration de test (à adapter)
         config = OwnCloudConfig(
             server_url="https://your-owncloud-server.com",

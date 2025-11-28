@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from src.owncloud_config import get_owncloud_config, check_owncloud_setup
-from src.owncloud_uploader import VideoMetadata
+from src.models.owncloud_models import VideoMetadata
 
 setup_logger(level="INFO")
 logger = get_logger("demo")
