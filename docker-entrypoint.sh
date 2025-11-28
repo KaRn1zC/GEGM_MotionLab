@@ -170,9 +170,9 @@ elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
 fi
 
 if [ -f "$VAE_SOURCE" ]; then
-    # Créer symlink
-    ln -sf "$VAE_SOURCE" "$VAE_DIR/$(basename $VAE_SOURCE)"
-    echo "   ✅ Symlink créé: $VAE_DIR/$(basename $VAE_SOURCE)"
+    # Copier le VAE au lieu de créer un symlink (fix: WanVideoVAELoader ne suit pas toujours les symlinks)
+    cp "$VAE_SOURCE" "$VAE_DIR/$(basename $VAE_SOURCE)"
+    echo "   ✅ VAE copié: $VAE_DIR/$(basename $VAE_SOURCE)"
 else
     echo "   ⚠️ VAE non trouvé: $VAE_SOURCE"
 fi

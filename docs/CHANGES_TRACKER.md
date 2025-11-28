@@ -10,6 +10,90 @@
 
 ## 📅 Modifications récentes
 
+### [2025-11-28 11:00] - Correction erreur 48/96 canaux - Remplacement nodes
+
+**Problème** : RuntimeError "expected input to have 48 channels, but got 96 channels instead"
+
+**Cause identifiée** :
+- Node `WanVideoImageToVideoEncode` produit tenseur avec mauvais format
+- Shape bugué : `[48, 8, 135, 216]` → interprété comme 96 canaux par le transformer
+- Incompatibilité avec version récente wrapper (commit `44feb24`)
+
+**Solution implémentée** :
+Remplacement architecture node 7 basée sur workflow officiel `wanvideo_2_2_5B_I2V_example_WIP.json` :
+
+**Ancienne architecture (buguée)** :
+```
+Node 7: WanVideoImageToVideoEncode (tout-en-un, bugué)
+  ├─ vae: [3, 0]
+  ├─ start_image: [1, 0]
+  └─ clip_embeds: [6, 0]
+  → output: image_embeds (format incorrect)
+```
+
+**Nouvelle architecture (fonctionnelle)** :
+```
+Node 7: WanVideoEncode (encode image → latents)
+  ├─ vae: [3, 0]
+  └─ image: [1, 0]
+  → output: samples (LATENT)
+
+Node 7b: WanVideoEmptyEmbeds (latents → embeds)
+  ├─ extra_latents: [7, 0]
+  ├─ width: {width}
+  ├─ height: {height}
+  └─ num_frames: {frames}
+  → output: image_embeds (format correct)
+```
+
+**Fichiers modifiés** :
+- `workflows/templates/wan22_i2v.json` : v3.0.0 → v4.0.0
+  - Supprimé node 6 `WanVideoClipVisionEncode` (non utilisé dans workflow officiel sans CLIP embeds)
+  - Remplacé node 7 `WanVideoImageToVideoEncode` par `WanVideoEncode`
+  - Ajouté node 7b `WanVideoEmptyEmbeds`
+  - Node 8 `WanVideoSampler` : connexion `image_embeds` change de `[7, 0]` → `[7b, 0]`
+
+- `workflows/templates/wan22_with_upscale.json` : v1.0.0 → v2.0.0
+  - Mêmes modifications que wan22_i2v.json
+
+- `docker-entrypoint.sh` : ligne 173-174
+  - Remplacé `ln -sf` par `cp` pour le VAE
+  - Raison : WanVideoVAELoader ne suit pas toujours les symlinks correctement
+
+**Paramètres WanVideoEncode** :
+```json
+{
+  "vae": ["3", 0],
+  "image": ["1", 0],
+  "enable_vae_tiling": false,
+  "tile_x": 272,
+  "tile_y": 272,
+  "tile_stride_x": 144,
+  "tile_stride_y": 128,
+  "temporal_compress_level": 0,
+  "spatial_compress_level": 1
+}
+```
+
+**Paramètres WanVideoEmptyEmbeds** :
+```json
+{
+  "extra_latents": ["7", 0],
+  "width": "{width}",
+  "height": "{height}",
+  "num_frames": "{frames}"
+}
+```
+
+**Impact** :
+- ✅ Résout erreur 48/96 canaux définitivement
+- ✅ Compatible avec version récente wrapper (commit `44feb24`)
+- ✅ Architecture alignée sur workflows officiels Kijai
+- ⚠️ BREAKING CHANGE : anciens workflows incompatibles
+- ⏳ Test requis sur RunPod après redémarrage
+
+---
+
 ### [2025-11-27 11:00] - Correction workflows JSON pour refléter noms réels fichiers
 
 **Raison** : UnpicklingError car workflows JSON référençaient noms fictifs `.pth` au lieu des vrais fichiers `.safetensors`
