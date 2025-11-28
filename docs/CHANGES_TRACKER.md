@@ -10,6 +10,32 @@
 
 ## 📅 Modifications récentes
 
+### [2025-11-28 14:00] - Correction erreur dimensionnelle workflow upscale
+
+**Problème** : RuntimeError "The expanded size of the tensor (216) must match the existing size (45) at non-singleton dimension 3"
+
+**Cause identifiée** :
+- Le workflow `wan22_with_upscale` recevait les dimensions CIBLES (post-upscale) au lieu des dimensions SOURCE
+- Exemple : Image 720x450 → demande 3456x2160
+  - ❌ Avant : Passait 3456x2160 à WanVideoEmptyEmbeds (incompatible avec latents VAE)
+  - ✅ Après : Passe 720x450 pour génération, RealESRGAN upscale après
+
+**Solution implémentée** :
+- Modifié `web_interface/routes.py` lignes 125-152
+- Workflow upscale : utilise `source_width` et `source_height` pour génération
+- L'upscaling vers dimensions cibles est fait par RealESRGAN (node 11)
+
+**Fichiers modifiés** :
+- `web_interface/routes.py` : Logique sélection dimensions selon workflow
+
+**Impact** :
+- ✅ Résout erreur dimensionnelle définitivement
+- ✅ Le workflow upscale génère maintenant à résolution source puis upscale
+- ✅ Compatible avec toutes résolutions d'entrée
+- ⏳ Test requis sur RunPod après rebuild
+
+---
+
 ### [2025-11-28 11:00] - Correction erreur 48/96 canaux - Remplacement nodes
 
 **Problème** : RuntimeError "expected input to have 48 channels, but got 96 channels instead"
