@@ -126,19 +126,30 @@ async def process_cinemagraph_generation(job_id: str):
         if scale_ratio > 1.5:  # Besoin d'upscale intelligent
             selected_workflow = "wan22_with_upscale"
             logger.info(f"🔍 Upscale automatique activé (ratio: {scale_ratio:.2f}x)")
-        else:
-            selected_workflow = "wan22_i2v"
-            logger.info(f"✅ Génération standard (ratio: {scale_ratio:.2f}x)")
 
-        workflow = workflow_manager.create_workflow(
-            selected_workflow,
-            {
+            # IMPORTANT : Pour le workflow upscale, utiliser les dimensions SOURCE pour la génération
+            # L'upscaling vers les dimensions CIBLES sera fait par RealESRGAN (node 11)
+            workflow_params = {
                 "input_image": img_path.name,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
-            },
-        )
+                "width": source_width,  # Générer à résolution source
+                "height": source_height,  # Upscale sera fait après
+            }
+        else:
+            selected_workflow = "wan22_i2v"
+            logger.info(f"✅ Génération standard (ratio: {scale_ratio:.2f}x)")
+
+            # Pour génération standard, utiliser les dimensions demandées
+            workflow_params = {
+                "input_image": img_path.name,
+                "prompt": job.prompt,
+                "negative_prompt": job.parameters.get("negative_prompt", ""),
+                **job.parameters,
+            }
+
+        workflow = workflow_manager.create_workflow(selected_workflow, workflow_params)
 
         # 2. Générer le cinemagraph
         job_manager.update_job(
