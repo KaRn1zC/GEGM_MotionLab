@@ -10,188 +10,54 @@
 
 ## 📅 Modifications récentes
 
-### [2025-11-28 15:00] - Ajustement automatique dimensions multiples de 16
+### [2025-11-28 16:00] - Système universel images avec redimensionnement physique
 
-**Problème** : RuntimeError "The size of tensor a (2464) must match the size of tensor b (2520) at non-singleton dimension 1"
+**Problème** : Mismatch tensoriel persistant malgré ajustement paramètres
+- L'ajustement des paramètres workflow ne suffit pas
+- Le node `LoadImage` charge l'image avec ses dimensions originales
+- Conflit dimensions image réelle vs dimensions workflow
 
-**Cause identifiée** :
-- Le VAE WAN 2.2 utilise un facteur de compression de 16
-- Les dimensions doivent être des **multiples de 16** (pas 8)
-- Exemple : Image 720x450 → 720 ÷ 16 = 45 ✅, 450 ÷ 16 = 28.125 ❌
-- Les dimensions non-alignées causent un mismatch tensoriel dans le transformer
-
-**Solution implémentée** :
-- Modifié `web_interface/routes.py` lignes 41-43, 125-172
-- Changé le facteur d'alignement de 8 → 16 dans `calculate_optimal_resolution`
-- Ajout fonction `adjust_dimension()` pour ajuster toutes les dimensions (source ET cibles)
-- Les dimensions sont automatiquement arrondies au multiple de 16 le plus proche
-- Log des ajustements pour transparence
-
-**Exemple concret** :
-```python
-# Image 720x450 uploadée
-source: 720x450
-  → ajusté: 720x448  # 450 → 448 (448 ÷ 16 = 28 ✅)
-
-# Demande 3456x2160
-target: 3456x2160
-  → ajusté: 3456x2160  # Déjà multiples de 16 ✅
-```
+**Solution complète** :
+- **Redimensionnement physique** de l'image AVANT upload à ComfyUI
+- Création copie temporaire redimensionnée (LANCZOS haute qualité)
+- Upload de l'image redimensionnée au lieu de l'originale
+- Nettoyage automatique (finally block)
+- Correction `ZeroDivisionError` dans `/api/calculate-resolution`
+- **Ajustement automatique multiples de 16** (VAE compression factor)
+- **Workflow upscale** : Génération à résolution source, RealESRGAN upscale après
 
 **Fichiers modifiés** :
-- `web_interface/routes.py` : Ajout ajustement automatique dimensions
+- `web_interface/routes.py` : Pipeline complet traitement images
 
 **Impact** :
-- ✅ Résout erreur mismatch tensoriel définitivement
-- ✅ Accepte maintenant n'importe quelle image en entrée
-- ✅ Ajustement transparent (arrondi au multiple le plus proche)
-- ✅ Préserve le ratio d'aspect (ajustement minimal)
-- ⏳ Test requis sur RunPod après rebuild
+- ✅ Système vraiment universel (accepte n'importe quelle image)
+- ✅ Ajustement transparent et automatique
+- ✅ Qualité préservée (algorithme LANCZOS)
 
 ---
 
-### [2025-11-28 14:00] - Correction erreur dimensionnelle workflow upscale
-
-**Problème** : RuntimeError "The expanded size of the tensor (216) must match the existing size (45) at non-singleton dimension 3"
-
-**Cause identifiée** :
-- Le workflow `wan22_with_upscale` recevait les dimensions CIBLES (post-upscale) au lieu des dimensions SOURCE
-- Exemple : Image 720x450 → demande 3456x2160
-  - ❌ Avant : Passait 3456x2160 à WanVideoEmptyEmbeds (incompatible avec latents VAE)
-  - ✅ Après : Passe 720x450 pour génération, RealESRGAN upscale après
-
-**Solution implémentée** :
-- Modifié `web_interface/routes.py` lignes 125-152
-- Workflow upscale : utilise `source_width` et `source_height` pour génération
-- L'upscaling vers dimensions cibles est fait par RealESRGAN (node 11)
-
-**Fichiers modifiés** :
-- `web_interface/routes.py` : Logique sélection dimensions selon workflow
-
-**Impact** :
-- ✅ Résout erreur dimensionnelle définitivement
-- ✅ Le workflow upscale génère maintenant à résolution source puis upscale
-- ✅ Compatible avec toutes résolutions d'entrée
-- ⏳ Test requis sur RunPod après rebuild
-
----
-
-### [2025-11-28 11:00] - Correction erreur 48/96 canaux - Remplacement nodes
+### [2025-11-28 11:00] - Architecture workflows v4.0/v2.0 (WanVideoEncode + WanVideoEmptyEmbeds)
 
 **Problème** : RuntimeError "expected input to have 48 channels, but got 96 channels instead"
 
-**Cause identifiée** :
-- Node `WanVideoImageToVideoEncode` produit tenseur avec mauvais format
-- Shape bugué : `[48, 8, 135, 216]` → interprété comme 96 canaux par le transformer
-- Incompatibilité avec version récente wrapper (commit `44feb24`)
+**Cause** : Node `WanVideoImageToVideoEncode` incompatible avec wrapper récent (commit `44feb24`)
 
-**Solution implémentée** :
-Remplacement architecture node 7 basée sur workflow officiel `wanvideo_2_2_5B_I2V_example_WIP.json` :
-
-**Ancienne architecture (buguée)** :
-```
-Node 7: WanVideoImageToVideoEncode (tout-en-un, bugué)
-  ├─ vae: [3, 0]
-  ├─ start_image: [1, 0]
-  └─ clip_embeds: [6, 0]
-  → output: image_embeds (format incorrect)
-```
-
-**Nouvelle architecture (fonctionnelle)** :
+**Solution** : Remplacement architecture basée sur workflow officiel Kijai
 ```
 Node 7: WanVideoEncode (encode image → latents)
-  ├─ vae: [3, 0]
-  └─ image: [1, 0]
-  → output: samples (LATENT)
-
 Node 7b: WanVideoEmptyEmbeds (latents → embeds)
-  ├─ extra_latents: [7, 0]
-  ├─ width: {width}
-  ├─ height: {height}
-  └─ num_frames: {frames}
-  → output: image_embeds (format correct)
+Node 8: WanVideoSampler (connexion [7b, 0])
 ```
 
 **Fichiers modifiés** :
 - `workflows/templates/wan22_i2v.json` : v3.0.0 → v4.0.0
-  - Supprimé node 6 `WanVideoClipVisionEncode` (non utilisé dans workflow officiel sans CLIP embeds)
-  - Remplacé node 7 `WanVideoImageToVideoEncode` par `WanVideoEncode`
-  - Ajouté node 7b `WanVideoEmptyEmbeds`
-  - Node 8 `WanVideoSampler` : connexion `image_embeds` change de `[7, 0]` → `[7b, 0]`
-
 - `workflows/templates/wan22_with_upscale.json` : v1.0.0 → v2.0.0
-  - Mêmes modifications que wan22_i2v.json
-
-- `docker-entrypoint.sh` : ligne 173-174
-  - Remplacé `ln -sf` par `cp` pour le VAE
-  - Raison : WanVideoVAELoader ne suit pas toujours les symlinks correctement
-
-**Paramètres WanVideoEncode** :
-```json
-{
-  "vae": ["3", 0],
-  "image": ["1", 0],
-  "enable_vae_tiling": false,
-  "tile_x": 272,
-  "tile_y": 272,
-  "tile_stride_x": 144,
-  "tile_stride_y": 128,
-  "temporal_compress_level": 0,
-  "spatial_compress_level": 1
-}
-```
-
-**Paramètres WanVideoEmptyEmbeds** :
-```json
-{
-  "extra_latents": ["7", 0],
-  "width": "{width}",
-  "height": "{height}",
-  "num_frames": "{frames}"
-}
-```
+- `docker-entrypoint.sh` : VAE copie (`cp`) au lieu de symlink
 
 **Impact** :
-- ✅ Résout erreur 48/96 canaux définitivement
-- ✅ Compatible avec version récente wrapper (commit `44feb24`)
-- ✅ Architecture alignée sur workflows officiels Kijai
+- ✅ Compatible avec wrapper récent
+- ✅ Architecture alignée workflows officiels
 - ⚠️ BREAKING CHANGE : anciens workflows incompatibles
-- ⏳ Test requis sur RunPod après redémarrage
-
----
-
-### [2025-11-27 11:00] - Correction workflows JSON pour refléter noms réels fichiers
-
-**Raison** : UnpicklingError car workflows JSON référençaient noms fictifs `.pth` au lieu des vrais fichiers `.safetensors`
-
-**Fichiers modifiés** :
-- `workflows/templates/wan22_i2v.json` :
-  - VAE: `Wan2.2_VAE.pth` → `wan2.2_vae.safetensors`
-  - T5: `t5/umt5-xxl-enc-bf16.pth` → `t5/umt5_xxl_fp16.safetensors`
-- `workflows/templates/wan22_with_upscale.json` : Idem
-- `docker-entrypoint.sh` : Suppression symlinks de compatibilité (lignes 178, 206)
-- `scripts/setup_diffusion_models.sh` : Suppression symlinks de compatibilité
-
-**Impact** :
-- ✅ Workflows JSON reflètent la réalité des fichiers
-- ✅ Résout UnpicklingError définitivement (pas de patch nécessaire)
-- ✅ Architecture simplifiée (pas de symlinks artificiels)
-
----
-
-### [2025-11-26 17:00] - Migration T5 Encoder FP8 scaled → FP16
-
-**Raison** : ComfyUI-WanVideoWrapper refuse les T5 FP8 scaled (ValueError)
-
-**Fichiers modifiés** :
-- `scripts/setup_wan22_native.sh` : Download `umt5_xxl_fp16.safetensors` (11.4 GB)
-- `scripts/verify_t5_integrity.py` : Vérification FP16 (10-12 GB attendu)
-- `docker-entrypoint.sh` : T5_SOURCE vers FP16
-
-**Impact** :
-- ✅ Résout ValueError "fp8 scaled is not supported by this node"
-- ✅ Solution officielle T5 FP16
-- ⚠️ T5 plus gros : 11.4 GB vs 6.74 GB (OK avec L40S 44GB)
 
 ---
 
@@ -200,21 +66,37 @@ Node 7b: WanVideoEmptyEmbeds (latents → embeds)
 ```markdown
 ### [YYYY-MM-DD HH:MM] - Titre court
 
-**Raison** : Pourquoi ce changement
+**Problème** : Description du problème rencontré
+
+**Cause** : Cause identifiée (si applicable)
+
+**Solution** : Solution implémentée
 
 **Fichiers modifiés** :
 - `fichier.py` : Changement effectué
 
 **Impact** :
-- Impact principal sur le fonctionnement
-
-**Documentation mise à jour** :
-- [ ] `CLAUDE.md`
-- [ ] `docs/ARCHITECTURE.md`
+- ✅ Impact principal sur le fonctionnement
 ```
 
 ---
 
-## 🧹 Rappel : Nettoyer régulièrement ce fichier
+## 🔄 WORKFLOW OBLIGATOIRE (Auto-enforcement)
 
-Après chaque mise à jour de `CLAUDE.md`, supprimer les anciennes entrées et ne garder que les 2-3 dernières pertinentes.
+**RÈGLES À SUIVRE SYSTÉMATIQUEMENT APRÈS CHAQUE CORRECTION** :
+
+1. ✅ **Ajouter entrée** dans `CHANGES_TRACKER.md` (clair, court, concis)
+2. ✅ **Mettre à jour `CLAUDE.md`** avec les informations essentielles
+3. ✅ **Mettre à jour `ARCHITECTURE.md`** si changement architectural
+4. ✅ **NETTOYER `CHANGES_TRACKER.md`** après mise à jour de CLAUDE.md (garder max 2-3 entrées, ~60 lignes max)
+5. ✅ **NETTOYER `ARCHITECTURE.md`** (supprimer sections obsolètes)
+6. ⏸️ **Attendre demande utilisateur** pour mise à jour README
+
+**IMPORTANT** : Ces règles doivent être appliquées **automatiquement** sans que l'utilisateur ait besoin de le rappeler, et doivent être **mémorisées d'une session à l'autre**.
+
+---
+
+## 🧹 Rappel de nettoyage
+
+Ce fichier doit rester **court et pertinent** (max 60 lignes pour les modifications récentes).
+Après chaque mise à jour de `CLAUDE.md`, supprimer les anciennes entrées et ne garder que les 2-3 dernières.
