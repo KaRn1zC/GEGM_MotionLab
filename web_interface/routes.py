@@ -19,7 +19,6 @@ from workflows.workflow_manager import workflow_manager
 from web_interface.jobs import JobStatus
 
 from PIL import Image
-import math
 
 
 def calculate_optimal_resolution(
@@ -38,9 +37,9 @@ def calculate_optimal_resolution(
     # Ratio de l'image source
     source_ratio = source_width / source_height
 
-    # Arrondir à un multiple de 8 (requis par les modèles de diffusion)
-    def round_to_multiple(value, multiple=8):
-        return int(math.ceil(value / multiple) * multiple)
+    # Arrondir à un multiple de 16 (requis par le VAE WAN 2.2)
+    def round_to_multiple(value, multiple=16):
+        return int(round(value / multiple) * multiple)
 
     # Calculer selon le ratio source
     if target_width / target_height > source_ratio:
@@ -122,31 +121,56 @@ async def process_cinemagraph_generation(job_id: str):
         # Calculer le ratio d'agrandissement
         scale_ratio = (target_width * target_height) / (source_width * source_height)
 
+        # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 16)
+        def adjust_dimension(value):
+            """Ajuste une dimension pour qu'elle soit un multiple de 16"""
+            return int(round(value / 16) * 16)
+
+        # Ajuster dimensions source
+        adjusted_source_width = adjust_dimension(source_width)
+        adjusted_source_height = adjust_dimension(source_height)
+
+        # Ajuster dimensions cibles
+        adjusted_target_width = adjust_dimension(target_width)
+        adjusted_target_height = adjust_dimension(target_height)
+
+        # Log des ajustements si nécessaire
+        if (
+            adjusted_source_width != source_width
+            or adjusted_source_height != source_height
+        ):
+            logger.info(
+                f"📐 Dimensions source ajustées pour compatibilité WAN 2.2: "
+                f"{source_width}x{source_height} → {adjusted_source_width}x{adjusted_source_height}"
+            )
+
         # Sélectionner le workflow
         if scale_ratio > 1.5:  # Besoin d'upscale intelligent
             selected_workflow = "wan22_with_upscale"
             logger.info(f"🔍 Upscale automatique activé (ratio: {scale_ratio:.2f}x)")
 
-            # IMPORTANT : Pour le workflow upscale, utiliser les dimensions SOURCE pour la génération
+            # IMPORTANT : Pour le workflow upscale, utiliser les dimensions SOURCE ajustées pour la génération
             # L'upscaling vers les dimensions CIBLES sera fait par RealESRGAN (node 11)
             workflow_params = {
                 "input_image": img_path.name,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
-                "width": source_width,  # Générer à résolution source
-                "height": source_height,  # Upscale sera fait après
+                "width": adjusted_source_width,  # Générer à résolution source ajustée
+                "height": adjusted_source_height,  # Upscale sera fait après
             }
         else:
             selected_workflow = "wan22_i2v"
             logger.info(f"✅ Génération standard (ratio: {scale_ratio:.2f}x)")
 
-            # Pour génération standard, utiliser les dimensions demandées
+            # Pour génération standard, utiliser les dimensions ajustées
             workflow_params = {
                 "input_image": img_path.name,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
+                "width": adjusted_target_width,
+                "height": adjusted_target_height,
             }
 
         workflow = workflow_manager.create_workflow(selected_workflow, workflow_params)

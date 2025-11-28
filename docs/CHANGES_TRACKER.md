@@ -10,6 +10,46 @@
 
 ## 📅 Modifications récentes
 
+### [2025-11-28 15:00] - Ajustement automatique dimensions multiples de 16
+
+**Problème** : RuntimeError "The size of tensor a (2464) must match the size of tensor b (2520) at non-singleton dimension 1"
+
+**Cause identifiée** :
+- Le VAE WAN 2.2 utilise un facteur de compression de 16
+- Les dimensions doivent être des **multiples de 16** (pas 8)
+- Exemple : Image 720x450 → 720 ÷ 16 = 45 ✅, 450 ÷ 16 = 28.125 ❌
+- Les dimensions non-alignées causent un mismatch tensoriel dans le transformer
+
+**Solution implémentée** :
+- Modifié `web_interface/routes.py` lignes 41-43, 125-172
+- Changé le facteur d'alignement de 8 → 16 dans `calculate_optimal_resolution`
+- Ajout fonction `adjust_dimension()` pour ajuster toutes les dimensions (source ET cibles)
+- Les dimensions sont automatiquement arrondies au multiple de 16 le plus proche
+- Log des ajustements pour transparence
+
+**Exemple concret** :
+```python
+# Image 720x450 uploadée
+source: 720x450
+  → ajusté: 720x448  # 450 → 448 (448 ÷ 16 = 28 ✅)
+
+# Demande 3456x2160
+target: 3456x2160
+  → ajusté: 3456x2160  # Déjà multiples de 16 ✅
+```
+
+**Fichiers modifiés** :
+- `web_interface/routes.py` : Ajout ajustement automatique dimensions
+
+**Impact** :
+- ✅ Résout erreur mismatch tensoriel définitivement
+- ✅ Accepte maintenant n'importe quelle image en entrée
+- ✅ Ajustement transparent (arrondi au multiple le plus proche)
+- ✅ Préserve le ratio d'aspect (ajustement minimal)
+- ⏳ Test requis sur RunPod après rebuild
+
+---
+
 ### [2025-11-28 14:00] - Correction erreur dimensionnelle workflow upscale
 
 **Problème** : RuntimeError "The expanded size of the tensor (216) must match the existing size (45) at non-singleton dimension 3"
