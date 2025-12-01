@@ -10,6 +10,38 @@
 
 ## 📅 Modifications récentes
 
+### [2025-12-01 13:00] - Correction détection fin workflow et gestion WebSocket
+
+**Problème CRITIQUE** : Workflow bloqué indéfiniment sans jamais se terminer
+- Workflow reste en état "processing" jusqu'au timeout (600s)
+- Erreurs UTF-32 répétées: `'utf-32-be' codec can't decode bytes...`
+- Progressions aberrantes affichées (10000%, 80000%, etc.)
+- Log "Exécution nœud None" sans action
+
+**Cause identifiée** :
+1. **Détection de fin manquante** : ComfyUI envoie `executing` avec `node = null` pour signaler la fin, mais le code ne détectait pas ce signal
+2. **Messages binaires** : Tentative de décoder tous les messages WebSocket comme JSON texte (ComfyUI envoie aussi des images preview)
+3. **Normalisation progression** : ComfyUI envoie parfois des valeurs 0-100 (déjà en %), affichées avec `.1%` qui multiplie par 100
+
+**Solution implémentée** :
+- **Détection fin workflow** : Check `node_id is None` → marquer workflow "completed"
+- **Skip messages binaires** : Vérifier `isinstance(message, bytes)` et ignorer proprement
+- **Normalisation progression** : Diviser par 100 si valeur > 1.0
+
+**Fichiers modifiés** :
+- `src/comfyui_client.py` lignes 236-257 : Gestion messages binaires
+- `src/comfyui_client.py` lignes 271-290 : Normalisation progression
+- `src/comfyui_client.py` lignes 292-314 : Détection fin workflow (CRITIQUE)
+
+**Impact** :
+- ✅ Workflow se termine immédiatement après génération (au lieu de timeout 10min)
+- ✅ Plus d'erreurs UTF-32 dans les logs
+- ✅ Progressions normalisées (0-100%)
+- ✅ Log clair "✅ Workflow terminé avec succès"
+- 🚀 Génération de cinemagraph fonctionnelle de bout en bout
+
+---
+
 ### [2025-12-01 11:30] - Correction alignement dimensions: 16 → 32
 
 **Problème** : RuntimeError "The size of tensor a (2464) must match the size of tensor b (2520)"
@@ -63,31 +95,6 @@
 - ✅ Système vraiment universel (accepte n'importe quelle image)
 - ✅ Ajustement transparent et automatique
 - ✅ Qualité préservée (algorithme LANCZOS)
-
----
-
-### [2025-11-28 11:00] - Architecture workflows v4.0/v2.0 (WanVideoEncode + WanVideoEmptyEmbeds)
-
-**Problème** : RuntimeError "expected input to have 48 channels, but got 96 channels instead"
-
-**Cause** : Node `WanVideoImageToVideoEncode` incompatible avec wrapper récent (commit `44feb24`)
-
-**Solution** : Remplacement architecture basée sur workflow officiel Kijai
-```
-Node 7: WanVideoEncode (encode image → latents)
-Node 7b: WanVideoEmptyEmbeds (latents → embeds)
-Node 8: WanVideoSampler (connexion [7b, 0])
-```
-
-**Fichiers modifiés** :
-- `workflows/templates/wan22_i2v.json` : v3.0.0 → v4.0.0
-- `workflows/templates/wan22_with_upscale.json` : v1.0.0 → v2.0.0
-- `docker-entrypoint.sh` : VAE copie (`cp`) au lieu de symlink
-
-**Impact** :
-- ✅ Compatible avec wrapper récent
-- ✅ Architecture alignée workflows officiels
-- ⚠️ BREAKING CHANGE : anciens workflows incompatibles
 
 ---
 

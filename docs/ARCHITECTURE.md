@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-11-27
+**Dernière mise à jour** : 2025-12-01
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -52,6 +52,20 @@
 - Configuration paramètres
 
 **Fichier** : `workflows/workflow_manager.py`
+
+### Client WebSocket ComfyUI (v3.5.2)
+- Communication bidirectionnelle Flask ↔ ComfyUI
+- **Détection fin workflow** : Message `executing` avec `node = null` → marquer "completed"
+- **Gestion messages binaires** : Skip proprement les images preview (évite erreurs UTF-32)
+- **Normalisation progression** : Auto-détection format 0-1 vs 0-100
+- Monitoring temps réel des nœuds en exécution
+
+**Fichier** : `src/comfyui_client.py`
+
+**Points critiques** :
+- Ligne 236-257 : Gestion messages binaires
+- Ligne 271-290 : Normalisation progression
+- Ligne 292-314 : Détection fin workflow (CRITIQUE)
 
 ---
 
@@ -160,8 +174,10 @@ COMFYUI_PORT=8188
 
 ## Notes importantes
 
-1. **T5 FP16** : Utilise FP16 (11.4 GB) officiellement supporté par WanVideoWrapper
-2. **Workflows JSON** : Référencent les vrais fichiers `.safetensors` (pas de symlinks artificiels)
-3. **Pas de patch nécessaire** : Architecture simplifiée, chargement natif
-4. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
-5. **VRAM** : 48GB minimum (5B), 80GB (14B)
+1. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 600s)
+2. **Messages binaires WebSocket** : Ignorer proprement les images preview pour éviter erreurs UTF-32
+3. **T5 FP16** : Utilise FP16 (11.4 GB) officiellement supporté par WanVideoWrapper
+4. **Workflows JSON** : Référencent les vrais fichiers `.safetensors` (pas de symlinks artificiels)
+5. **Pas de patch nécessaire** : Architecture simplifiée, chargement natif
+6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
+7. **VRAM** : 48GB minimum (5B), 80GB (14B)
