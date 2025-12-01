@@ -53,11 +53,12 @@
 
 **Fichier** : `workflows/workflow_manager.py`
 
-### Client WebSocket ComfyUI (v3.5.2)
+### Client WebSocket ComfyUI (v3.5.3)
 - Communication bidirectionnelle Flask ↔ ComfyUI
 - **Détection fin workflow** : Message `executing` avec `node = null` → marquer "completed"
 - **Gestion messages binaires** : Skip proprement les images preview (évite erreurs UTF-32)
 - **Normalisation progression** : Auto-détection format 0-1 vs 0-100
+- **Récupération outputs** : Support clés "images" (SaveImage) ET "gifs" (VHS_VideoCombine)
 - Monitoring temps réel des nœuds en exécution
 
 **Fichier** : `src/comfyui_client.py`
@@ -66,6 +67,7 @@
 - Ligne 236-257 : Gestion messages binaires
 - Ligne 271-290 : Normalisation progression
 - Ligne 292-314 : Détection fin workflow (CRITIQUE)
+- Ligne 487-546 : Récupération images/vidéos (CRITIQUE)
 
 ---
 
@@ -174,10 +176,11 @@ COMFYUI_PORT=8188
 
 ## Notes importantes
 
-1. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 600s)
-2. **Messages binaires WebSocket** : Ignorer proprement les images preview pour éviter erreurs UTF-32
-3. **T5 FP16** : Utilise FP16 (11.4 GB) officiellement supporté par WanVideoWrapper
-4. **Workflows JSON** : Référencent les vrais fichiers `.safetensors` (pas de symlinks artificiels)
-5. **Pas de patch nécessaire** : Architecture simplifiée, chargement natif
-6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
-7. **VRAM** : 48GB minimum (5B), 80GB (14B)
+1. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
+2. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 600s)
+3. **Messages binaires WebSocket** : Ignorer proprement les images preview pour éviter erreurs UTF-32
+4. **T5 FP16** : Utilise FP16 (11.4 GB) officiellement supporté par WanVideoWrapper
+5. **Workflows JSON** : Référencent les vrais fichiers `.safetensors` (pas de symlinks artificiels)
+6. **Pas de patch nécessaire** : Architecture simplifiée, chargement natif
+7. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
+8. **VRAM** : 48GB minimum (5B), 80GB (14B)

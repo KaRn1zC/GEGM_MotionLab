@@ -10,6 +10,33 @@
 
 ## 📅 Modifications récentes
 
+### [2025-12-01 14:00] - Support récupération vidéos (clé "gifs")
+
+**Problème** : Workflow terminé avec succès mais "Aucune vidéo générée"
+- Workflow ComfyUI se termine correctement
+- Fonction `get_output_images()` retourne 0 fichiers
+- Erreur : "Récupéré 0 images pour workflow"
+
+**Cause identifiée** :
+- Node `VHS_VideoCombine` génère des vidéos avec la clé **"gifs"** (standard VideoHelperSuite)
+- La fonction `get_output_images()` cherchait uniquement la clé **"images"** (SaveImage nodes)
+- Les vidéos MP4 générées n'étaient pas détectées
+
+**Solution implémentée** :
+- Ajout support clé "gifs" dans `get_output_images()`
+- Fonction renommée conceptuellement pour gérer images ET vidéos
+- Détection automatique du format (images ou vidéos)
+
+**Fichiers modifiés** :
+- `src/comfyui_client.py` lignes 487-546 : Support "gifs" + "images"
+
+**Impact** :
+- ✅ Vidéos MP4 correctement récupérées depuis VHS_VideoCombine
+- ✅ Compatible images (SaveImage) et vidéos (VHS_VideoCombine)
+- ✅ Génération cinemagraph fonctionnelle de bout en bout
+
+---
+
 ### [2025-12-01 13:00] - Correction détection fin workflow et gestion WebSocket
 
 **Problème CRITIQUE** : Workflow bloqué indéfiniment sans jamais se terminer
@@ -39,62 +66,6 @@
 - ✅ Progressions normalisées (0-100%)
 - ✅ Log clair "✅ Workflow terminé avec succès"
 - 🚀 Génération de cinemagraph fonctionnelle de bout en bout
-
----
-
-### [2025-12-01 11:30] - Correction alignement dimensions: 16 → 32
-
-**Problème** : RuntimeError "The size of tensor a (2464) must match the size of tensor b (2520)"
-- Image redimensionnée à 720x448 (multiple de 16)
-- VAE avec `spatial_compress_level: 1` convertissait automatiquement 720 → 704 (multiple de 32)
-- Node `WanVideoEmptyEmbeds` recevait width=720 mais VAE attendait width=704
-- Mismatch: 44 latents (704/16) vs 45 latents (720/16)
-
-**Cause identifiée** :
-- Avec `spatial_compress_level: 1`, le VAE nécessite des dimensions **multiples de 32**, pas 16
-- VAE_STRIDE = (4, 8, 8), mais compression spatiale level 1 double le facteur → (4, 16, 16)
-- Workflow officiel 5B utilise 832x480 (tous deux multiples de 32!)
-
-**Solution implémentée** :
-- Modifié `web_interface/routes.py` lignes 40-42, 126-128
-- Changé facteur d'alignement de 16 → **32** dans `round_to_multiple()` et `adjust_dimension()`
-- Ajouté commentaires explicatifs sur `spatial_compress_level=1`
-- Mis à jour docstrings
-
-**Fichiers modifiés** :
-- `web_interface/routes.py` : Alignement 16 → 32
-
-**Impact** :
-- ✅ Résout définitivement le mismatch tensoriel avec spatial_compress_level=1
-- ✅ Dimensions automatiquement ajustées aux multiples de 32
-- ✅ Compatible avec workflow officiel 5B (832x480)
-- 📐 Exemple: 720x450 → **704x448** (au lieu de 720x448)
-
----
-
-### [2025-11-28 16:00] - Système universel images avec redimensionnement physique
-
-**Problème** : Mismatch tensoriel persistant malgré ajustement paramètres
-- L'ajustement des paramètres workflow ne suffit pas
-- Le node `LoadImage` charge l'image avec ses dimensions originales
-- Conflit dimensions image réelle vs dimensions workflow
-
-**Solution complète** :
-- **Redimensionnement physique** de l'image AVANT upload à ComfyUI
-- Création copie temporaire redimensionnée (LANCZOS haute qualité)
-- Upload de l'image redimensionnée au lieu de l'originale
-- Nettoyage automatique (finally block)
-- Correction `ZeroDivisionError` dans `/api/calculate-resolution`
-- **Ajustement automatique multiples de 16** (VAE compression factor)
-- **Workflow upscale** : Génération à résolution source, RealESRGAN upscale après
-
-**Fichiers modifiés** :
-- `web_interface/routes.py` : Pipeline complet traitement images
-
-**Impact** :
-- ✅ Système vraiment universel (accepte n'importe quelle image)
-- ✅ Ajustement transparent et automatique
-- ✅ Qualité préservée (algorithme LANCZOS)
 
 ---
 

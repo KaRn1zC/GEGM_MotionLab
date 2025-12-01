@@ -237,7 +237,9 @@ class ComfyUIClient:
                 try:
                     # Vérifier si le message est binaire
                     if isinstance(message, bytes):
-                        logger.debug("Message binaire reçu (probablement une image preview)")
+                        logger.debug(
+                            "Message binaire reçu (probablement une image preview)"
+                        )
                         continue
 
                     data = json.loads(message)
@@ -251,8 +253,8 @@ class ComfyUIClient:
                     else:
                         logger.debug(f"Type de message non géré: {message_type}")
 
-                except json.JSONDecodeError as e:
-                    logger.debug(f"Message non-JSON ignoré (probablement binaire)")
+                except json.JSONDecodeError:
+                    logger.debug("Message non-JSON ignoré (probablement binaire)")
                 except Exception as e:
                     logger.error(f"Erreur lors du traitement du message: {e}")
 
@@ -486,13 +488,13 @@ class ComfyUIClient:
 
     async def get_output_images(self, workflow_id: str) -> List[Dict[str, Any]]:
         """
-        Récupère les images de sortie d'un workflow terminé
+        Récupère les images/vidéos de sortie d'un workflow terminé
 
         Args:
             workflow_id: ID du workflow
 
         Returns:
-            List[Dict]: Liste des images de sortie
+            List[Dict]: Liste des images/vidéos de sortie
         """
         try:
             url = f"{self.config.base_url}/history/{workflow_id}"
@@ -505,6 +507,7 @@ class ComfyUIClient:
 
                     images = []
                     for node_id, node_outputs in outputs.items():
+                        # Chercher les images (SaveImage nodes)
                         if "images" in node_outputs:
                             for image_info in node_outputs["images"]:
                                 # Télécharger l'image
@@ -521,8 +524,26 @@ class ComfyUIClient:
                                     }
                                 )
 
+                        # Chercher les vidéos/GIFs (VHS_VideoCombine nodes)
+                        if "gifs" in node_outputs:
+                            for video_info in node_outputs["gifs"]:
+                                # Télécharger la vidéo
+                                video_data = await self._download_image(
+                                    video_info["filename"], video_info["subfolder"]
+                                )
+
+                                images.append(
+                                    {
+                                        "node_id": node_id,
+                                        "filename": video_info["filename"],
+                                        "data": video_data,
+                                        "type": video_info.get("type", "output"),
+                                        "format": video_info.get("format", "video/mp4"),
+                                    }
+                                )
+
                     logger.info(
-                        f"Récupéré {len(images)} images pour workflow {workflow_id[:8]}"
+                        f"Récupéré {len(images)} fichiers (images/vidéos) pour workflow {workflow_id[:8]}"
                     )
                     return images
                 else:
