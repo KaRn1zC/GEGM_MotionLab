@@ -235,6 +235,11 @@ class ComfyUIClient:
         try:
             async for message in self.websocket:
                 try:
+                    # Vérifier si le message est binaire
+                    if isinstance(message, bytes):
+                        logger.debug("Message binaire reçu (probablement une image preview)")
+                        continue
+
                     data = json.loads(message)
                     message_type = data.get("type", "unknown")
 
@@ -247,7 +252,7 @@ class ComfyUIClient:
                         logger.debug(f"Type de message non géré: {message_type}")
 
                 except json.JSONDecodeError as e:
-                    logger.error(f"Erreur de décodage JSON: {e}")
+                    logger.debug(f"Message non-JSON ignoré (probablement binaire)")
                 except Exception as e:
                     logger.error(f"Erreur lors du traitement du message: {e}")
 
@@ -270,7 +275,14 @@ class ComfyUIClient:
 
         if workflow_id and workflow_id in self.active_workflows:
             workflow = self.active_workflows[workflow_id]
-            workflow.progress = progress_data.get("value", 0.0)
+            raw_progress = progress_data.get("value", 0.0)
+
+            # Normaliser la progression (ComfyUI peut envoyer 0-100 ou 0-1)
+            if raw_progress > 1.0:
+                workflow.progress = raw_progress / 100.0
+            else:
+                workflow.progress = raw_progress
+
             workflow.current_node = progress_data.get("node")
 
             logger.info(
@@ -285,6 +297,14 @@ class ComfyUIClient:
 
         if workflow_id and workflow_id in self.active_workflows:
             workflow = self.active_workflows[workflow_id]
+
+            # Si node_id est None, cela signifie que le workflow est terminé
+            if node_id is None:
+                workflow.status = "completed"
+                workflow.end_time = datetime.now()
+                logger.info(f"✅ Workflow {workflow_id[:8]} terminé avec succès")
+                return
+
             workflow.current_node = node_id
             workflow.status = "running"
 
