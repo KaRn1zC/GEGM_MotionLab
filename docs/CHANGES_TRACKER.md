@@ -10,64 +10,35 @@
 
 ## 📅 Modifications récentes
 
-### [2025-12-01 14:00] - Support récupération vidéos (clé "gifs")
+### [2025-12-01 16:30] - Correction durée vidéo (limites frames/fps workflows)
 
-**Problème** : Workflow terminé avec succès mais "Aucune vidéo générée"
-- Workflow ComfyUI se termine correctement
-- Fonction `get_output_images()` retourne 0 fichiers
-- Erreur : "Récupéré 0 images pour workflow"
+**Problème** : Vidéos générées trop courtes malgré paramètres corrects
+- Demande utilisateur : 5 secondes @ 24fps (120 frames)
+- Résultat obtenu : ~1 seconde seulement
+- Artéfacts visuels présents avec upscale 4K
 
 **Cause identifiée** :
-- Node `VHS_VideoCombine` génère des vidéos avec la clé **"gifs"** (standard VideoHelperSuite)
-- La fonction `get_output_images()` cherchait uniquement la clé **"images"** (SaveImage nodes)
-- Les vidéos MP4 générées n'étaient pas détectées
+- **Workflow manager** : Clamp automatique des valeurs entières au `max` du template (lignes 284-291)
+- **wan22_with_upscale.json** : `max: 32` frames (insuffisant pour 5s)
+- **wan22_i2v.json** : `max: 48` frames (insuffisant pour 5s)
+- Calcul : 120 frames demandés → clampés à 32 → 32/24fps = 1.33 secondes
 
 **Solution implémentée** :
-- Ajout support clé "gifs" dans `get_output_images()`
-- Fonction renommée conceptuellement pour gérer images ET vidéos
-- Détection automatique du format (images ou vidéos)
+- Augmentation limites `frames` : 32/48 → **240** (permet 10s @ 24fps)
+- Augmentation limites `fps` : 24/30 → **60** (permet slow-motion fluide)
 
 **Fichiers modifiés** :
-- `src/comfyui_client.py` lignes 487-546 : Support "gifs" + "images"
+- `workflows/templates/wan22_with_upscale.json` lignes 52-65 : max frames 32→240, max fps 24→60
+- `workflows/templates/wan22_i2v.json` lignes 44-57 : max frames 48→240, max fps 30→60
 
 **Impact** :
-- ✅ Vidéos MP4 correctement récupérées depuis VHS_VideoCombine
-- ✅ Compatible images (SaveImage) et vidéos (VHS_VideoCombine)
-- ✅ Génération cinemagraph fonctionnelle de bout en bout
+- ✅ Vidéos générées respectent la durée demandée (5s = 120 frames @ 24fps)
+- ✅ Support vidéos longues jusqu'à 10 secondes @ 24fps (240 frames)
+- ✅ Support slow-motion/high framerate jusqu'à 60fps
+- ⚠️ Artefacts visuels nécessitent investigation séparée (compression H264, qualité upscale)
 
 ---
 
-### [2025-12-01 13:00] - Correction détection fin workflow et gestion WebSocket
-
-**Problème CRITIQUE** : Workflow bloqué indéfiniment sans jamais se terminer
-- Workflow reste en état "processing" jusqu'au timeout (600s)
-- Erreurs UTF-32 répétées: `'utf-32-be' codec can't decode bytes...`
-- Progressions aberrantes affichées (10000%, 80000%, etc.)
-- Log "Exécution nœud None" sans action
-
-**Cause identifiée** :
-1. **Détection de fin manquante** : ComfyUI envoie `executing` avec `node = null` pour signaler la fin, mais le code ne détectait pas ce signal
-2. **Messages binaires** : Tentative de décoder tous les messages WebSocket comme JSON texte (ComfyUI envoie aussi des images preview)
-3. **Normalisation progression** : ComfyUI envoie parfois des valeurs 0-100 (déjà en %), affichées avec `.1%` qui multiplie par 100
-
-**Solution implémentée** :
-- **Détection fin workflow** : Check `node_id is None` → marquer workflow "completed"
-- **Skip messages binaires** : Vérifier `isinstance(message, bytes)` et ignorer proprement
-- **Normalisation progression** : Diviser par 100 si valeur > 1.0
-
-**Fichiers modifiés** :
-- `src/comfyui_client.py` lignes 236-257 : Gestion messages binaires
-- `src/comfyui_client.py` lignes 271-290 : Normalisation progression
-- `src/comfyui_client.py` lignes 292-314 : Détection fin workflow (CRITIQUE)
-
-**Impact** :
-- ✅ Workflow se termine immédiatement après génération (au lieu de timeout 10min)
-- ✅ Plus d'erreurs UTF-32 dans les logs
-- ✅ Progressions normalisées (0-100%)
-- ✅ Log clair "✅ Workflow terminé avec succès"
-- 🚀 Génération de cinemagraph fonctionnelle de bout en bout
-
----
 
 ## 📝 Template pour nouvelle entrée
 

@@ -45,15 +45,15 @@
       "type": "integer",
       "default": 16,
       "min": 8,
-      "max": 48,
-      "description": "Nombre de frames de la vidéo"
+      "max": 240,
+      "description": "Nombre de frames (240 = 10s @ 24fps)"
     },
     "fps": {
       "type": "integer",
       "default": 8,
       "min": 4,
-      "max": 30,
-      "description": "Frames par seconde"
+      "max": 60,
+      "description": "Frames par seconde (60 pour slow-motion)"
     },
     "width": {
       "type": "integer",
