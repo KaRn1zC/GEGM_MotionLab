@@ -10,6 +10,36 @@
 
 ## 📅 Modifications récentes
 
+### [2025-12-01 11:30] - Correction alignement dimensions: 16 → 32
+
+**Problème** : RuntimeError "The size of tensor a (2464) must match the size of tensor b (2520)"
+- Image redimensionnée à 720x448 (multiple de 16)
+- VAE avec `spatial_compress_level: 1` convertissait automatiquement 720 → 704 (multiple de 32)
+- Node `WanVideoEmptyEmbeds` recevait width=720 mais VAE attendait width=704
+- Mismatch: 44 latents (704/16) vs 45 latents (720/16)
+
+**Cause identifiée** :
+- Avec `spatial_compress_level: 1`, le VAE nécessite des dimensions **multiples de 32**, pas 16
+- VAE_STRIDE = (4, 8, 8), mais compression spatiale level 1 double le facteur → (4, 16, 16)
+- Workflow officiel 5B utilise 832x480 (tous deux multiples de 32!)
+
+**Solution implémentée** :
+- Modifié `web_interface/routes.py` lignes 40-42, 126-128
+- Changé facteur d'alignement de 16 → **32** dans `round_to_multiple()` et `adjust_dimension()`
+- Ajouté commentaires explicatifs sur `spatial_compress_level=1`
+- Mis à jour docstrings
+
+**Fichiers modifiés** :
+- `web_interface/routes.py` : Alignement 16 → 32
+
+**Impact** :
+- ✅ Résout définitivement le mismatch tensoriel avec spatial_compress_level=1
+- ✅ Dimensions automatiquement ajustées aux multiples de 32
+- ✅ Compatible avec workflow officiel 5B (832x480)
+- 📐 Exemple: 720x450 → **704x448** (au lieu de 720x448)
+
+---
+
 ### [2025-11-28 16:00] - Système universel images avec redimensionnement physique
 
 **Problème** : Mismatch tensoriel persistant malgré ajustement paramètres

@@ -32,13 +32,13 @@ def calculate_optimal_resolution(
         target_width, target_height: Résolution demandée
 
     Returns:
-        (final_width, final_height): Résolution ajustée (multiple de 8)
+        (final_width, final_height): Résolution ajustée (multiple de 32)
     """
     # Ratio de l'image source
     source_ratio = source_width / source_height
 
-    # Arrondir à un multiple de 16 (requis par le VAE WAN 2.2)
-    def round_to_multiple(value, multiple=16):
+    # Arrondir à un multiple de 32 (requis par le VAE WAN 2.2 avec spatial_compress_level=1)
+    def round_to_multiple(value, multiple=32):
         return int(round(value / multiple) * multiple)
 
     # Calculer selon le ratio source
@@ -121,10 +121,11 @@ async def process_cinemagraph_generation(job_id: str):
         # Calculer le ratio d'agrandissement
         scale_ratio = (target_width * target_height) / (source_width * source_height)
 
-        # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 16)
+        # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
+        # Note: Avec spatial_compress_level=1, le VAE nécessite des multiples de 32
         def adjust_dimension(value):
-            """Ajuste une dimension pour qu'elle soit un multiple de 16"""
-            return int(round(value / 16) * 16)
+            """Ajuste une dimension pour qu'elle soit un multiple de 32"""
+            return int(round(value / 32) * 32)
 
         # Ajuster dimensions source
         adjusted_source_width = adjust_dimension(source_width)
