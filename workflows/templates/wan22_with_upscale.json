@@ -53,15 +53,15 @@
       "type": "integer",
       "default": 16,
       "min": 8,
-      "max": 32,
-      "description": "Nombre de frames"
+      "max": 240,
+      "description": "Nombre de frames (240 = 10s @ 24fps)"
     },
     "fps": {
       "type": "integer",
       "default": 8,
       "min": 4,
-      "max": 24,
-      "description": "FPS de sortie"
+      "max": 60,
+      "description": "FPS de sortie (60 pour slow-motion)"
     },
     "seed": {
       "type": "integer",

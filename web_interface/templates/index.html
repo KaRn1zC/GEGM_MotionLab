@@ -678,7 +678,7 @@
                                     class="flex items-center justify-center bg-red-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-red-700 transition">
                                 🗑️ Supprimer
                             </button>
-                            <button id="newBtn" onclick="location.reload()"
+                            <button id="newBtn" onclick="startNewGeneration()"
                                     class="flex items-center justify-center bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-gray-700 transition">
                                 🔄 Nouvelle
                             </button>
@@ -1273,6 +1273,26 @@
             } catch (error) {
                 alert('❌ Erreur lors de la suppression: ' + error.message);
             }
+        }
+
+        // ============================================
+        // Nouvelle Génération
+        // ============================================
+
+        function startNewGeneration() {
+            // Cacher la carte de résultats
+            resultCard.classList.add('hidden');
+
+            // Réinitialiser l'état
+            currentJobId = null;
+
+            // Remonter en haut de la page pour voir le formulaire
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // Message de confirmation
+            setTimeout(() => {
+                alert('✨ Interface réinitialisée ! Vous pouvez démarrer une nouvelle génération.');
+            }, 300);
         }
 
     </script>

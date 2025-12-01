@@ -36,10 +36,14 @@ def create_app(config_name="default"):
     app = Flask(__name__, template_folder="templates", static_folder="static")
 
     # Configuration de base
+    # Chemin absolu pour uploads (éviter les doublons de chemin)
+    # Si lancé depuis /workspace, cwd = /workspace
+    upload_folder = os.path.join(os.getcwd(), "web_interface", "uploads")
+
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret-key-change-in-production"),
         MAX_CONTENT_LENGTH=100 * 1024 * 1024,  # 100MB max upload
-        UPLOAD_FOLDER="web_interface/uploads",
+        UPLOAD_FOLDER=upload_folder,
         ALLOWED_EXTENSIONS={"png", "jpg", "jpeg", "webp"},
         JSON_SORT_KEYS=False,
         JSONIFY_PRETTYPRINT_REGULAR=True,
