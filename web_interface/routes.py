@@ -19,7 +19,6 @@ from workflows.workflow_manager import workflow_manager
 from web_interface.jobs import JobStatus
 
 from PIL import Image
-import math
 
 
 def calculate_optimal_resolution(
@@ -33,14 +32,14 @@ def calculate_optimal_resolution(
         target_width, target_height: Résolution demandée
 
     Returns:
-        (final_width, final_height): Résolution ajustée (multiple de 8)
+        (final_width, final_height): Résolution ajustée (multiple de 32)
     """
     # Ratio de l'image source
     source_ratio = source_width / source_height
 
-    # Arrondir à un multiple de 8 (requis par les modèles de diffusion)
-    def round_to_multiple(value, multiple=8):
-        return int(math.ceil(value / multiple) * multiple)
+    # Arrondir à un multiple de 32 (requis par le VAE WAN 2.2 avec spatial_compress_level=1)
+    def round_to_multiple(value, multiple=32):
+        return int(round(value / multiple) * multiple)
 
     # Calculer selon le ratio source
     if target_width / target_height > source_ratio:
@@ -122,31 +121,86 @@ async def process_cinemagraph_generation(job_id: str):
         # Calculer le ratio d'agrandissement
         scale_ratio = (target_width * target_height) / (source_width * source_height)
 
+        # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
+        # Note: Avec spatial_compress_level=1, le VAE nécessite des multiples de 32
+        def adjust_dimension(value):
+            """Ajuste une dimension pour qu'elle soit un multiple de 32"""
+            return int(round(value / 32) * 32)
+
+        # Ajuster dimensions source
+        adjusted_source_width = adjust_dimension(source_width)
+        adjusted_source_height = adjust_dimension(source_height)
+
+        # Ajuster dimensions cibles
+        adjusted_target_width = adjust_dimension(target_width)
+        adjusted_target_height = adjust_dimension(target_height)
+
+        # Redimensionner l'image si nécessaire pour compatibilité WAN 2.2
+        image_to_upload = job.input_image
+        needs_resize = (
+            adjusted_source_width != source_width
+            or adjusted_source_height != source_height
+        )
+
+        if needs_resize:
+            logger.info(
+                f"📐 Redimensionnement de l'image pour compatibilité WAN 2.2: "
+                f"{source_width}x{source_height} → {adjusted_source_width}x{adjusted_source_height}"
+            )
+
+            # Créer une copie redimensionnée temporaire
+            with Image.open(job.input_image) as img:
+                # Redimensionner avec LANCZOS pour meilleure qualité
+                resized_img = img.resize(
+                    (adjusted_source_width, adjusted_source_height),
+                    Image.Resampling.LANCZOS,
+                )
+
+                # Créer le nom du fichier redimensionné
+                resized_path = (
+                    img_path.parent / f"{img_path.stem}_resized{img_path.suffix}"
+                )
+
+                # Sauvegarder l'image redimensionnée
+                resized_img.save(resized_path, quality=95)
+
+                logger.info(
+                    f"   ✅ Image redimensionnée sauvegardée: {resized_path.name}"
+                )
+
+            # Utiliser l'image redimensionnée pour l'upload
+            image_to_upload = resized_path
+            upload_filename = resized_path.name
+        else:
+            upload_filename = img_path.name
+
         # Sélectionner le workflow
         if scale_ratio > 1.5:  # Besoin d'upscale intelligent
             selected_workflow = "wan22_with_upscale"
             logger.info(f"🔍 Upscale automatique activé (ratio: {scale_ratio:.2f}x)")
 
-            # IMPORTANT : Pour le workflow upscale, utiliser les dimensions SOURCE pour la génération
+            # IMPORTANT : Pour le workflow upscale, utiliser les dimensions SOURCE ajustées pour la génération
             # L'upscaling vers les dimensions CIBLES sera fait par RealESRGAN (node 11)
             workflow_params = {
-                "input_image": img_path.name,
+                "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
-                "width": source_width,  # Générer à résolution source
-                "height": source_height,  # Upscale sera fait après
+                "width": adjusted_source_width,  # Générer à résolution source ajustée
+                "height": adjusted_source_height,  # Upscale sera fait après
             }
         else:
             selected_workflow = "wan22_i2v"
             logger.info(f"✅ Génération standard (ratio: {scale_ratio:.2f}x)")
 
-            # Pour génération standard, utiliser les dimensions demandées
+            # Pour génération standard, utiliser les dimensions ajustées
             workflow_params = {
-                "input_image": img_path.name,
+                "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
+                "width": adjusted_target_width,
+                "height": adjusted_target_height,
             }
 
         workflow = workflow_manager.create_workflow(selected_workflow, workflow_params)
@@ -157,13 +211,13 @@ async def process_cinemagraph_generation(job_id: str):
         )
 
         async with ComfyUISession(comfyui_config) as client:
-            # Upload de l'image
-            with open(job.input_image, "rb") as f:
+            # Upload de l'image (originale ou redimensionnée)
+            with open(image_to_upload, "rb") as f:
                 image_data = f.read()
 
             # Lancer le workflow
             comfyui_workflow_id = await client.queue_prompt(
-                workflow, images={Path(job.input_image).name: image_data}
+                workflow, images={upload_filename: image_data}
             )
 
             job_manager.update_job(job_id, workflow_id=comfyui_workflow_id)
@@ -210,6 +264,17 @@ async def process_cinemagraph_generation(job_id: str):
 
         logger.error(traceback.format_exc())
         job_manager.update_job(job_id, status=JobStatus.FAILED, error_message=str(e))
+
+    finally:
+        # Nettoyer l'image redimensionnée temporaire si elle existe
+        if needs_resize and image_to_upload.exists():
+            try:
+                image_to_upload.unlink()
+                logger.debug(f"   🗑️ Image temporaire supprimée: {image_to_upload.name}")
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"   ⚠️ Impossible de supprimer {image_to_upload}: {cleanup_error}"
+                )
 
 
 # === ROUTES PRINCIPALES ===
@@ -291,11 +356,14 @@ def calc_resolution():
             source_w, source_h, target_w, target_h
         )
 
+        # Protection contre division par zéro
+        ratio = round(final_w / final_h, 2) if final_h > 0 else 0
+
         return jsonify(
             {
                 "final_width": final_w,
                 "final_height": final_h,
-                "ratio": round(final_w / final_h, 2),
+                "ratio": ratio,
                 "adjusted": (final_w != target_w or final_h != target_h),
             }
         )
