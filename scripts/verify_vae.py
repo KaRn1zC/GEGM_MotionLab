@@ -35,7 +35,7 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         expected_size_min = 0.5  # ~600 MB
         expected_size_max = 1.5
     elif model_name == "wan2.2-i2v-a14b":
-        vae_file = model_dir / "wan_2.1_vae.safetensors"
+        vae_file = model_dir / "wan2.2_vae.safetensors"
         expected_size_min = 0.5  # ~600 MB
         expected_size_max = 1.5
     else:

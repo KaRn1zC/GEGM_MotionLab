@@ -1,7 +1,7 @@
 {
-  "name": "WAN 2.2 + Pyramid Upscale",
-  "description": "Pipeline complet : génération + upscaling haute qualité - Version corrigée",
-  "version": "2.0.0",
+  "name": "WAN 2.2 + UltraSharp Upscale",
+  "description": "Pipeline complet : génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
+  "version": "3.0.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
 
@@ -81,7 +81,26 @@
       "default": 480,
       "min": 64,
       "max": 2160,
-      "description": "Hauteur de la vidéo"
+      "description": "Hauteur de génération WAN 2.2"
+    },
+    "target_width": {
+      "type": "integer",
+      "default": 1920,
+      "min": 64,
+      "max": 7680,
+      "description": "Largeur finale après upscale"
+    },
+    "target_height": {
+      "type": "integer",
+      "default": 1080,
+      "min": 64,
+      "max": 4320,
+      "description": "Hauteur finale après upscale"
+    },
+    "enable_vae_tiling": {
+      "type": "boolean",
+      "default": false,
+      "description": "Activer VAE tiling pour grandes résolutions"
     }
   },
 
@@ -189,6 +208,16 @@
         "image": ["9", 0]
       }
     },
+    "11b": {
+      "class_type": "ImageScale",
+      "inputs": {
+        "image": ["11", 0],
+        "width": "{target_width}",
+        "height": "{target_height}",
+        "upscale_method": "lanczos",
+        "crop": "disabled"
+      }
+    },
     "12": {
       "class_type": "VHS_VideoCombine",
       "inputs": {
@@ -199,7 +228,7 @@
         "crf": 18,
         "pingpong": false,
         "save_output": true,
-        "images": ["11", 0]
+        "images": ["11b", 0]
       }
     }
   },

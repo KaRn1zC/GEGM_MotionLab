@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-03
+**Dernière mise à jour** : 2025-12-03 (v3.7.0 - Système upscale adaptatif)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---

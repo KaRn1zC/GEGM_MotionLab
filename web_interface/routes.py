@@ -19,6 +19,99 @@ from workflows.workflow_manager import workflow_manager
 from web_interface.jobs import JobStatus
 
 from PIL import Image
+import uuid
+
+
+def resize_image_with_ultrasharp(
+    input_image_path: Path,
+    target_width: int,
+    target_height: int,
+    comfyui_client: "ComfyUISession",
+) -> Path:
+    """
+    Redimensionne une image avec UltraSharp 4x + downscale Lanczos.
+
+    Processus :
+    1. Upscale 4x avec UltraSharp (IA)
+    2. Downscale/Upscale avec Lanczos vers target exacte
+
+    Args:
+        input_image_path: Chemin de l'image source
+        target_width: Largeur cible
+        target_height: Hauteur cible
+        comfyui_client: Client ComfyUI connecté
+
+    Returns:
+        Path vers l'image redimensionnée
+    """
+    logger = get_logger("resize_ultrasharp")
+
+    # Créer mini-workflow pour upscale + resize
+    workflow_id = str(uuid.uuid4())[:8]
+
+    workflow = {
+        "1": {"class_type": "LoadImage", "inputs": {"image": input_image_path.name}},
+        "2": {
+            "class_type": "UpscaleModelLoader",
+            "inputs": {"model_name": "4x-UltraSharp.pth"},
+        },
+        "3": {
+            "class_type": "ImageUpscaleWithModel",
+            "inputs": {"upscale_model": ["2", 0], "image": ["1", 0]},
+        },
+        "4": {
+            "class_type": "ImageScale",
+            "inputs": {
+                "image": ["3", 0],
+                "width": target_width,
+                "height": target_height,
+                "upscale_method": "lanczos",
+                "crop": "disabled",
+            },
+        },
+        "5": {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["4", 0], "filename_prefix": f"resized_{workflow_id}"},
+        },
+    }
+
+    logger.info(
+        f"🔧 Redimensionnement UltraSharp: {input_image_path.name} → {target_width}x{target_height}"
+    )
+
+    # Exécuter le workflow synchrone
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        # Soumettre workflow
+        prompt_id = loop.run_until_complete(comfyui_client.queue_workflow(workflow))
+
+        # Attendre completion (timeout 60s suffisant pour resize)
+        loop.run_until_complete(comfyui_client.wait_for_workflow(prompt_id, timeout=60))
+
+        # Récupérer l'image résultante
+        outputs = loop.run_until_complete(comfyui_client.get_output_images(prompt_id))
+
+        if not outputs:
+            raise RuntimeError("Aucune image générée par le workflow de resize")
+
+        # L'image est dans le dossier output de ComfyUI
+        output_dir = (
+            Path("/workspace/comfyui/ComfyUI/output")
+            if Path("/workspace").exists()
+            else Path("output")
+        )
+        resized_image = output_dir / outputs[0]["filename"]
+
+        if not resized_image.exists():
+            raise RuntimeError(f"Image redimensionnée non trouvée: {resized_image}")
+
+        logger.success(f"✅ Image redimensionnée: {resized_image.name}")
+        return resized_image
+
+    finally:
+        loop.close()
 
 
 def calculate_optimal_resolution(
@@ -224,9 +317,6 @@ async def process_cinemagraph_generation(job_id: str):
         target_width = job.parameters.get("width", source_width)
         target_height = job.parameters.get("height", source_height)
 
-        # # Calculer le ratio d'agrandissement # A supprimer ?
-        # scale_ratio = (target_width * target_height) / (source_width * source_height) # A supprimer ?
-
         # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
         # Note: Avec spatial_compress_level=1, le VAE nécessite des multiples de 32
         def adjust_dimension(value):
@@ -241,45 +331,6 @@ async def process_cinemagraph_generation(job_id: str):
         adjusted_target_width = adjust_dimension(target_width)
         adjusted_target_height = adjust_dimension(target_height)
 
-        # Redimensionner l'image si nécessaire pour compatibilité WAN 2.2
-        image_to_upload = job.input_image
-        needs_resize = (
-            adjusted_source_width != source_width
-            or adjusted_source_height != source_height
-        )
-
-        if needs_resize:
-            logger.info(
-                f"📐 Redimensionnement de l'image pour compatibilité WAN 2.2: "
-                f"{source_width}x{source_height} → {adjusted_source_width}x{adjusted_source_height}"
-            )
-
-            # Créer une copie redimensionnée temporaire
-            with Image.open(job.input_image) as img:
-                # Redimensionner avec LANCZOS pour meilleure qualité
-                resized_img = img.resize(
-                    (adjusted_source_width, adjusted_source_height),
-                    Image.Resampling.LANCZOS,
-                )
-
-                # Créer le nom du fichier redimensionné
-                resized_path = (
-                    img_path.parent / f"{img_path.stem}_resized{img_path.suffix}"
-                )
-
-                # Sauvegarder l'image redimensionnée
-                resized_img.save(resized_path, quality=95)
-
-                logger.info(
-                    f"   ✅ Image redimensionnée sauvegardée: {resized_path.name}"
-                )
-
-            # Utiliser l'image redimensionnée pour l'upload
-            image_to_upload = resized_path
-            upload_filename = resized_path.name
-        else:
-            upload_filename = img_path.name
-
         # Calculer la stratégie de génération optimale
         strategy = calculate_optimal_generation_strategy(
             adjusted_source_width,
@@ -292,21 +343,108 @@ async def process_cinemagraph_generation(job_id: str):
         generation_height = strategy["generation_height"]
         upscale_ratio = strategy["upscale_ratio"]
 
+        # Déterminer si on doit redimensionner l'image AVANT génération
+        # Cas 1: Ajustement aux multiples de 32 (source → adjusted_source)
+        # Cas 2: Upscale pour génération optimale (adjusted_source → generation)
+        needs_resize_to_adjusted = (
+            adjusted_source_width != source_width
+            or adjusted_source_height != source_height
+        )
+        needs_upscale_for_generation = (
+            generation_width > adjusted_source_width
+            or generation_height > adjusted_source_height
+        )
+
+        image_to_upload = job.input_image
+        upload_filename = img_path.name
+
+        # Étape 1: Ajustement multiples de 32 si nécessaire (LANCZOS rapide)
+        if needs_resize_to_adjusted:
+            logger.info(
+                f"📐 Ajustement multiples de 32: "
+                f"{source_width}x{source_height} → {adjusted_source_width}x{adjusted_source_height}"
+            )
+
+            with Image.open(job.input_image) as img:
+                resized_img = img.resize(
+                    (adjusted_source_width, adjusted_source_height),
+                    Image.Resampling.LANCZOS,
+                )
+
+                adjusted_path = (
+                    img_path.parent / f"{img_path.stem}_adjusted{img_path.suffix}"
+                )
+
+                resized_img.save(adjusted_path, quality=95)
+                logger.info(f"   ✅ Image ajustée: {adjusted_path.name}")
+
+            image_to_upload = adjusted_path
+            upload_filename = adjusted_path.name
+
+        # Étape 2: Upscale pour génération optimale (UltraSharp + Lanczos)
+        if needs_upscale_for_generation:
+            logger.info(
+                f"🎨 Upscale pré-génération (UltraSharp 4x + Lanczos): "
+                f"{adjusted_source_width}x{adjusted_source_height} → {generation_width}x{generation_height}"
+            )
+
+            # Créer client ComfyUI temporaire pour le resize
+            comfyui_client = ComfyUISession(config=current_app.config["comfyui_config"])
+
+            try:
+                # Connecter au serveur ComfyUI
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(comfyui_client.connect())
+
+                # Upscaler avec UltraSharp
+                upscaled_path = resize_image_with_ultrasharp(
+                    input_image_path=image_to_upload,
+                    target_width=generation_width,
+                    target_height=generation_height,
+                    comfyui_client=comfyui_client,
+                )
+
+                image_to_upload = upscaled_path
+                upload_filename = upscaled_path.name
+
+                logger.success(
+                    f"✅ Image upscalée pour génération optimale: {upload_filename}"
+                )
+
+            finally:
+                loop.run_until_complete(comfyui_client.disconnect())
+                loop.close()
+
         # Logger la stratégie choisie
-        logger.info("📐 Stratégie de génération optimale:")
-        logger.info(f"   Source: {adjusted_source_width}x{adjusted_source_height}")
+        logger.info("📐 Stratégie de génération complète:")
+        logger.info(f"   Image source originale: {source_width}x{source_height}")
         logger.info(
-            f"   Cible: {adjusted_target_width}x{adjusted_target_height} (ratio total: {strategy['total_ratio']:.2f}x)"
+            f"   Image ajustée (×32): {adjusted_source_width}x{adjusted_source_height}"
         )
         logger.info(f"   Génération WAN 2.2: {generation_width}x{generation_height}")
         logger.info(
-            f"   Upscale: {generation_width}x{generation_height} → {adjusted_target_width}x{adjusted_target_height} ({upscale_ratio:.2f}x)"
+            f"   Résolution finale: {adjusted_target_width}x{adjusted_target_height}"
         )
-        logger.info(f"   {strategy['strategy']}")
 
-        # Avertissement si ratio upscale extrême
-        if strategy["quality_warning"]:
-            logger.warning(strategy["quality_warning"])
+        # Messages sur l'upscale post-génération
+        if upscale_ratio > 1.5:
+            logger.info(
+                f"   Upscale post-génération: {generation_width}x{generation_height} → "
+                f"{adjusted_target_width}x{adjusted_target_height} ({upscale_ratio:.2f}x)"
+            )
+
+            if upscale_ratio <= 4.0:
+                logger.success(
+                    f"   ✅ Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - 4x-UltraSharp + affinage Lanczos"
+                )
+            else:
+                logger.warning(
+                    f"   ⚠️  Upscale élevé ({upscale_ratio:.2f}x > 4x) - 4x UltraSharp + {upscale_ratio / 4:.2f}x Lanczos supplémentaire"
+                )
+                logger.warning(
+                    "   Des artefacts peuvent apparaître au-delà de 4x. Qualité optimale garantie jusqu'à 4x."
+                )
 
         # Calculer si VAE tiling doit être activé (pour résolutions >1080p ou upscale >4x)
         target_pixels = adjusted_target_width * adjusted_target_height
@@ -320,14 +458,16 @@ async def process_cinemagraph_generation(job_id: str):
             )
 
             # Pour le workflow upscale, utiliser la résolution de génération optimale calculée
-            # L'upscaling sera fait par 4x-UltraSharp (node 11)
+            # L'upscaling sera fait par 4x-UltraSharp (node 11) + resize Lanczos (node 11b)
             workflow_params = {
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
-                "width": generation_width,  # Résolution optimale calculée
+                "width": generation_width,  # Résolution génération WAN 2.2
                 "height": generation_height,
+                "target_width": adjusted_target_width,  # Résolution finale après upscale
+                "target_height": adjusted_target_height,
                 "enable_vae_tiling": enable_vae_tiling,
             }
 
@@ -418,8 +558,10 @@ async def process_cinemagraph_generation(job_id: str):
         job_manager.update_job(job_id, status=JobStatus.FAILED, error_message=str(e))
 
     finally:
-        # Nettoyer l'image redimensionnée temporaire si elle existe
-        if needs_resize and image_to_upload.exists():
+        # Nettoyer les images redimensionnées temporaires si elles existent
+        if (
+            needs_resize_to_adjusted or needs_upscale_for_generation
+        ) and image_to_upload.exists():
             try:
                 image_to_upload.unlink()
                 logger.debug(f"   🗑️ Image temporaire supprimée: {image_to_upload.name}")
