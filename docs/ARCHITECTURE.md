@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-01
+**Dernière mise à jour** : 2025-12-03
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -83,8 +83,9 @@
 - **Fichiers** :
   - `wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors`
   - `wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors`
-- **Résolution max** : 4K
+- **Résolution max native** : **720p** (identique 5B, upscale requis pour >720p)
 - **GPU** : H100 SXM 80GB
+- **Qualité** : Supérieure au 5B (MoE architecture)
 - **Template** : `wan22_with_upscale.json`
 
 ### T5 Encoder (partagé 5B/14B)
@@ -109,13 +110,6 @@
 └── config.json
 ```
 
-### Symlinks T5
-```
-/workspace/comfyui/ComfyUI/models/text_encoders/t5/
-├── umt5_xxl_fp16.safetensors → (source)
-└── umt5-xxl-enc-bf16.pth → (compatibilité)
-```
-
 ### Output
 ```
 /app/output/        # Vidéos générées
@@ -132,7 +126,7 @@
 3. Reconstitution fichiers découpés
 4. Vérification intégrité (diffusion + T5 FP16)
 5. Configuration symlinks (modèles, VAE, T5)
-6. Download CLIP Vision + RealESRGAN
+6. Download CLIP Vision + modèles upscale (4x-UltraSharp, RealESRGAN backup)
 7. Démarrage ComfyUI (port 8188)
 8. Health check (180s timeout)
 9. Démarrage Flask (port 5000)
@@ -174,13 +168,9 @@ COMFYUI_PORT=8188
 
 ---
 
-## Notes importantes
+## Points critiques
 
 1. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
 2. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 600s)
-3. **Messages binaires WebSocket** : Ignorer proprement les images preview pour éviter erreurs UTF-32
-4. **T5 FP16** : Utilise FP16 (11.4 GB) officiellement supporté par WanVideoWrapper
-5. **Workflows JSON** : Référencent les vrais fichiers `.safetensors` (pas de symlinks artificiels)
-6. **Pas de patch nécessaire** : Architecture simplifiée, chargement natif
-7. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
-8. **VRAM** : 48GB minimum (5B), 80GB (14B)
+3. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
+4. **VRAM** : 48GB minimum (5B), 80GB (14B)
