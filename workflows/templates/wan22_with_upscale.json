@@ -131,7 +131,7 @@
       "inputs": {
         "vae": ["3", 0],
         "image": ["1", 0],
-        "enable_vae_tiling": false,
+        "enable_vae_tiling": "{enable_vae_tiling}",
         "tile_x": 272,
         "tile_y": 272,
         "tile_stride_x": 144,
@@ -169,7 +169,7 @@
       "inputs": {
         "vae": ["3", 0],
         "samples": ["8", 0],
-        "enable_vae_tiling": false,
+        "enable_vae_tiling": "{enable_vae_tiling}",
         "tile_x": 272,
         "tile_y": 272,
         "tile_stride_x": 144,
@@ -179,7 +179,7 @@
     "10": {
       "class_type": "UpscaleModelLoader",
       "inputs": {
-        "model_name": "RealESRGAN_x4plus.pth"
+        "model_name": "4x-UltraSharp.pth"
       }
     },
     "11": {
@@ -196,6 +196,7 @@
         "loop_count": 0,
         "filename_prefix": "wan22_upscaled",
         "format": "video/h264-mp4",
+        "crf": 18,
         "pingpong": false,
         "save_output": true,
         "images": ["11", 0]

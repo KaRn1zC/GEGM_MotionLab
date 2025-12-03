@@ -54,6 +54,112 @@ def calculate_optimal_resolution(
     return final_width, final_height
 
 
+def calculate_optimal_generation_strategy(
+    source_width: int,
+    source_height: int,
+    target_width: int,
+    target_height: int,
+) -> dict:
+    """
+    Calcule la stratégie de génération optimale pour minimiser les artefacts d'upscale.
+
+    Specs officielles WAN 2.2 (5B et 14B) :
+    - Résolution max native : 1280x720 (720p)
+    - Sweet spot upscale : 2-4x
+    - Limite acceptable : 8x
+    - Au-delà de 8x : artefacts possibles (mais génération autorisée)
+
+    Args:
+        source_width, source_height: Dimensions image source
+        target_width, target_height: Dimensions cible finales
+
+    Returns:
+        dict: {
+            'generation_width': int,      # Résolution pour WAN 2.2
+            'generation_height': int,
+            'upscale_ratio': float,       # Ratio upscale final
+            'total_ratio': float,         # Ratio source→cible
+            'quality_warning': str|None,  # Warning si ratio extrême
+            'strategy': str              # Description stratégie
+        }
+    """
+    # Constantes officielles
+    WAN22_MAX_WIDTH = 1280
+    WAN22_MAX_HEIGHT = 720
+    WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
+
+    UPSCALE_OPTIMAL_RATIO = 2.5  # Sweet spot (qualité optimale)
+    UPSCALE_MAX_RATIO = 4.0  # Limite qualité acceptable
+    UPSCALE_WARNING_RATIO = 8.0  # Au-delà : avertissement
+
+    # Fonction utilitaire
+    def adjust_to_32(value):
+        return int(round(value / 32) * 32)
+
+    # Calculer ratios
+    source_pixels = source_width * source_height
+    target_pixels = target_width * target_height
+    total_ratio = target_pixels / source_pixels
+    aspect_ratio = source_width / source_height
+
+    # Cas 1 : Pas besoin d'upscale ou upscale modéré (≤4x)
+    if total_ratio <= UPSCALE_MAX_RATIO:
+        gen_w = adjust_to_32(source_width)
+        gen_h = adjust_to_32(source_height)
+        upscale_ratio = (target_width * target_height) / (gen_w * gen_h)
+
+        return {
+            "generation_width": gen_w,
+            "generation_height": gen_h,
+            "upscale_ratio": upscale_ratio,
+            "total_ratio": total_ratio,
+            "quality_warning": None,
+            "strategy": f"Génération à résolution source ({gen_w}x{gen_h}), upscale modéré {upscale_ratio:.1f}x",
+        }
+
+    # Cas 2 : Upscale agressif (>4x)
+    # Calculer résolution intermédiaire optimale
+    optimal_gen_pixels = target_pixels / (UPSCALE_OPTIMAL_RATIO**2)
+
+    # Respecter limite 720p
+    if optimal_gen_pixels > WAN22_MAX_PIXELS:
+        optimal_gen_pixels = WAN22_MAX_PIXELS
+
+    # Calculer dimensions en préservant aspect ratio
+    gen_h = int((optimal_gen_pixels / aspect_ratio) ** 0.5)
+    gen_w = int(gen_h * aspect_ratio)
+
+    # Ajuster aux multiples de 32
+    gen_w = adjust_to_32(gen_w)
+    gen_h = adjust_to_32(gen_h)
+
+    # Double-check : ne pas dépasser 1280x720
+    if gen_w > WAN22_MAX_WIDTH:
+        gen_w = WAN22_MAX_WIDTH
+        gen_h = adjust_to_32(int(WAN22_MAX_WIDTH / aspect_ratio))
+
+    if gen_h > WAN22_MAX_HEIGHT:
+        gen_h = WAN22_MAX_HEIGHT
+        gen_w = adjust_to_32(int(WAN22_MAX_HEIGHT * aspect_ratio))
+
+    # Recalculer ratio upscale final
+    upscale_ratio = (target_width * target_height) / (gen_w * gen_h)
+
+    # Générer warning si ratio extrême
+    quality_warning = None
+    if upscale_ratio > UPSCALE_WARNING_RATIO:
+        quality_warning = f"⚠️ Ratio upscale très élevé ({upscale_ratio:.1f}x). Des artefacts peuvent apparaître. Considérez réduire la résolution cible."
+
+    return {
+        "generation_width": gen_w,
+        "generation_height": gen_h,
+        "upscale_ratio": upscale_ratio,
+        "total_ratio": total_ratio,
+        "quality_warning": quality_warning,
+        "strategy": f"Génération optimisée à {gen_w}x{gen_h} (proche max 720p), upscale {upscale_ratio:.1f}x vers résolution cible",
+    }
+
+
 logger = get_logger("flask_routes")
 
 # Blueprints
@@ -118,8 +224,8 @@ async def process_cinemagraph_generation(job_id: str):
         target_width = job.parameters.get("width", source_width)
         target_height = job.parameters.get("height", source_height)
 
-        # Calculer le ratio d'agrandissement
-        scale_ratio = (target_width * target_height) / (source_width * source_height)
+        # # Calculer le ratio d'agrandissement # A supprimer ?
+        # scale_ratio = (target_width * target_height) / (source_width * source_height) # A supprimer ?
 
         # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
         # Note: Avec spatial_compress_level=1, le VAE nécessite des multiples de 32
@@ -174,34 +280,80 @@ async def process_cinemagraph_generation(job_id: str):
         else:
             upload_filename = img_path.name
 
-        # Sélectionner le workflow
-        if scale_ratio > 1.5:  # Besoin d'upscale intelligent
-            selected_workflow = "wan22_with_upscale"
-            logger.info(f"🔍 Upscale automatique activé (ratio: {scale_ratio:.2f}x)")
+        # Calculer la stratégie de génération optimale
+        strategy = calculate_optimal_generation_strategy(
+            adjusted_source_width,
+            adjusted_source_height,
+            adjusted_target_width,
+            adjusted_target_height,
+        )
 
-            # IMPORTANT : Pour le workflow upscale, utiliser les dimensions SOURCE ajustées pour la génération
-            # L'upscaling vers les dimensions CIBLES sera fait par RealESRGAN (node 11)
+        generation_width = strategy["generation_width"]
+        generation_height = strategy["generation_height"]
+        upscale_ratio = strategy["upscale_ratio"]
+
+        # Logger la stratégie choisie
+        logger.info("📐 Stratégie de génération optimale:")
+        logger.info(f"   Source: {adjusted_source_width}x{adjusted_source_height}")
+        logger.info(
+            f"   Cible: {adjusted_target_width}x{adjusted_target_height} (ratio total: {strategy['total_ratio']:.2f}x)"
+        )
+        logger.info(f"   Génération WAN 2.2: {generation_width}x{generation_height}")
+        logger.info(
+            f"   Upscale: {generation_width}x{generation_height} → {adjusted_target_width}x{adjusted_target_height} ({upscale_ratio:.2f}x)"
+        )
+        logger.info(f"   {strategy['strategy']}")
+
+        # Avertissement si ratio upscale extrême
+        if strategy["quality_warning"]:
+            logger.warning(strategy["quality_warning"])
+
+        # Calculer si VAE tiling doit être activé (pour résolutions >1080p ou upscale >4x)
+        target_pixels = adjusted_target_width * adjusted_target_height
+        enable_vae_tiling = target_pixels > (1920 * 1080) or upscale_ratio > 4.0
+
+        # Sélectionner le workflow
+        if upscale_ratio > 1.5:  # Besoin d'upscale intelligent
+            selected_workflow = "wan22_with_upscale"
+            logger.info(
+                f"🔍 Workflow upscale sélectionné (ratio: {upscale_ratio:.2f}x)"
+            )
+
+            # Pour le workflow upscale, utiliser la résolution de génération optimale calculée
+            # L'upscaling sera fait par 4x-UltraSharp (node 11)
             workflow_params = {
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
-                "width": adjusted_source_width,  # Générer à résolution source ajustée
-                "height": adjusted_source_height,  # Upscale sera fait après
+                "width": generation_width,  # Résolution optimale calculée
+                "height": generation_height,
+                "enable_vae_tiling": enable_vae_tiling,
             }
+
+            if enable_vae_tiling:
+                logger.info(
+                    f"🔧 VAE tiling activé (résolution finale: {adjusted_target_width}x{adjusted_target_height}, upscale: {upscale_ratio:.2f}x)"
+                )
         else:
             selected_workflow = "wan22_i2v"
-            logger.info(f"✅ Génération standard (ratio: {scale_ratio:.2f}x)")
+            logger.info(f"✅ Workflow standard (ratio: {upscale_ratio:.2f}x)")
 
-            # Pour génération standard, utiliser les dimensions ajustées
+            # Pour génération standard, utiliser les dimensions optimales
             workflow_params = {
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
                 **job.parameters,
-                "width": adjusted_target_width,
-                "height": adjusted_target_height,
+                "width": generation_width,
+                "height": generation_height,
+                "enable_vae_tiling": enable_vae_tiling,
             }
+
+            if enable_vae_tiling:
+                logger.info(
+                    f"🔧 VAE tiling activé (résolution: {generation_width}x{generation_height})"
+                )
 
         workflow = workflow_manager.create_workflow(selected_workflow, workflow_params)
 

@@ -135,9 +135,9 @@ if [ "$MODEL" = "all" ]; then
     # 4. VAE 14B
     echo "  4/4: VAE 14B..."
     hf download "$REPO" \
-        split_files/vae/wan_2.1_vae.safetensors \
+        split_files/vae/wan2.2_vae.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/vae/wan_2.1_vae.safetensors" ./models/vae/
+    mv "$TEMP_DL/split_files/vae/wan2.2_vae.safetensors" ./models/vae/
 
     # Nettoyer le dossier temporaire
     rm -rf "$TEMP_DL"
@@ -151,7 +151,7 @@ if [ "$MODEL" = "all" ]; then
     ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-i2v-a14b/
-    ln -sf ../vae/wan_2.1_vae.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-i2v-a14b/
     echo "✅ Symlinks créés"
 
     # Vérification intégrité 14B
@@ -281,9 +281,9 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     # 4. VAE 14B
     echo "  4/4: VAE 14B..."
     hf download "$REPO" \
-        split_files/vae/wan_2.1_vae.safetensors \
+        split_files/vae/wan2.2_vae.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/vae/wan_2.1_vae.safetensors" ./models/vae/
+    mv "$TEMP_DL/split_files/vae/wan2.2_vae.safetensors" ./models/vae/
 
     # Nettoyer le dossier temporaire
     rm -rf "$TEMP_DL"
@@ -297,7 +297,7 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-i2v-a14b/
-    ln -sf ../vae/wan_2.1_vae.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-i2v-a14b/
     echo "✅ Symlinks créés"
 
     # Vérifications

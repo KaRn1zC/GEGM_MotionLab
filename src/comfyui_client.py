@@ -280,10 +280,11 @@ class ComfyUIClient:
             raw_progress = progress_data.get("value", 0.0)
 
             # Normaliser la progression (ComfyUI peut envoyer 0-100 ou 0-1)
+            # Plafonner à 100% pour éviter les progressions aberrantes
             if raw_progress > 1.0:
-                workflow.progress = raw_progress / 100.0
+                workflow.progress = min(raw_progress / 100.0, 1.0)
             else:
-                workflow.progress = raw_progress
+                workflow.progress = min(raw_progress, 1.0)
 
             workflow.current_node = progress_data.get("node")
 

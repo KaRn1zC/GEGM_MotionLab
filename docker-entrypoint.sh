@@ -165,7 +165,7 @@ if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
     VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
     echo "   Chemin source 5B: $VAE_SOURCE"
 elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-    VAE_SOURCE="$MODEL_DIR/wan_2.1_vae.safetensors"
+    VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
     echo "   Chemin source 14B: $VAE_SOURCE"
 fi
 
@@ -228,27 +228,48 @@ else
     echo "✅ CLIP Vision déjà présent: $(du -h $CLIP_VISION_FILE | cut -f1)"
 fi
 
-# Télécharger RealESRGAN si absent
+# Télécharger modèles upscale si absents
 UPSCALE_DIR="/workspace/comfyui/ComfyUI/models/upscale_models"
-UPSCALE_FILE="$UPSCALE_DIR/RealESRGAN_x4plus.pth"
+mkdir -p "$UPSCALE_DIR"
 
-if [ ! -f "$UPSCALE_FILE" ]; then
+# 4x-UltraSharp (meilleure qualité, anti-artefacts)
+ULTRASHARP_FILE="$UPSCALE_DIR/4x-UltraSharp.pth"
+if [ ! -f "$ULTRASHARP_FILE" ]; then
     echo ""
-    echo "📥 Téléchargement de RealESRGAN (requis pour upscale)..."
-    mkdir -p "$UPSCALE_DIR"
-    
+    echo "📥 Téléchargement de 4x-UltraSharp (meilleure qualité, ~67MB)..."
+
     wget -q --show-progress \
-        "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
-        -O "$UPSCALE_FILE"
-    
+        "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
+        -O "$ULTRASHARP_FILE"
+
     if [ $? -eq 0 ]; then
-        echo "✅ RealESRGAN téléchargé ($(du -h $UPSCALE_FILE | cut -f1))"
+        echo "✅ 4x-UltraSharp téléchargé ($(du -h $ULTRASHARP_FILE | cut -f1))"
     else
-        echo "⚠️ Échec téléchargement RealESRGAN (upscale désactivé)"
+        echo "⚠️ Échec téléchargement 4x-UltraSharp"
     fi
 else
     echo ""
-    echo "✅ RealESRGAN déjà présent: $(du -h $UPSCALE_FILE | cut -f1)"
+    echo "✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
+fi
+
+# RealESRGAN (backup, compatibilité)
+REALESRGAN_FILE="$UPSCALE_DIR/RealESRGAN_x4plus.pth"
+if [ ! -f "$REALESRGAN_FILE" ]; then
+    echo ""
+    echo "📥 Téléchargement de RealESRGAN (backup, ~64MB)..."
+
+    wget -q --show-progress \
+        "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
+        -O "$REALESRGAN_FILE"
+
+    if [ $? -eq 0 ]; then
+        echo "✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
+    else
+        echo "⚠️ Échec téléchargement RealESRGAN"
+    fi
+else
+    echo ""
+    echo "✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
 fi
 
 # ============================================
