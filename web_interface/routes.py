@@ -19,99 +19,20 @@ from workflows.workflow_manager import workflow_manager
 from web_interface.jobs import JobStatus
 
 from PIL import Image
-import uuid
 
 
-def resize_image_with_ultrasharp(
-    input_image_path: Path,
-    target_width: int,
-    target_height: int,
-    comfyui_client: "ComfyUISession",
-) -> Path:
+def adjust_dimension(value: int, multiple: int = 32) -> int:
     """
-    Redimensionne une image avec UltraSharp 4x + downscale Lanczos.
-
-    Processus :
-    1. Upscale 4x avec UltraSharp (IA)
-    2. Downscale/Upscale avec Lanczos vers target exacte
+    Ajuste une valeur au multiple le plus proche
 
     Args:
-        input_image_path: Chemin de l'image source
-        target_width: Largeur cible
-        target_height: Hauteur cible
-        comfyui_client: Client ComfyUI connecté
+        value: Valeur à ajuster
+        multiple: Multiple cible (défaut: 32)
 
     Returns:
-        Path vers l'image redimensionnée
+        Valeur ajustée
     """
-    logger = get_logger("resize_ultrasharp")
-
-    # Créer mini-workflow pour upscale + resize
-    workflow_id = str(uuid.uuid4())[:8]
-
-    workflow = {
-        "1": {"class_type": "LoadImage", "inputs": {"image": input_image_path.name}},
-        "2": {
-            "class_type": "UpscaleModelLoader",
-            "inputs": {"model_name": "4x-UltraSharp.pth"},
-        },
-        "3": {
-            "class_type": "ImageUpscaleWithModel",
-            "inputs": {"upscale_model": ["2", 0], "image": ["1", 0]},
-        },
-        "4": {
-            "class_type": "ImageScale",
-            "inputs": {
-                "image": ["3", 0],
-                "width": target_width,
-                "height": target_height,
-                "upscale_method": "lanczos",
-                "crop": "disabled",
-            },
-        },
-        "5": {
-            "class_type": "SaveImage",
-            "inputs": {"images": ["4", 0], "filename_prefix": f"resized_{workflow_id}"},
-        },
-    }
-
-    logger.info(
-        f"🔧 Redimensionnement UltraSharp: {input_image_path.name} → {target_width}x{target_height}"
-    )
-
-    # Exécuter le workflow synchrone
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    try:
-        # Soumettre workflow
-        prompt_id = loop.run_until_complete(comfyui_client.queue_workflow(workflow))
-
-        # Attendre completion (timeout 60s suffisant pour resize)
-        loop.run_until_complete(comfyui_client.wait_for_workflow(prompt_id, timeout=60))
-
-        # Récupérer l'image résultante
-        outputs = loop.run_until_complete(comfyui_client.get_output_images(prompt_id))
-
-        if not outputs:
-            raise RuntimeError("Aucune image générée par le workflow de resize")
-
-        # L'image est dans le dossier output de ComfyUI
-        output_dir = (
-            Path("/workspace/comfyui/ComfyUI/output")
-            if Path("/workspace").exists()
-            else Path("output")
-        )
-        resized_image = output_dir / outputs[0]["filename"]
-
-        if not resized_image.exists():
-            raise RuntimeError(f"Image redimensionnée non trouvée: {resized_image}")
-
-        logger.success(f"✅ Image redimensionnée: {resized_image.name}")
-        return resized_image
-
-    finally:
-        loop.close()
+    return int(round(value / multiple) * multiple)
 
 
 def calculate_optimal_resolution(
@@ -154,102 +75,98 @@ def calculate_optimal_generation_strategy(
     target_height: int,
 ) -> dict:
     """
-    Calcule la stratégie de génération optimale pour minimiser les artefacts d'upscale.
+    Calcule la stratégie de génération optimale pour WAN 2.2.
 
-    Specs officielles WAN 2.2 (5B et 14B) :
-    - Résolution max native : 1280x720 (720p)
-    - Sweet spot upscale : 2-4x
-    - Limite acceptable : 8x
-    - Au-delà de 8x : artefacts possibles (mais génération autorisée)
+    Principe (résolution native WAN 2.2 : 720p max) :
+    1. Si source < 720p : upscale Lanczos vers ~720p max
+    2. Si source > 720p : downscale Lanczos vers ~720p max
+    3. Si source ~720p : ajuster multiples de 32 uniquement
+    4. Génération WAN 2.2 à résolution optimale (~720p)
+    5. Post-génération : UltraSharp 4x + Lanczos vers target
 
     Args:
-        source_width, source_height: Dimensions image source
+        source_width, source_height: Dimensions image source (déjà ajustées multiples 32)
         target_width, target_height: Dimensions cible finales
 
     Returns:
         dict: {
-            'generation_width': int,      # Résolution pour WAN 2.2
+            'generation_width': int,       # Résolution pour WAN 2.2 (~720p max)
             'generation_height': int,
-            'upscale_ratio': float,       # Ratio upscale final
-            'total_ratio': float,         # Ratio source→cible
-            'quality_warning': str|None,  # Warning si ratio extrême
-            'strategy': str              # Description stratégie
+            'needs_pregen_resize': bool,   # Si redimensionnement pré-génération requis
+            'upscale_ratio': float,        # Ratio upscale post-génération
+            'total_ratio': float,          # Ratio source→target
+            'use_supersampling': bool,     # True si ratio ≤4x (downscale après UltraSharp)
+            'strategy': str                # Description stratégie
         }
     """
-    # Constantes officielles
+    # Constantes officielles WAN 2.2
     WAN22_MAX_WIDTH = 1280
     WAN22_MAX_HEIGHT = 720
     WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
 
-    UPSCALE_OPTIMAL_RATIO = 2.5  # Sweet spot (qualité optimale)
-    UPSCALE_MAX_RATIO = 4.0  # Limite qualité acceptable
-    UPSCALE_WARNING_RATIO = 8.0  # Au-delà : avertissement
-
-    # Fonction utilitaire
     def adjust_to_32(value):
         return int(round(value / 32) * 32)
 
-    # Calculer ratios
+    # Calculer ratios et dimensions
     source_pixels = source_width * source_height
     target_pixels = target_width * target_height
     total_ratio = target_pixels / source_pixels
     aspect_ratio = source_width / source_height
 
-    # Cas 1 : Pas besoin d'upscale ou upscale modéré (≤4x)
-    if total_ratio <= UPSCALE_MAX_RATIO:
-        gen_w = adjust_to_32(source_width)
-        gen_h = adjust_to_32(source_height)
-        upscale_ratio = (target_width * target_height) / (gen_w * gen_h)
+    # Calculer résolution de génération optimale (~720p max)
+    # On veut maximiser la résolution de génération sans dépasser 720p
 
-        return {
-            "generation_width": gen_w,
-            "generation_height": gen_h,
-            "upscale_ratio": upscale_ratio,
-            "total_ratio": total_ratio,
-            "quality_warning": None,
-            "strategy": f"Génération à résolution source ({gen_w}x{gen_h}), upscale modéré {upscale_ratio:.1f}x",
-        }
-
-    # Cas 2 : Upscale agressif (>4x)
-    # Calculer résolution intermédiaire optimale
-    optimal_gen_pixels = target_pixels / (UPSCALE_OPTIMAL_RATIO**2)
-
-    # Respecter limite 720p
-    if optimal_gen_pixels > WAN22_MAX_PIXELS:
-        optimal_gen_pixels = WAN22_MAX_PIXELS
-
-    # Calculer dimensions en préservant aspect ratio
-    gen_h = int((optimal_gen_pixels / aspect_ratio) ** 0.5)
-    gen_w = int(gen_h * aspect_ratio)
+    # Calculer dimensions max possibles en conservant ratio
+    if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
+        # Limité par largeur (image wide)
+        gen_w = WAN22_MAX_WIDTH
+        gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
+    else:
+        # Limité par hauteur (image tall)
+        gen_h = WAN22_MAX_HEIGHT
+        gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
 
     # Ajuster aux multiples de 32
     gen_w = adjust_to_32(gen_w)
     gen_h = adjust_to_32(gen_h)
 
-    # Double-check : ne pas dépasser 1280x720
-    if gen_w > WAN22_MAX_WIDTH:
-        gen_w = WAN22_MAX_WIDTH
-        gen_h = adjust_to_32(int(WAN22_MAX_WIDTH / aspect_ratio))
+    # Vérifier si on dépasse encore 720p après ajustement
+    if gen_w * gen_h > WAN22_MAX_PIXELS:
+        # Réduire légèrement pour rester sous la limite
+        if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
+            gen_w = adjust_to_32(WAN22_MAX_WIDTH - 32)
+            gen_h = adjust_to_32(gen_w / aspect_ratio)
+        else:
+            gen_h = adjust_to_32(WAN22_MAX_HEIGHT - 32)
+            gen_w = adjust_to_32(gen_h * aspect_ratio)
 
-    if gen_h > WAN22_MAX_HEIGHT:
-        gen_h = WAN22_MAX_HEIGHT
-        gen_w = adjust_to_32(int(WAN22_MAX_HEIGHT * aspect_ratio))
+    # Déterminer si redimensionnement pré-génération nécessaire
+    needs_pregen_resize = gen_w != source_width or gen_h != source_height
 
-    # Recalculer ratio upscale final
+    # Déterminer type de redimensionnement pré-génération
+    if source_pixels < gen_w * gen_h:
+        resize_type = "upscale"
+        strategy_desc = f"Upscale Lanczos pré-génération: {source_width}x{source_height} → {gen_w}x{gen_h}"
+    elif source_pixels > gen_w * gen_h:
+        resize_type = "downscale"
+        strategy_desc = f"Downscale Lanczos pré-génération: {source_width}x{source_height} → {gen_w}x{gen_h}"
+    else:
+        resize_type = "none"
+        strategy_desc = f"Génération directe à résolution source: {gen_w}x{gen_h}"
+
+    # Calculer ratio upscale post-génération
     upscale_ratio = (target_width * target_height) / (gen_w * gen_h)
-
-    # Générer warning si ratio extrême
-    quality_warning = None
-    if upscale_ratio > UPSCALE_WARNING_RATIO:
-        quality_warning = f"⚠️ Ratio upscale très élevé ({upscale_ratio:.1f}x). Des artefacts peuvent apparaître. Considérez réduire la résolution cible."
+    use_supersampling = upscale_ratio <= 4.0
 
     return {
         "generation_width": gen_w,
         "generation_height": gen_h,
+        "needs_pregen_resize": needs_pregen_resize,
+        "resize_type": resize_type,
         "upscale_ratio": upscale_ratio,
         "total_ratio": total_ratio,
-        "quality_warning": quality_warning,
-        "strategy": f"Génération optimisée à {gen_w}x{gen_h} (proche max 720p), upscale {upscale_ratio:.1f}x vers résolution cible",
+        "use_supersampling": use_supersampling,
+        "strategy": strategy_desc,
     }
 
 
@@ -319,9 +236,6 @@ async def process_cinemagraph_generation(job_id: str):
 
         # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
         # Note: Avec spatial_compress_level=1, le VAE nécessite des multiples de 32
-        def adjust_dimension(value):
-            """Ajuste une dimension pour qu'elle soit un multiple de 32"""
-            return int(round(value / 32) * 32)
 
         # Ajuster dimensions source
         adjusted_source_width = adjust_dimension(source_width)
@@ -341,24 +255,20 @@ async def process_cinemagraph_generation(job_id: str):
 
         generation_width = strategy["generation_width"]
         generation_height = strategy["generation_height"]
+        needs_pregen_resize = strategy["needs_pregen_resize"]
+        resize_type = strategy["resize_type"]
         upscale_ratio = strategy["upscale_ratio"]
-
-        # Déterminer si on doit redimensionner l'image AVANT génération
-        # Cas 1: Ajustement aux multiples de 32 (source → adjusted_source)
-        # Cas 2: Upscale pour génération optimale (adjusted_source → generation)
-        needs_resize_to_adjusted = (
-            adjusted_source_width != source_width
-            or adjusted_source_height != source_height
-        )
-        needs_upscale_for_generation = (
-            generation_width > adjusted_source_width
-            or generation_height > adjusted_source_height
-        )
+        use_supersampling = strategy["use_supersampling"]
 
         image_to_upload = job.input_image
         upload_filename = img_path.name
 
-        # Étape 1: Ajustement multiples de 32 si nécessaire (LANCZOS rapide)
+        # Étape 1: Ajustement multiples de 32 (si nécessaire)
+        needs_resize_to_adjusted = (
+            adjusted_source_width != source_width
+            or adjusted_source_height != source_height
+        )
+
         if needs_resize_to_adjusted:
             logger.info(
                 f"📐 Ajustement multiples de 32: "
@@ -381,40 +291,39 @@ async def process_cinemagraph_generation(job_id: str):
             image_to_upload = adjusted_path
             upload_filename = adjusted_path.name
 
-        # Étape 2: Upscale pour génération optimale (UltraSharp + Lanczos)
-        if needs_upscale_for_generation:
-            logger.info(
-                f"🎨 Upscale pré-génération (UltraSharp 4x + Lanczos): "
-                f"{adjusted_source_width}x{adjusted_source_height} → {generation_width}x{generation_height}"
-            )
-
-            # Créer client ComfyUI temporaire pour le resize
-            comfyui_client = ComfyUISession(config=current_app.config["comfyui_config"])
-
-            try:
-                # Connecter au serveur ComfyUI
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(comfyui_client.connect())
-
-                # Upscaler avec UltraSharp
-                upscaled_path = resize_image_with_ultrasharp(
-                    input_image_path=image_to_upload,
-                    target_width=generation_width,
-                    target_height=generation_height,
-                    comfyui_client=comfyui_client,
+        # Étape 2: Redimensionnement vers ~720p pour génération optimale (Lanczos)
+        if needs_pregen_resize and (
+            generation_width != adjusted_source_width
+            or generation_height != adjusted_source_height
+        ):
+            if resize_type == "upscale":
+                logger.info(
+                    f"🔼 Upscale Lanczos pré-génération: "
+                    f"{adjusted_source_width}x{adjusted_source_height} → {generation_width}x{generation_height}"
+                )
+            elif resize_type == "downscale":
+                logger.info(
+                    f"🔽 Downscale Lanczos pré-génération: "
+                    f"{adjusted_source_width}x{adjusted_source_height} → {generation_width}x{generation_height}"
                 )
 
-                image_to_upload = upscaled_path
-                upload_filename = upscaled_path.name
+            with Image.open(image_to_upload) as img:
+                resized_img = img.resize(
+                    (generation_width, generation_height),
+                    Image.Resampling.LANCZOS,
+                )
 
+                pregen_path = (
+                    img_path.parent / f"{img_path.stem}_pregen{img_path.suffix}"
+                )
+
+                resized_img.save(pregen_path, quality=95)
                 logger.success(
-                    f"✅ Image upscalée pour génération optimale: {upload_filename}"
+                    f"   ✅ Image préparée pour génération: {pregen_path.name}"
                 )
 
-            finally:
-                loop.run_until_complete(comfyui_client.disconnect())
-                loop.close()
+            image_to_upload = pregen_path
+            upload_filename = pregen_path.name
 
         # Logger la stratégie choisie
         logger.info("📐 Stratégie de génération complète:")
@@ -434,9 +343,9 @@ async def process_cinemagraph_generation(job_id: str):
                 f"{adjusted_target_width}x{adjusted_target_height} ({upscale_ratio:.2f}x)"
             )
 
-            if upscale_ratio <= 4.0:
+            if use_supersampling:
                 logger.success(
-                    f"   ✅ Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - 4x-UltraSharp + affinage Lanczos"
+                    f"   ✅ Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - 4x-UltraSharp + supersampling Lanczos"
                 )
             else:
                 logger.warning(
@@ -560,7 +469,7 @@ async def process_cinemagraph_generation(job_id: str):
     finally:
         # Nettoyer les images redimensionnées temporaires si elles existent
         if (
-            needs_resize_to_adjusted or needs_upscale_for_generation
+            needs_resize_to_adjusted or needs_pregen_resize
         ) and image_to_upload.exists():
             try:
                 image_to_upload.unlink()
@@ -624,14 +533,14 @@ def analyze_image():
 @api_bp.route("/calculate-resolution", methods=["POST"])
 def calc_resolution():
     """
-    Calcule la résolution optimale
+    Calcule la résolution optimale et les infos d'upscale
 
     Body JSON:
         - source_width, source_height: Dimensions source
         - target_width, target_height: Dimensions demandées
 
     Returns:
-        JSON avec résolution finale
+        JSON avec résolution finale et infos upscale
     """
     data = request.get_json()
 
@@ -646,9 +555,33 @@ def calc_resolution():
         if source_w <= 0 or source_h <= 0 or target_w <= 0 or target_h <= 0:
             return jsonify({"error": "Les dimensions doivent être positives"}), 400
 
+        # Calculer résolution finale
         final_w, final_h = calculate_optimal_resolution(
             source_w, source_h, target_w, target_h
         )
+
+        # Ajuster source et target aux multiples de 32
+        adjusted_source_w = adjust_dimension(source_w)
+        adjusted_source_h = adjust_dimension(source_h)
+
+        # Calculer la stratégie de génération complète
+        strategy = calculate_optimal_generation_strategy(
+            adjusted_source_w, adjusted_source_h, final_w, final_h
+        )
+
+        upscale_ratio = strategy["upscale_ratio"]
+        use_supersampling = strategy["use_supersampling"]
+
+        # Déterminer le type et la description de l'upscale
+        if upscale_ratio <= 1.5:
+            upscale_type = "none"
+            upscale_description = "Pas d'upscale nécessaire"
+        elif use_supersampling:
+            upscale_type = "optimal"
+            upscale_description = f"Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - 4x-UltraSharp + supersampling Lanczos"
+        else:
+            upscale_type = "elevated"
+            upscale_description = f"⚠️ Upscale élevé ({upscale_ratio:.2f}x > 4x) - 4x UltraSharp + {upscale_ratio / 4:.2f}x Lanczos. Artefacts possibles."
 
         # Protection contre division par zéro
         ratio = round(final_w / final_h, 2) if final_h > 0 else 0
@@ -659,6 +592,9 @@ def calc_resolution():
                 "final_height": final_h,
                 "ratio": ratio,
                 "adjusted": (final_w != target_w or final_h != target_h),
+                "upscale_ratio": round(upscale_ratio, 2),
+                "upscale_type": upscale_type,
+                "upscale_description": upscale_description,
             }
         )
     except (KeyError, ValueError) as e:
