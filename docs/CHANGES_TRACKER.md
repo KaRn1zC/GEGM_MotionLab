@@ -80,6 +80,121 @@ Cas 2 (élevé >4x) : 704x448 source → 1120x704 génération → 7168x4480 fin
 
 ---
 
+### [2025-12-05 12:00] - ✅ FIX CRITIQUE: spatial_compress_level + Timeout étendu
+
+**Problèmes identifiés** (analyse logs 5B_container3.txt + test_5B.txt) :
+
+1. **CRITIQUE - Incompatibilité spatial_compress_level=1** :
+   - `WanVideoEncode` (node 7) avec `spatial_compress_level=1` produit latents **70x44** (compression ×16)
+   - `WanVideoEmptyEmbeds` (node 7b) utilise `VAE_STRIDE` base et attend **140x88** (compression ×8)
+   - **MISMATCH** : 70x44 ≠ 140x88 → RuntimeError tensor size mismatch
+   - Vérifié dans logs : `WanVideoEncode: Encoded latents shape torch.Size([1, 48, 1, 44, 70])`
+   - Affecte **TOUS** les modèles (5B et 14B)
+
+2. **Timeout insuffisant pour preset "qualité maximale"** :
+   - Preset quality : 30 steps (vs 20 balanced)
+   - Temps d'exécution 5B : ~9min30s
+   - Timeout actuel : 600s (10 minutes)
+   - Résultat : Workflow bloqué à 100% puis timeout
+
+**Solutions implémentées** :
+
+**A. Correction spatial_compress_level (2 fichiers)** :
+1. `workflows/templates/wan22_i2v.json:126` : `spatial_compress_level: 1 → 0`
+2. `workflows/templates/wan22_with_upscale.json:159` : `spatial_compress_level: 1 → 0`
+
+**Impact** :
+- Compression spatiale : 8 (au lieu de 16)
+- Latents produits : **140x88** (match parfait avec WanVideoEmptyEmbeds) ✅
+- Résout crash 14B et timeout 5B
+
+**B. Augmentation timeout websocket** :
+- `src/comfyui_client.py:34` : `websocket_timeout: 600 → 1200` (20 minutes)
+- Marge confortable pour preset quality (30 steps)
+- Supporte jusqu'à 15-18 minutes de génération
+
+**Fichiers modifiés** :
+- `workflows/templates/wan22_i2v.json` : spatial_compress_level=0
+- `workflows/templates/wan22_with_upscale.json` : spatial_compress_level=0
+- `src/comfyui_client.py` : websocket_timeout=1200s
+
+**Résultats attendus** :
+- ✅ **14B fonctionnel** : Plus de RuntimeError tensor mismatch
+- ✅ **5B stable** : Génération complète sans timeout
+- ✅ **Preset quality** : 30 steps supportés (15-18 min max)
+- ✅ **Compatible 5B/14B** : Configuration identique pour les deux modèles
+
+---
+
+### [2025-12-04 17:30] - 🔍 Investigation erreur modèle 14B (RÉSOLU - voir ci-dessus)
+- Container 5B : ✅ Génération réussie (720x450 → 1120x704 → 1728x1088)
+- Container 14B : ❌ RuntimeError dans WanVideoSampler (node 8)
+  - Erreur : `The expanded size of the tensor (140) must match the existing size (70)`
+  - Target sizes: `[16, 1, 88, 140]` (attendu 1120x704)
+  - Tensor sizes: `[48, 1, 44, 70]` (reçu 560x352)
+
+**Investigations effectuées (Container 14B)** :
+
+1. **Vérification image pregen** :
+   - ✅ Existe : `/workspace/comfyui/ComfyUI/input/20251204_161246_720x450_01_pregen.jpg`
+   - ✅ Dimensions correctes : **1120x704** (vérifié avec PIL)
+
+2. **Vérification paramètres workflow** :
+   - ✅ Node 7b (WanVideoEmptyEmbeds) : width=1120, height=704 ✅
+   - ✅ Node 7 (WanVideoEncode) : spatial_compress_level=1 ✅
+   - ✅ enable_vae_tiling=false
+
+3. **Analyse compression VAE** :
+   - VAE stride de base : (4, 8, 8) - temporal, spatial_h, spatial_w
+   - Avec spatial_compress_level=1 : facteur spatial = 2
+   - Compression totale : 8 × 2 = 16
+   - **1120x704 → 70x44 en latent space** (70 = 1120÷16, 44 = 704÷16)
+   - Mais node 7b crée des embeds pour **140x88** (140 = 1120÷8, 88 = 704÷8)
+   - **MISMATCH : 70x44 vs 140x88**
+
+4. **Comparaison workflows** :
+   - `wan22_i2v.json` (5B) : spatial_compress_level=1 ✅
+   - `wan22_with_upscale.json` (14B) : spatial_compress_level=1 ✅
+   - **Les deux workflows sont IDENTIQUES**
+
+**Hypothèse actuelle** :
+- Le modèle 5B et 14B traitent différemment `spatial_compress_level`
+- OU le modèle 5B a une configuration spécifique qui compense
+- OU il y a une différence dans WanVideoWrapper entre les deux modèles
+
+**Actions à effectuer (Container 5B)** :
+1. Exécuter mêmes commandes de vérification dans container 5B
+2. Comparer dimensions latent réelles produites par node 7
+3. Vérifier logs ComfyUI du 5B pour messages spatial_compress
+4. Comparer versions WanVideoWrapper si différentes
+5. Tester si spatial_compress_level=0 résout le problème 14B
+
+**Fichiers concernés** :
+- `workflows/templates/wan22_with_upscale.json` : Node 7 spatial_compress_level
+- `workflows/templates/wan22_i2v.json` : Node 7 spatial_compress_level
+- `web_interface/routes.py` : Calcul dimensions et paramètres workflow
+
+**Commandes exécutées (Container 14B)** :
+```bash
+# Image pregen
+ls -lh /workspace/comfyui/ComfyUI/input/*pregen*
+python3 -c "from PIL import Image; img = Image.open('/workspace/comfyui/ComfyUI/input/20251204_161246_720x450_01_pregen.jpg'); print(f'{img.size[0]}x{img.size[1]}')"
+# Résultat: 1120x704 ✅
+
+# Paramètres workflow
+curl -s http://127.0.0.1:8188/history | python3 -c "..."
+# Node 7b: width=1120, height=704 ✅
+# Node 7: spatial_compress_level=1 ✅
+
+# Calcul théorique compression
+python3 -c "print(f'Latent: {1120//16}x{704//16}')"
+# Résultat: 70x44 (correspond à l'erreur)
+```
+
+**État** : ⏸️ En attente container 5B pour comparaison
+
+---
+
 
 ## 📝 Template pour nouvelle entrée
 

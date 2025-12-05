@@ -123,7 +123,7 @@
         "tile_stride_x": 144,
         "tile_stride_y": 128,
         "temporal_compress_level": 0,
-        "spatial_compress_level": 1
+        "spatial_compress_level": 0
       }
     },
     "7b": {
