@@ -31,7 +31,9 @@ class ComfyUIConfig:
     timeout: int = 300  # 5 minutes par défaut
     max_retries: int = 3
     retry_delay: float = 1.0
-    websocket_timeout: int = 600  # 10 minutes pour les gros workflows
+    websocket_timeout: int = (
+        1200  # 20 minutes pour les gros workflows (presets qualité maximale)
+    )
 
     @property
     def base_url(self) -> str:
