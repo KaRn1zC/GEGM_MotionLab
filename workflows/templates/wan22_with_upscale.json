@@ -123,7 +123,7 @@
     "3": {
       "class_type": "WanVideoVAELoader",
       "inputs": {
-        "model_name": "wan2.2_vae.safetensors",
+        "model_name": "{vae_name}",
         "precision": "bf16"
       }
     },

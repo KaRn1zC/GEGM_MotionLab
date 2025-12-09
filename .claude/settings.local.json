@@ -21,7 +21,8 @@
       "WebFetch(domain:docs.comfy.org)",
       "WebFetch(domain:comfyanonymous.github.io)",
       "Bash(source:*)",
-      "Bash(hf download --help:*)"
+      "Bash(hf download --help:*)",
+      "Bash(split:*)"
     ],
     "deny": [],
     "ask": []

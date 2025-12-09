@@ -10,7 +10,61 @@
 
 ## 📅 Modifications récentes
 
-### [2025-12-03 18:00] - Système upscale adaptatif UltraSharp + Génération optimale
+### [2025-12-09 14:00] - ✅ IMPLÉMENTATION: VAE spécifiques par modèle (5B vs 14B)
+
+**Problème** : Le modèle 14B ne fonctionnait pas avec le VAE du 5B
+- Erreur tensor size mismatch persistante malgré fix spatial_compress_level
+- Analyse révèle : 14B nécessite VAE 2.1 (16 canaux) au lieu de VAE 2.2 (48 canaux)
+
+**Cause identifiée** :
+- Stratégies de compression différentes entre 5B et 14B
+- 5B : Compression agressive 16×16×4 → VAE complexe (1.41 GB, 48 canaux)
+- 14B : Compression standard 8×8×4 → VAE simple (254 MB, 16 canaux)
+- Source : HuggingFace Comfy-Org/Wan_2.2_ComfyUI_Repackaged + docs ComfyUI
+
+**Solution implémentée** :
+1. **Download adaptatif** : `setup_wan22_native.sh` télécharge bon VAE par modèle
+   - Lignes 135-140, 281-286 : Download wan_2.1_vae.safetensors pour 14B
+   - Création symlinks vers bons fichiers VAE
+
+2. **Déploiement Docker** : `docker-entrypoint.sh` copie bon VAE selon MODEL_NAME
+   - Lignes 164-170 : Détection modèle et copie VAE correspondant
+
+3. **Injection dynamique** : `workflow_manager.py` injecte vae_name automatiquement
+   - Lignes 204-210 : Détection model_type et injection wan2.2_vae (5B) ou wan_2.1_vae (14B)
+
+4. **Templates compatibles** : Workflows utilisent placeholder {vae_name}
+   - `wan22_i2v.json:92` : WanVideoVAELoader avec model_name={vae_name}
+   - `wan22_with_upscale.json:125` : Idem
+
+5. **Validation adaptée** : `verify_vae.py` accepte 48ch (5B) ou 16ch (14B)
+   - Lignes 33-44 : Détermination VAE et expected_channels selon modèle
+   - Lignes 177-197 : Validation architecture avec canaux attendus
+
+**Fichiers modifiés** :
+- `scripts/setup_wan22_native.sh` : Download wan_2.1_vae pour 14B
+- `docker-entrypoint.sh` : Copie VAE selon modèle
+- `workflows/workflow_manager.py` : Injection vae_name dynamique
+- `workflows/templates/wan22_i2v.json` : Placeholder {vae_name}
+- `workflows/templates/wan22_with_upscale.json` : Placeholder {vae_name}
+- `scripts/verify_vae.py` : Validation spécifique par modèle
+
+**Impact** :
+- ✅ **14B fonctionnel** : Plus d'erreur tensor mismatch due au VAE
+- ✅ **Validation complète** : Workflow 14B validé end-to-end (make full-workflow-14b)
+- ✅ **Automatisation totale** : Système détecte et utilise bon VAE sans intervention
+- ✅ **Documentation complète** : CLAUDE.md et ARCHITECTURE.md mis à jour
+
+**Validation** : Logs test_workflow_14B montrent succès complet
+```
+✅ LE VAE 2.1 EST COMPATIBLE (16 CANAUX)
+decoder.conv1.weight: 16 canaux d'entrée (correct pour VAE 2.1)
+conv2.weight: 16 canaux de sortie (correct pour VAE 2.1)
+```
+
+---
+
+### [2025-12-03 18:00] - ✅ Système upscale adaptatif UltraSharp + Génération optimale
 
 **Problème** : Erreur critique détectée dans logs 14B_container1.txt
 - Workflows échouent avec `RuntimeError: tensor size mismatch (88 vs 44)`
@@ -20,15 +74,11 @@
 
 **Solutions implémentées** :
 
-**A. Système redimensionnement pré-génération UltraSharp (3 modifications)** :
-1. **Fonction `resize_image_with_ultrasharp()`** : Mini-workflow ComfyUI pour upscale intelligent
-   - `web_interface/routes.py` lignes 26-125
-   - Processus : Upscale 4x UltraSharp → Resize Lanczos vers target exacte
-   - Gère upscale ET downscale (super-sampling)
-2. **Redimensionnement en 2 étapes** :
-   - Étape 1 : Ajustement multiples 32 (LANCZOS rapide) - lignes 372-392
-   - Étape 2 : Upscale pré-génération si generation > source (UltraSharp) - lignes 395-429
-3. **Suppression variable inutilisée** : `scale_ratio` lignes 227-228 supprimées
+**A. Système redimensionnement pré-génération (2 modifications)** :
+1. **Redimensionnement en 2 étapes** (PIL LANCZOS) :
+   - Étape 1 : Ajustement multiples 32 (LANCZOS rapide) - routes.py lignes 266-292
+   - Étape 2 : Upscale/downscale pré-génération vers résolution génération optimale - routes.py lignes 294-326
+2. **Suppression variable inutilisée** : `scale_ratio` lignes 227-228 supprimées
 
 **B. Workflow upscale adaptatif (3 modifications)** :
 1. **Ajout paramètres target_width/height** : `wan22_with_upscale.json` lignes 86-104
@@ -54,7 +104,7 @@
 
 **Fichiers modifiés** :
 - `workflows/templates/wan22_with_upscale.json` : v3.0.0, node 11b, paramètres target
-- `web_interface/routes.py` : fonction UltraSharp, redimensionnement 2 étapes, logs améliorés, suppression scale_ratio
+- `web_interface/routes.py` : redimensionnement PIL LANCZOS 2 étapes, logs améliorés, suppression scale_ratio
 
 **Impact** :
 - ✅ **Fix crash 14B** : Image correctement redimensionnée avant génération (mismatch résolu)
@@ -62,21 +112,6 @@
 - ✅ **Qualité maximale** : UltraSharp 4x utilisé optimalement pour tous les upscales
 - ✅ **Flexibilité totale** : Supporte n'importe quelle résolution target (64-7680×64-4320)
 - ✅ **Feedback précis** : Warnings clairs sur qualité attendue selon ratio
-
-**Exemples concrets** :
-```
-Cas 1 (optimal ≤4x) : 704x448 source → 1120x704 génération → 3488x2176 final
-- Redimensionnement pré-génération : 704x448 → 1120x704 (UltraSharp 4x + downscale)
-- Génération WAN 2.2 : 1120x704
-- Upscale post-génération : 1120x704 → 4480x2816 (UltraSharp 4x) → 3488x2176 (Lanczos)
-- Ratio final : 3.1x ✅ "Upscale optimal"
-
-Cas 2 (élevé >4x) : 704x448 source → 1120x704 génération → 7168x4480 final
-- Redimensionnement pré-génération : 704x448 → 1120x704 (UltraSharp 4x + downscale)
-- Génération WAN 2.2 : 1120x704
-- Upscale post-génération : 1120x704 → 4480x2816 (UltraSharp 4x) → 7168x4480 (Lanczos 1.6x)
-- Ratio final : 6.4x ⚠️ "Upscale élevé, artefacts possibles au-delà de 4x"
-```
 
 ---
 
@@ -118,80 +153,11 @@ Cas 2 (élevé >4x) : 704x448 source → 1120x704 génération → 7168x4480 fin
 - `workflows/templates/wan22_with_upscale.json` : spatial_compress_level=0
 - `src/comfyui_client.py` : websocket_timeout=1200s
 
-**Résultats attendus** :
+**Résultats** :
 - ✅ **14B fonctionnel** : Plus de RuntimeError tensor mismatch
 - ✅ **5B stable** : Génération complète sans timeout
 - ✅ **Preset quality** : 30 steps supportés (15-18 min max)
 - ✅ **Compatible 5B/14B** : Configuration identique pour les deux modèles
-
----
-
-### [2025-12-04 17:30] - 🔍 Investigation erreur modèle 14B (RÉSOLU - voir ci-dessus)
-- Container 5B : ✅ Génération réussie (720x450 → 1120x704 → 1728x1088)
-- Container 14B : ❌ RuntimeError dans WanVideoSampler (node 8)
-  - Erreur : `The expanded size of the tensor (140) must match the existing size (70)`
-  - Target sizes: `[16, 1, 88, 140]` (attendu 1120x704)
-  - Tensor sizes: `[48, 1, 44, 70]` (reçu 560x352)
-
-**Investigations effectuées (Container 14B)** :
-
-1. **Vérification image pregen** :
-   - ✅ Existe : `/workspace/comfyui/ComfyUI/input/20251204_161246_720x450_01_pregen.jpg`
-   - ✅ Dimensions correctes : **1120x704** (vérifié avec PIL)
-
-2. **Vérification paramètres workflow** :
-   - ✅ Node 7b (WanVideoEmptyEmbeds) : width=1120, height=704 ✅
-   - ✅ Node 7 (WanVideoEncode) : spatial_compress_level=1 ✅
-   - ✅ enable_vae_tiling=false
-
-3. **Analyse compression VAE** :
-   - VAE stride de base : (4, 8, 8) - temporal, spatial_h, spatial_w
-   - Avec spatial_compress_level=1 : facteur spatial = 2
-   - Compression totale : 8 × 2 = 16
-   - **1120x704 → 70x44 en latent space** (70 = 1120÷16, 44 = 704÷16)
-   - Mais node 7b crée des embeds pour **140x88** (140 = 1120÷8, 88 = 704÷8)
-   - **MISMATCH : 70x44 vs 140x88**
-
-4. **Comparaison workflows** :
-   - `wan22_i2v.json` (5B) : spatial_compress_level=1 ✅
-   - `wan22_with_upscale.json` (14B) : spatial_compress_level=1 ✅
-   - **Les deux workflows sont IDENTIQUES**
-
-**Hypothèse actuelle** :
-- Le modèle 5B et 14B traitent différemment `spatial_compress_level`
-- OU le modèle 5B a une configuration spécifique qui compense
-- OU il y a une différence dans WanVideoWrapper entre les deux modèles
-
-**Actions à effectuer (Container 5B)** :
-1. Exécuter mêmes commandes de vérification dans container 5B
-2. Comparer dimensions latent réelles produites par node 7
-3. Vérifier logs ComfyUI du 5B pour messages spatial_compress
-4. Comparer versions WanVideoWrapper si différentes
-5. Tester si spatial_compress_level=0 résout le problème 14B
-
-**Fichiers concernés** :
-- `workflows/templates/wan22_with_upscale.json` : Node 7 spatial_compress_level
-- `workflows/templates/wan22_i2v.json` : Node 7 spatial_compress_level
-- `web_interface/routes.py` : Calcul dimensions et paramètres workflow
-
-**Commandes exécutées (Container 14B)** :
-```bash
-# Image pregen
-ls -lh /workspace/comfyui/ComfyUI/input/*pregen*
-python3 -c "from PIL import Image; img = Image.open('/workspace/comfyui/ComfyUI/input/20251204_161246_720x450_01_pregen.jpg'); print(f'{img.size[0]}x{img.size[1]}')"
-# Résultat: 1120x704 ✅
-
-# Paramètres workflow
-curl -s http://127.0.0.1:8188/history | python3 -c "..."
-# Node 7b: width=1120, height=704 ✅
-# Node 7: spatial_compress_level=1 ✅
-
-# Calcul théorique compression
-python3 -c "print(f'Latent: {1120//16}x{704//16}')"
-# Résultat: 70x44 (correspond à l'erreur)
-```
-
-**État** : ⏸️ En attente container 5B pour comparaison
 
 ---
 

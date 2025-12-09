@@ -201,6 +201,14 @@ class WorkflowTemplate:
                 f"🤖 Modèle auto-détecté: {detected_model} (type: {model_type})"
             )
 
+        # Injecter le bon nom de VAE selon le modèle
+        if validated_params.get("model_type") == "14b":
+            validated_params["vae_name"] = "wan_2.1_vae.safetensors"
+            logger.info("📦 VAE 14B: wan_2.1_vae.safetensors (254 MB - VAE 2.1)")
+        else:
+            validated_params["vae_name"] = "wan2.2_vae.safetensors"
+            logger.info("📦 VAE 5B: wan2.2_vae.safetensors (1.41 GB - VAE 2.2)")
+
         # Construire le chemin de checkpoint adapté au modèle
         checkpoint_path = self._get_model_checkpoint_path(detected_model)
         validated_params["checkpoint_path"] = checkpoint_path

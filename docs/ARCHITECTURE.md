@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-03 (v3.7.0 - Système upscale adaptatif)
+**Dernière mise à jour** : 2025-12-09 (v3.9.0 - VAE spécifiques 5B/14B)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -93,20 +93,31 @@
 - **Format** : FP16 (officiellement supporté par WanVideoWrapper)
 - **Clés** : 412
 
-### VAE
-- **Fichier** : `wan2.2_vae.safetensors` (~1 GB)
-- **Canaux** : 48 (compatible natif)
+### VAE (CRITIQUE - Spécifiques par modèle)
+- **5B** : `wan2.2_vae.safetensors` (1.41 GB, 48 canaux, compression 16×16×4)
+- **14B** : `wan_2.1_vae.safetensors` (254 MB, 16 canaux, compression 8×8×4)
+- **NON INTERCHANGEABLES** : Workflow manager injecte automatiquement le bon VAE
 
 ---
 
 ## Chemins critiques (RunPod)
 
-### Modèles
+### Modèles 5B
 ```
 /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/
 ├── wan2.2_ti2v_5B_fp16.safetensors       # 9.31 GB
-├── umt5_xxl_fp16.safetensors             # 11.4 GB
-├── wan2.2_vae.safetensors                # ~1 GB
+├── umt5_xxl_fp16.safetensors             # 11.4 GB (partagé)
+├── wan2.2_vae.safetensors                # 1.41 GB (VAE 2.2 - 48ch)
+└── config.json
+```
+
+### Modèles 14B
+```
+/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/
+├── wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
+├── wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+├── umt5_xxl_fp16.safetensors             # 11.4 GB (partagé)
+├── wan_2.1_vae.safetensors               # 254 MB (VAE 2.1 - 16ch)
 └── config.json
 ```
 
@@ -170,7 +181,11 @@ COMFYUI_PORT=8188
 
 ## Points critiques
 
-1. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
-2. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 600s)
-3. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
-4. **VRAM** : 48GB minimum (5B), 80GB (14B)
+1. **VAE spécifiques** : 5B et 14B utilisent des VAE DIFFÉRENTS et NON INTERCHANGEABLES
+   - 5B: wan2.2_vae.safetensors (1.41 GB, 48 canaux)
+   - 14B: wan_2.1_vae.safetensors (254 MB, 16 canaux)
+   - Injection automatique par workflow_manager.py
+2. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
+3. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 1200s)
+4. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
+5. **VRAM** : 48GB minimum (5B), 80GB (14B)
