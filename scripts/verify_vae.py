@@ -32,18 +32,22 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     # Déterminer le nom du fichier VAE selon le modèle
     if model_name == "wan2.2-ti2v-5b":
         vae_file = model_dir / "wan2.2_vae.safetensors"
-        expected_size_min = 0.5  # ~600 MB
-        expected_size_max = 1.5
+        expected_size_min = 0.5  # ~1.41 GB
+        expected_size_max = 2.0
+        expected_channels = 48  # VAE 2.2 - 48 canaux
+        vae_version = "2.2"
     elif model_name == "wan2.2-i2v-a14b":
-        vae_file = model_dir / "wan2.2_vae.safetensors"
-        expected_size_min = 0.5  # ~600 MB
-        expected_size_max = 1.5
+        vae_file = model_dir / "wan_2.1_vae.safetensors"
+        expected_size_min = 0.2  # ~254 MB
+        expected_size_max = 0.4
+        expected_channels = 16  # VAE 2.1 - 16 canaux
+        vae_version = "2.1"
     else:
         logger.error(f"❌ Modèle inconnu: {model_name}")
         return False
 
     print(f"🔍 Vérification de l'intégrité du VAE pour {model_name}...")
-    logger.info("🔍 Vérification de l'intégrité du VAE (WanVideoVAE38 - 48 canaux)...")
+    logger.info(f"🔍 Vérification de l'intégrité du VAE {vae_version} ({expected_channels} canaux)...")
     logger.info(f"📂 Fichier: {vae_file}")
 
     # 1. Vérifier que le fichier existe
@@ -151,9 +155,9 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     # WanVideoVAELoader.loadmodel() vérifie que le VAE a 48 canaux (pas 96!)
 
     print("")
-    print("🔍 VÉRIFICATION CRITIQUE: Nombre de canaux...")
-    logger.info("🔍 VÉRIFICATION CRITIQUE: Nombre de canaux du VAE...")
-    logger.info("   WanVideoVAE38 attend 48 canaux (pas 96!)")
+    print(f"🔍 VÉRIFICATION CRITIQUE: Nombre de canaux (VAE {vae_version})...")
+    logger.info(f"🔍 VÉRIFICATION CRITIQUE: Nombre de canaux du VAE {vae_version}...")
+    logger.info(f"   VAE {vae_version} attend {expected_channels} canaux")
     logger.info("   Source: ComfyUI-WanVideoWrapper/nodes_model_loading.py")
 
     try:
@@ -170,19 +174,19 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
                 f"   decoder.conv1.weight: shape={tuple(decoder_conv1_weight.shape)}"
             )
 
-            if decoder_in_channels != 48:
+            if decoder_in_channels != expected_channels:
                 print(
-                    f"   ❌ ERREUR: decoder.conv1.weight a {decoder_in_channels} canaux d'entrée (attendu: 48)"
+                    f"   ❌ ERREUR: decoder.conv1.weight a {decoder_in_channels} canaux d'entrée (attendu: {expected_channels})"
                 )
                 logger.error(
-                    f"   ❌ ERREUR: decoder.conv1.weight a {decoder_in_channels} canaux d'entrée (attendu: 48)"
+                    f"   ❌ ERREUR: decoder.conv1.weight a {decoder_in_channels} canaux d'entrée (attendu: {expected_channels})"
                 )
                 logger.error("")
                 logger.error(
-                    "   Ce VAE n'est PAS compatible avec ComfyUI WanVideoVAE38!"
+                    f"   Ce VAE n'est PAS compatible avec le modèle {model_name}!"
                 )
                 logger.error(
-                    "   Il s'agit probablement d'un VAE 96 canaux (ancien format)"
+                    f"   Architecture attendue: VAE {vae_version} ({expected_channels} canaux)"
                 )
                 logger.error("")
                 logger.error("   💡 Solution:")
@@ -193,38 +197,38 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
                 return False
 
             print(
-                f"   ✅ decoder.conv1.weight: {decoder_in_channels} canaux d'entrée (correct)"
+                f"   ✅ decoder.conv1.weight: {decoder_in_channels} canaux d'entrée (correct pour VAE {vae_version})"
             )
             logger.success(
-                f"   ✅ decoder.conv1.weight: {decoder_in_channels} canaux d'entrée (correct)"
+                f"   ✅ decoder.conv1.weight: {decoder_in_channels} canaux d'entrée (correct pour VAE {vae_version})"
             )
 
             # Vérifier conv2.weight: shape [out_channels, in_channels, ...]
-            # Pour WanVideoVAE38, out_channels (dimension [0]) doit être 48
+            # Le nombre de canaux de sortie doit correspondre à l'architecture du VAE
             conv2_weight = f.get_tensor("conv2.weight")
             conv2_out_channels = conv2_weight.shape[0]  # dimension [0]
 
             print(f"   conv2.weight: shape={tuple(conv2_weight.shape)}")
             logger.info(f"   conv2.weight: shape={tuple(conv2_weight.shape)}")
 
-            if conv2_out_channels != 48:
+            if conv2_out_channels != expected_channels:
                 print(
-                    f"   ❌ ERREUR: conv2.weight a {conv2_out_channels} canaux de sortie (attendu: 48)"
+                    f"   ❌ ERREUR: conv2.weight a {conv2_out_channels} canaux de sortie (attendu: {expected_channels})"
                 )
                 logger.error(
-                    f"   ❌ ERREUR: conv2.weight a {conv2_out_channels} canaux de sortie (attendu: 48)"
+                    f"   ❌ ERREUR: conv2.weight a {conv2_out_channels} canaux de sortie (attendu: {expected_channels})"
                 )
                 logger.error("")
                 logger.error(
-                    "   Ce VAE n'est PAS compatible avec ComfyUI WanVideoVAE38!"
+                    f"   Ce VAE n'est PAS compatible avec le modèle {model_name}!"
                 )
                 return False
 
             print(
-                f"   ✅ conv2.weight: {conv2_out_channels} canaux de sortie (correct)"
+                f"   ✅ conv2.weight: {conv2_out_channels} canaux de sortie (correct pour VAE {vae_version})"
             )
             logger.success(
-                f"   ✅ conv2.weight: {conv2_out_channels} canaux de sortie (correct)"
+                f"   ✅ conv2.weight: {conv2_out_channels} canaux de sortie (correct pour VAE {vae_version})"
             )
 
     except Exception as e:
@@ -232,18 +236,18 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         return False
 
     print("")
-    print("✅ LE VAE EST COMPATIBLE AVEC COMFYUI WANVIDEOVAE38 (48 CANAUX)")
-    logger.success("✅ LE VAE EST COMPATIBLE AVEC COMFYUI WANVIDEOVAE38 (48 CANAUX)")
+    print(f"✅ LE VAE {vae_version} EST COMPATIBLE ({expected_channels} CANAUX)")
+    logger.success(f"✅ LE VAE {vae_version} EST COMPATIBLE ({expected_channels} CANAUX)")
 
     # 6. Vérification finale
     print("")
     print("=" * 70)
     print("✅ VÉRIFICATION VAE RÉUSSIE")
     print(f"   Fichier: {vae_file.name}")
-    print("   Format: SafeTensors WanVideoVAE38 (ComfyUI Native)")
+    print(f"   Format: SafeTensors VAE {vae_version} (ComfyUI Native)")
     print(f"   Taille: {file_size_gb:.2f} GB")
     print(f"   Clés: {len(keys)}")
-    print("   Canaux: 48 (compatible ComfyUI)")
+    print(f"   Canaux: {expected_channels} (compatible {model_name})")
     print("   Le VAE est COMPLET et VALIDE")
     print("=" * 70)
     print("")
@@ -252,10 +256,10 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     logger.success("=" * 70)
     logger.success("✅ VÉRIFICATION VAE RÉUSSIE")
     logger.success(f"   Fichier: {vae_file.name}")
-    logger.success("   Format: SafeTensors WanVideoVAE38 (ComfyUI Native)")
+    logger.success(f"   Format: SafeTensors VAE {vae_version} (ComfyUI Native)")
     logger.success(f"   Taille: {file_size_gb:.2f} GB")
     logger.success(f"   Clés: {len(keys)}")
-    logger.success("   Canaux: 48 (compatible ComfyUI)")
+    logger.success(f"   Canaux: {expected_channels} (compatible {model_name})")
     logger.success("   Le VAE est COMPLET et VALIDE")
     logger.success("=" * 70)
     logger.info("")

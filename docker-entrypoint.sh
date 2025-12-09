@@ -163,10 +163,10 @@ mkdir -p "$VAE_DIR"
 # Déterminer le nom du fichier VAE selon le modèle
 if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
     VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
-    echo "   Chemin source 5B: $VAE_SOURCE"
+    echo "   Chemin source 5B: $VAE_SOURCE (1.41 GB)"
 elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-    VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
-    echo "   Chemin source 14B: $VAE_SOURCE"
+    VAE_SOURCE="$MODEL_DIR/wan_2.1_vae.safetensors"
+    echo "   Chemin source 14B: $VAE_SOURCE (254 MB - VAE 2.1 spécifique au 14B)"
 fi
 
 if [ -f "$VAE_SOURCE" ]; then
