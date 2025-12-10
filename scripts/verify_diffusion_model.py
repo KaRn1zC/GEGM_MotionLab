@@ -34,8 +34,8 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
         diffusion_files = [model_dir / "wan2.2_ti2v_5B_fp16.safetensors"]
     elif model_name == "wan2.2-i2v-a14b":
         diffusion_files = [
-            model_dir / "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
-            model_dir / "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+            model_dir / "wan2.2_i2v_high_noise_14B_fp16.safetensors",
+            model_dir / "wan2.2_i2v_low_noise_14B_fp16.safetensors",
         ]
     else:
         print(f"❌ Modèle inconnu: {model_name}")
@@ -63,8 +63,8 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
     # Tailles attendues par fichier (ComfyUI Native format)
     expected_file_sizes = {
         "wan2.2_ti2v_5B_fp16.safetensors": (8.0, 11.0),  # ~9.3 GB
-        "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors": (12.0, 16.0),  # ~14 GB
-        "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors": (12.0, 16.0),  # ~14 GB
+        "wan2.2_i2v_high_noise_14B_fp16.safetensors": (25.0, 32.0),  # ~28.6 GB FP16
+        "wan2.2_i2v_low_noise_14B_fp16.safetensors": (25.0, 32.0),  # ~28.6 GB FP16
     }
 
     total_size_gb = 0.0

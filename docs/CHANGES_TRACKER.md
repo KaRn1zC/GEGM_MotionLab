@@ -10,6 +10,30 @@
 
 ## 📅 Modifications récentes
 
+### [2025-12-10 PM #3] - ✅ FIX CRITIQUE: verify_diffusion_model.py références FP8 manquées
+
+**Problème** : Workflow échouait avec "Fichier introuvable: wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+- Script de vérification cherchait encore fichiers FP8 au lieu de FP16
+- Oublié lors de l'audit initial des références FP8
+
+**Solution implémentée** :
+
+**scripts/verify_diffusion_model.py** (4 corrections) :
+- Ligne 37: `wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors` → `wan2.2_i2v_high_noise_14B_fp16.safetensors`
+- Ligne 38: `wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors` → `wan2.2_i2v_low_noise_14B_fp16.safetensors`
+- Ligne 66: Tailles attendues (12.0, 16.0) GB → (25.0, 32.0) GB (pour ~28.6 GB FP16)
+- Ligne 67: Tailles attendues (12.0, 16.0) GB → (25.0, 32.0) GB (pour ~28.6 GB FP16)
+
+**Fichiers modifiés** :
+- `scripts/verify_diffusion_model.py` : Correction références FP8 → FP16 + tailles attendues
+
+**Impact** :
+- ✅ **Workflows fonctionnels** : `workflow-5b`, `workflow-14b`, `workflow-both` peuvent s'exécuter
+- ✅ **Vérification correcte** : Accepte fichiers FP16 de ~28.6 GB (au lieu de rejeter car >16 GB)
+- ✅ **Cohérence totale** : Plus AUCUNE référence FP8 dans le projet
+
+---
+
 ### [2025-12-10 PM #2] - ✅ SIMPLIFICATION WORKFLOWS: 3 commandes principales avec deep-clean
 
 **Objectif** : Simplifier les workflows Makefile pour clarté et automatisation complète
