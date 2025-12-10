@@ -27,7 +27,7 @@ if python -c 'import torch; exit(0 if torch.cuda.is_available() else 1)' 2>/dev/
 fi
 
 # ============================================
-# TÉLÉCHARGEMENT DES MODÈLES DEPUIS OWNCLOUD
+# TÉLÉCHARGEMENT DES MODÈLES (UPSTREAM + FALLBACK OWNCLOUD)
 # ============================================
 
 # Utiliser OWNCLOUD_MODEL_NAME ou par défaut wan2.2-ti2v-5b
@@ -43,17 +43,96 @@ echo "📦 Modèle configuré: $MODEL_NAME"
 if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
    { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp16.safetensors" ] || \
                                                   [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp16.safetensors" ]; }; }; then
-    echo ""
-    echo "📥 Téléchargement du modèle depuis OwnCloud..."
-    echo "   Ceci peut prendre 5-15 minutes..."
-    
-    python /workspace/scripts/download_models_from_owncloud.py \
-        --model "$MODEL_NAME" \
-        --target-dir /workspace/comfyui/ComfyUI/models/checkpoints
-    
-    if [ $? -eq 0 ]; then
-        echo "✅ Modèle téléchargé"
 
+    DOWNLOAD_SUCCESS=false
+    USE_OWNCLOUD_FALLBACK=false
+
+    # ========================================
+    # ÉTAPE 1: HEALTHCHECK UPSTREAM
+    # ========================================
+    echo ""
+    echo "🔍 Vérification de la disponibilité des sources upstream..."
+    echo "   (HuggingFace + GitHub)"
+
+    python /workspace/scripts/check_upstream_health.py "$MODEL_NAME"
+    HEALTHCHECK_EXIT_CODE=$?
+
+    if [ $HEALTHCHECK_EXIT_CODE -eq 0 ]; then
+        echo ""
+        echo "✅ Sources upstream disponibles et versions correctes"
+        echo "📥 Téléchargement depuis upstream (HuggingFace + GitHub)..."
+        echo "   Ceci peut prendre 10-30 minutes selon la connexion..."
+
+        # ========================================
+        # ÉTAPE 2: TÉLÉCHARGEMENT UPSTREAM
+        # ========================================
+        cd /workspace/comfyui/ComfyUI/models/checkpoints
+
+        if [ -f "/workspace/scripts/setup_wan22_native.sh" ]; then
+            bash /workspace/scripts/setup_wan22_native.sh "$MODEL_NAME"
+
+            if [ $? -eq 0 ]; then
+                echo ""
+                echo "✅ Téléchargement upstream réussi"
+                DOWNLOAD_SUCCESS=true
+            else
+                echo ""
+                echo "❌ Échec du téléchargement upstream"
+                echo "🧹 Nettoyage des fichiers partiels..."
+
+                # Cleanup des fichiers partiels
+                python /workspace/scripts/cleanup_partial_downloads.py --model "$MODEL_NAME"
+
+                echo "⚠️  Basculement vers OwnCloud (fallback)..."
+                USE_OWNCLOUD_FALLBACK=true
+            fi
+        else
+            echo "❌ Script setup_wan22_native.sh non trouvé"
+            echo "⚠️  Basculement vers OwnCloud (fallback)..."
+            USE_OWNCLOUD_FALLBACK=true
+        fi
+
+        cd /workspace
+
+    else
+        echo ""
+        echo "⚠️  Sources upstream non disponibles ou versions différentes"
+        echo "   Raisons possibles:"
+        echo "   - Nouvelle version upstream détectée (nécessite validation)"
+        echo "   - Fichiers temporairement indisponibles"
+        echo "   - Erreur réseau"
+        echo ""
+        echo "→ Basculement vers OwnCloud (version stable et testée)"
+        USE_OWNCLOUD_FALLBACK=true
+    fi
+
+    # ========================================
+    # ÉTAPE 3: FALLBACK OWNCLOUD SI NÉCESSAIRE
+    # ========================================
+    if [ "$USE_OWNCLOUD_FALLBACK" = true ]; then
+        echo ""
+        echo "📥 Téléchargement depuis OwnCloud (fallback)..."
+        echo "   Version stable et testée"
+        echo "   Ceci peut prendre 5-15 minutes..."
+
+        python /workspace/scripts/download_models_from_owncloud.py \
+            --model "$MODEL_NAME" \
+            --target-dir /workspace/comfyui/ComfyUI/models/checkpoints
+
+        if [ $? -eq 0 ]; then
+            echo "✅ Modèle téléchargé depuis OwnCloud"
+            DOWNLOAD_SUCCESS=true
+        else
+            echo "❌ Échec téléchargement depuis OwnCloud"
+            echo "⚠️  Vérifiez les credentials OwnCloud"
+            exit 1
+        fi
+    fi
+
+    # ========================================
+    # ÉTAPE 4: VÉRIFICATION POST-TÉLÉCHARGEMENT
+    # ========================================
+    if [ "$DOWNLOAD_SUCCESS" = true ]; then
         echo ""
         echo "🔍 Vérification des fichiers téléchargés (ComfyUI Native)..."
 
@@ -96,20 +175,20 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
         fi
 
         echo "✅ Tous les fichiers diffusion sont complets (ComfyUI Native)"
-        
+
         # ============================================
-        # RECONSTITUTION DES FICHIERS DÉCOUPÉS
+        # RECONSTITUTION DES FICHIERS DÉCOUPÉS (si OwnCloud fallback)
         # ============================================
-        
+
         CHUNKS_DIR="$MODEL_DIR/chunks"
         if [ -d "$CHUNKS_DIR" ] && [ -f "$CHUNKS_DIR/mapping.txt" ]; then
             echo ""
             echo "🔧 Reconstitution des fichiers découpés..."
-            
+
             # Utiliser le script local
             if [ -f "/workspace/scripts/reassemble_models.sh" ]; then
                 /workspace/scripts/reassemble_models.sh "$MODEL_DIR"
-                
+
                 if [ $? -eq 0 ]; then
                     echo "✅ Fichiers reconstitués et chunks supprimés"
                 else
@@ -125,8 +204,7 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
         fi
 
     else
-        echo "❌ Échec téléchargement modèles"
-        echo "⚠️  Vérifiez les credentials OwnCloud"
+        echo "❌ Échec téléchargement - tous les chemins ont échoué"
         exit 1
     fi
 else
@@ -200,77 +278,90 @@ else
     echo "   ⚠️ T5 Encoder non trouvé: $T5_SOURCE"
 fi
 
-# Télécharger CLIP Vision si absent
+# ============================================
+# CLIP VISION + UPSCALERS (depuis OwnCloud ou fallback upstream)
+# ============================================
+
+echo ""
+echo "🔧 Configuration CLIP Vision + Upscalers..."
+
 CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
 CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
+UPSCALE_DIR="/workspace/comfyui/ComfyUI/models/upscale_models"
+ULTRASHARP_FILE="$UPSCALE_DIR/4x-UltraSharp.pth"
+REALESRGAN_FILE="$UPSCALE_DIR/RealESRGAN_x4plus.pth"
 
+mkdir -p "$CLIP_VISION_DIR"
+mkdir -p "$UPSCALE_DIR"
 
-if [ ! -f "$CLIP_VISION_FILE" ] || [ ! -s "$CLIP_VISION_FILE" ]; then
-    echo ""
-    echo "📥 Téléchargement de CLIP Vision (requis pour WAN 2.2, ~2.4GB)..."
-    mkdir -p "$CLIP_VISION_DIR"
-    
-    # Utiliser le repo h94/IP-Adapter qui contient le bon fichier SafeTensors
+# Chemins possibles des composants depuis OwnCloud (uploadés avec le modèle)
+OWNCLOUD_CLIP="$MODEL_DIR/clip_vision/clip-vit-large-patch14-336.safetensors"
+OWNCLOUD_ULTRASHARP="$MODEL_DIR/upscale_models/4x-UltraSharp.pth"
+OWNCLOUD_REALESRGAN="$MODEL_DIR/upscale_models/RealESRGAN_x4plus.pth"
+
+# CLIP Vision
+if [ -f "$OWNCLOUD_CLIP" ]; then
+    echo "  ✅ CLIP Vision trouvé dans OwnCloud, copie..."
+    cp "$OWNCLOUD_CLIP" "$CLIP_VISION_FILE"
+    echo "  ✅ CLIP Vision copié depuis OwnCloud ($(du -h $CLIP_VISION_FILE | cut -f1))"
+elif [ ! -f "$CLIP_VISION_FILE" ] || [ ! -s "$CLIP_VISION_FILE" ]; then
+    echo "  📥 CLIP Vision absent, téléchargement upstream (~2.4GB)..."
     wget --progress=bar:force \
         "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
         -O "$CLIP_VISION_FILE"
-    
+
     if [ $? -eq 0 ] && [ -s "$CLIP_VISION_FILE" ]; then
-        FILE_SIZE=$(du -h "$CLIP_VISION_FILE" | cut -f1)
-        echo "✅ CLIP Vision téléchargé ($FILE_SIZE)"
+        echo "  ✅ CLIP Vision téléchargé upstream ($(du -h $CLIP_VISION_FILE | cut -f1))"
     else
-        echo "❌ Échec téléchargement CLIP Vision"
+        echo "  ❌ Échec téléchargement CLIP Vision"
         rm -f "$CLIP_VISION_FILE"
         exit 1
     fi
 else
-    echo ""
-    echo "✅ CLIP Vision déjà présent: $(du -h $CLIP_VISION_FILE | cut -f1)"
+    echo "  ✅ CLIP Vision déjà présent: $(du -h $CLIP_VISION_FILE | cut -f1)"
 fi
 
-# Télécharger modèles upscale si absents
-UPSCALE_DIR="/workspace/comfyui/ComfyUI/models/upscale_models"
-mkdir -p "$UPSCALE_DIR"
-
-# 4x-UltraSharp (meilleure qualité, anti-artefacts)
-ULTRASHARP_FILE="$UPSCALE_DIR/4x-UltraSharp.pth"
-if [ ! -f "$ULTRASHARP_FILE" ]; then
-    echo ""
-    echo "📥 Téléchargement de 4x-UltraSharp (meilleure qualité, ~67MB)..."
-
+# 4x-UltraSharp
+if [ -f "$OWNCLOUD_ULTRASHARP" ]; then
+    echo "  ✅ 4x-UltraSharp trouvé dans OwnCloud, copie..."
+    cp "$OWNCLOUD_ULTRASHARP" "$ULTRASHARP_FILE"
+    echo "  ✅ 4x-UltraSharp copié depuis OwnCloud ($(du -h $ULTRASHARP_FILE | cut -f1))"
+elif [ ! -f "$ULTRASHARP_FILE" ]; then
+    echo "  📥 4x-UltraSharp absent, téléchargement upstream (~67MB)..."
     wget -q --show-progress \
         "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
         -O "$ULTRASHARP_FILE"
 
     if [ $? -eq 0 ]; then
-        echo "✅ 4x-UltraSharp téléchargé ($(du -h $ULTRASHARP_FILE | cut -f1))"
+        echo "  ✅ 4x-UltraSharp téléchargé upstream ($(du -h $ULTRASHARP_FILE | cut -f1))"
     else
-        echo "⚠️ Échec téléchargement 4x-UltraSharp"
+        echo "  ⚠️ Échec téléchargement 4x-UltraSharp (non bloquant)"
     fi
 else
-    echo ""
-    echo "✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
+    echo "  ✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
 fi
 
-# RealESRGAN (backup, compatibilité)
-REALESRGAN_FILE="$UPSCALE_DIR/RealESRGAN_x4plus.pth"
-if [ ! -f "$REALESRGAN_FILE" ]; then
-    echo ""
-    echo "📥 Téléchargement de RealESRGAN (backup, ~64MB)..."
-
+# RealESRGAN
+if [ -f "$OWNCLOUD_REALESRGAN" ]; then
+    echo "  ✅ RealESRGAN trouvé dans OwnCloud, copie..."
+    cp "$OWNCLOUD_REALESRGAN" "$REALESRGAN_FILE"
+    echo "  ✅ RealESRGAN copié depuis OwnCloud ($(du -h $REALESRGAN_FILE | cut -f1))"
+elif [ ! -f "$REALESRGAN_FILE" ]; then
+    echo "  📥 RealESRGAN absent, téléchargement upstream (~64MB)..."
     wget -q --show-progress \
         "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
         -O "$REALESRGAN_FILE"
 
     if [ $? -eq 0 ]; then
-        echo "✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
+        echo "  ✅ RealESRGAN téléchargé upstream ($(du -h $REALESRGAN_FILE | cut -f1))"
     else
-        echo "⚠️ Échec téléchargement RealESRGAN"
+        echo "  ⚠️ Échec téléchargement RealESRGAN (non bloquant)"
     fi
 else
-    echo ""
-    echo "✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
+    echo "  ✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
 fi
+
+echo "✅ Configuration CLIP Vision + Upscalers terminée"
 
 # ============================================
 # COMFYUI
