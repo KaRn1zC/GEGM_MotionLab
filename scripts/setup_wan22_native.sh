@@ -248,6 +248,75 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
         exit 1
     fi
 
+elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
+    echo ""
+    echo "📥 Téléchargement WAN 2.2 TI2V 5B depuis $REPO..."
+    echo ""
+
+    # Dossier temporaire pour téléchargement
+    TEMP_DL="./models/.temp_download"
+    mkdir -p "$TEMP_DL"
+
+    # 1. Diffusion model (~9.3 GB)
+    echo "  1/3: Diffusion model (~9.3 GB)..."
+    hf download "$REPO" \
+        split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors \
+        --local-dir "$TEMP_DL"
+    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors" ./models/diffusion_models/
+
+    # 2. Text encoder FP16 (~11.4 GB)
+    echo "  2/3: Text encoder FP16 (~11.4 GB)..."
+    hf download "$REPO" \
+        split_files/text_encoders/umt5_xxl_fp16.safetensors \
+        --local-dir "$TEMP_DL"
+    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp16.safetensors" ./models/text_encoders/
+
+    # 3. VAE 5B (~600 MB)
+    echo "  3/3: VAE 5B (~600 MB)..."
+    hf download "$REPO" \
+        split_files/vae/wan2.2_vae.safetensors \
+        --local-dir "$TEMP_DL"
+    mv "$TEMP_DL/split_files/vae/wan2.2_vae.safetensors" ./models/vae/
+
+    # Nettoyer le dossier temporaire
+    rm -rf "$TEMP_DL"
+
+    echo "✅ WAN 2.2 5B téléchargé"
+
+    # Créer dossier wan2.2-ti2v-5b avec symlinks
+    echo ""
+    echo "🔗 Création de symlinks pour compatibilité..."
+    mkdir -p models/wan2.2-ti2v-5b
+    ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors models/wan2.2-ti2v-5b/
+    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-ti2v-5b/
+    ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-ti2v-5b/
+    echo "✅ Symlinks créés"
+
+    # Vérifications
+    echo ""
+    echo "🔍 Vérification intégrité modèle de diffusion..."
+    python scripts/verify_diffusion_model.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
+        exit 1
+    fi
+
+    echo ""
+    echo "🔍 Vérification intégrité Text Encoder..."
+    python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
+        exit 1
+    fi
+
+    echo ""
+    echo "🔍 Vérification intégrité VAE..."
+    python scripts/verify_vae.py wan2.2-ti2v-5b
+    if [ $? -ne 0 ]; then
+        echo "❌ ÉCHEC: VAE corrompu ou incomplet"
+        exit 1
+    fi
+
 elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 I2V 14B depuis $REPO..."
@@ -294,8 +363,8 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     echo ""
     echo "🔗 Création de symlinks pour compatibilité..."
     mkdir -p models/wan2.2-i2v-a14b
-    ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
-    ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../vae/wan_2.1_vae.safetensors models/wan2.2-i2v-a14b/
     echo "✅ Symlinks créés"
@@ -330,6 +399,116 @@ else
     echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"
     exit 1
 fi
+
+# === COMPOSANTS PARTAGÉS (CLIP + UPSCALERS) ===
+echo ""
+echo "📦 Téléchargement des composants partagés..."
+echo ""
+
+# Créer dossiers pour composants partagés
+mkdir -p models/clip_vision
+mkdir -p models/upscale_models
+
+# CLIP Vision (~2.4 GB) - Requis pour tous les modèles
+CLIP_FILE="models/clip_vision/clip-vit-large-patch14-336.safetensors"
+if [ ! -f "$CLIP_FILE" ] || [ ! -s "$CLIP_FILE" ]; then
+    echo "  1/3: CLIP Vision (~2.4 GB)..."
+    wget --progress=bar:force \
+        "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
+        -O "$CLIP_FILE"
+
+    if [ $? -eq 0 ] && [ -s "$CLIP_FILE" ]; then
+        FILE_SIZE=$(du -h "$CLIP_FILE" | cut -f1)
+        echo "  ✅ CLIP Vision téléchargé ($FILE_SIZE)"
+    else
+        echo "  ❌ Échec téléchargement CLIP Vision"
+        rm -f "$CLIP_FILE"
+        exit 1
+    fi
+else
+    echo "  ✅ CLIP Vision déjà présent: $(du -h $CLIP_FILE | cut -f1)"
+fi
+
+# 4x-UltraSharp (~67 MB) - Upscaler haute qualité
+ULTRASHARP_FILE="models/upscale_models/4x-UltraSharp.pth"
+if [ ! -f "$ULTRASHARP_FILE" ]; then
+    echo "  2/3: 4x-UltraSharp (~67 MB)..."
+    wget -q --show-progress \
+        "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
+        -O "$ULTRASHARP_FILE"
+
+    if [ $? -eq 0 ]; then
+        echo "  ✅ 4x-UltraSharp téléchargé ($(du -h $ULTRASHARP_FILE | cut -f1))"
+    else
+        echo "  ⚠️ Échec téléchargement 4x-UltraSharp (non bloquant)"
+    fi
+else
+    echo "  ✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
+fi
+
+# RealESRGAN (~64 MB) - Upscaler backup
+REALESRGAN_FILE="models/upscale_models/RealESRGAN_x4plus.pth"
+if [ ! -f "$REALESRGAN_FILE" ]; then
+    echo "  3/3: RealESRGAN (~64 MB)..."
+    wget -q --show-progress \
+        "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
+        -O "$REALESRGAN_FILE"
+
+    if [ $? -eq 0 ]; then
+        echo "  ✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
+    else
+        echo "  ⚠️ Échec téléchargement RealESRGAN (non bloquant)"
+    fi
+else
+    echo "  ✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
+fi
+
+echo "✅ Composants partagés téléchargés"
+
+# === CRÉATION SYMLINKS COMPOSANTS PARTAGÉS DANS DOSSIERS MODÈLES ===
+echo ""
+echo "🔗 Création de symlinks vers composants partagés dans dossiers modèles..."
+
+# Pour upload sur OwnCloud : créer symlinks dans models/{model_name}/
+# split_and_upload.py utilise --copy-links donc uploadera le contenu réel
+
+if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
+    echo "  Modèle 5B: Ajout symlinks CLIP + Upscalers..."
+    mkdir -p models/wan2.2-ti2v-5b/clip_vision
+    mkdir -p models/wan2.2-ti2v-5b/upscale_models
+
+    # Symlinks relatifs (plus robustes)
+    if [ -f "$CLIP_FILE" ]; then
+        ln -sf ../../clip_vision/clip-vit-large-patch14-336.safetensors models/wan2.2-ti2v-5b/clip_vision/
+    fi
+    if [ -f "$ULTRASHARP_FILE" ]; then
+        ln -sf ../../upscale_models/4x-UltraSharp.pth models/wan2.2-ti2v-5b/upscale_models/
+    fi
+    if [ -f "$REALESRGAN_FILE" ]; then
+        ln -sf ../../upscale_models/RealESRGAN_x4plus.pth models/wan2.2-ti2v-5b/upscale_models/
+    fi
+    echo "  ✅ Symlinks 5B créés"
+fi
+
+if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
+    echo "  Modèle 14B: Ajout symlinks CLIP + Upscalers..."
+    mkdir -p models/wan2.2-i2v-a14b/clip_vision
+    mkdir -p models/wan2.2-i2v-a14b/upscale_models
+
+    # Symlinks relatifs (plus robustes)
+    if [ -f "$CLIP_FILE" ]; then
+        ln -sf ../../clip_vision/clip-vit-large-patch14-336.safetensors models/wan2.2-i2v-a14b/clip_vision/
+    fi
+    if [ -f "$ULTRASHARP_FILE" ]; then
+        ln -sf ../../upscale_models/4x-UltraSharp.pth models/wan2.2-i2v-a14b/upscale_models/
+    fi
+    if [ -f "$REALESRGAN_FILE" ]; then
+        ln -sf ../../upscale_models/RealESRGAN_x4plus.pth models/wan2.2-i2v-a14b/upscale_models/
+    fi
+    echo "  ✅ Symlinks 14B créés"
+fi
+
+echo "✅ Symlinks composants partagés créés (seront uploadés avec les modèles)"
 
 # Étape 5: Vérification des téléchargements
 echo ""

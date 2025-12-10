@@ -91,21 +91,27 @@ models-clean: ## Supprimer les modèles locaux (libère 117GB)
 	@echo "✅ Modèles supprimés"
 	@df -h . | tail -1
 
-models-deep-clean: ## Nettoyage profond (modèles + chunks + cache)
+models-deep-clean: ## Nettoyage profond (modèles + chunks + cache) - avec confirmation
 	@echo "🧹 Nettoyage profond des modèles..."
 	@echo "⚠️  Ceci va supprimer :"
 	@echo "   - Tous les modèles dans models/"
 	@echo "   - models/vae/, models/text_encoders/, models/diffusion_models/"
+	@echo "   - models/clip_vision/, models/upscale_models/"
 	@echo "   - Tous les chunks (*_chunk_*)"
 	@echo "   - Tous les fichiers mapping.txt"
 	@echo "   - Cache HuggingFace (.cache/)"
 	@read -p "Êtes-vous sûr? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 1
-	@echo "🗑️  Suppression..."
+	@$(MAKE) _models-deep-clean-auto
+
+_models-deep-clean-auto: ## Nettoyage profond automatique (sans confirmation) - usage interne
+	@echo "🗑️  Suppression automatique..."
 	rm -rf models/wan2.2-i2v-a14b
 	rm -rf models/wan2.2-ti2v-5b
 	rm -rf models/vae
 	rm -rf models/text_encoders
 	rm -rf models/diffusion_models
+	rm -rf models/clip_vision
+	rm -rf models/upscale_models
 	find models/ -name "*_chunk_*" -type f -delete 2>/dev/null || true
 	find models/ -name "mapping.txt" -type f -delete 2>/dev/null || true
 	find models/ -type d -name "chunks" -exec rm -rf {} + 2>/dev/null || true
@@ -160,60 +166,106 @@ rclone-list: rclone-check ## Lister les fichiers sur OwnCloud
 	@echo "📂 Fichiers sur OwnCloud:"
 	@rclone ls owncloud:/GEGM_ComfyUI/Models/
 
-# ==================== Workflow Complet ====================
+# ==================== Workflows Principaux ====================
+#
+# COMMANDES RECOMMANDÉES:
+#   make workflow-5b     - Workflow complet modèle 5B
+#   make workflow-14b    - Workflow complet modèle 14B
+#   make workflow-both   - Workflow séquentiel 14B + 5B (évite surcharge disque)
+#
+# Chaque workflow inclut: Download → Vérif → Split → Upload → Vérif → Deep Clean
+# ========================================================================
 
-full-upload-workflow: download-models rclone-upload-all models-clean ## Workflow complet
+workflow-14b: rclone-check ## [PRINCIPAL] Workflow complet 14B: Download → Vérif → Split → Upload → Vérif → Deep Clean
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "🚀 WORKFLOW COMPLET MODÈLE 14B"
+	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
-	@echo "🎉 Workflow complet terminé !"
-	@echo "✅ Modèles téléchargés, découpés et uploadés sur OwnCloud"
-	@echo "✅ Modèles locaux supprimés (~117GB libérés)"
-	@df -h . | tail -1
-
-# ==================== Sequential Upload (Low Disk Space) ====================
-
-full-workflow-14b: rclone-check ## 14B: Download (ComfyUI Native) → Split (delete originals) → Upload (chunks only) → Verify → Clean
-	@echo "🔄 Workflow complet modèle 14B (download ComfyUI Native → split (delete originals) → upload (chunks) → verify → clean)"
-	@echo ""
-	@echo "📥 1/5: Téléchargement du modèle 14B (ComfyUI Native)..."
+	@echo "📥 1/6: Téléchargement modèle 14B + composants (ComfyUI Native)..."
+	@echo "      • Diffusion models FP16 (2x28.6 GB)"
+	@echo "      • T5 Encoder FP16 (11.4 GB)"
+	@echo "      • VAE 14B (254 MB)"
+	@echo "      • CLIP Vision (2.4 GB)"
+	@echo "      • Upscalers (UltraSharp + RealESRGAN)"
+	@echo "      • Vérifications intégrité automatiques"
 	./scripts/setup_wan22_native.sh wan2.2-i2v-a14b
 	@echo ""
-	@echo "📦 2/5: Découpe et upload du modèle 14B..."
+	@echo "📦 2/6: Découpe automatique et upload vers OwnCloud..."
+	@echo "      • Fichiers >4GB découpés en chunks 2GB"
+	@echo "      • Suppression automatique des originaux"
+	@echo "      • Upload de tous les fichiers (via symlinks)"
 	python scripts/split_and_upload.py --model wan2.2-i2v-a14b
 	@echo ""
-	@echo "🔍 3/5: Vérification de l'upload..."
+	@echo "🔍 3/6: Vérification de l'upload sur OwnCloud..."
 	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-i2v-a14b/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
+	@echo "✅ Upload vérifié avec succès"
 	@echo ""
-	@echo "✅ 4/5: Upload vérifié, nettoyage local..."
-	rm -rf models/wan2.2-i2v-a14b
+	@echo "🧹 4/6: Nettoyage profond local (deep clean)..."
+	@$(MAKE) _models-deep-clean-auto
 	@echo ""
-	@echo "✅ 5/5: Modèle 14B uploadé et nettoyé"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "✅ WORKFLOW 14B TERMINÉ AVEC SUCCÈS"
+	@echo "═══════════════════════════════════════════════════════════"
 	@df -h . | tail -1
-
-full-workflow-5b: rclone-check ## 5B: Download (ComfyUI Native) → Split (delete originals) → Upload (chunks only) → Verify → Clean
-	@echo "🔄 Workflow complet modèle 5B (download ComfyUI Native → split (delete originals) → upload (chunks) → verify → clean)"
 	@echo ""
-	@echo "📥 1/5: Téléchargement du modèle 5B (ComfyUI Native)..."
+
+workflow-5b: rclone-check ## [PRINCIPAL] Workflow complet 5B: Download → Vérif → Split → Upload → Vérif → Deep Clean
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "🚀 WORKFLOW COMPLET MODÈLE 5B"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "📥 1/6: Téléchargement modèle 5B + composants (ComfyUI Native)..."
+	@echo "      • Diffusion model FP16 (9.31 GB)"
+	@echo "      • T5 Encoder FP16 (11.4 GB)"
+	@echo "      • VAE 5B (254 MB)"
+	@echo "      • CLIP Vision (2.4 GB)"
+	@echo "      • Upscalers (UltraSharp + RealESRGAN)"
+	@echo "      • Vérifications intégrité automatiques"
 	./scripts/setup_wan22_native.sh wan2.2-ti2v-5b
 	@echo ""
-	@echo "📦 2/5: Découpe et upload du modèle 5B..."
+	@echo "📦 2/6: Découpe automatique et upload vers OwnCloud..."
+	@echo "      • Fichiers >4GB découpés en chunks 2GB"
+	@echo "      • Suppression automatique des originaux"
+	@echo "      • Upload de tous les fichiers (via symlinks)"
 	python scripts/split_and_upload.py --model wan2.2-ti2v-5b
 	@echo ""
-	@echo "🔍 3/5: Vérification de l'upload..."
+	@echo "🔍 3/6: Vérification de l'upload sur OwnCloud..."
 	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-ti2v-5b/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
+	@echo "✅ Upload vérifié avec succès"
 	@echo ""
-	@echo "✅ 4/5: Upload vérifié, nettoyage local..."
-	rm -rf models/wan2.2-ti2v-5b
+	@echo "🧹 4/6: Nettoyage profond local (deep clean)..."
+	@$(MAKE) _models-deep-clean-auto
 	@echo ""
-	@echo "✅ 5/5: Modèle 5B uploadé et nettoyé"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "✅ WORKFLOW 5B TERMINÉ AVEC SUCCÈS"
+	@echo "═══════════════════════════════════════════════════════════"
 	@df -h . | tail -1
+	@echo ""
 
-sequential-upload-workflow: full-workflow-14b full-workflow-5b ## Workflow séquentiel (espace disque limité <54GB)
+workflow-both: ## [PRINCIPAL] Workflow séquentiel 14B puis 5B (évite surcharge disque)
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "🚀 WORKFLOW SÉQUENTIEL - 14B PUIS 5B"
+	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
-	@echo "🎉 Workflow séquentiel terminé !"
-	@echo "✅ Modèle 14B uploadé et nettoyé (~28GB)"
-	@echo "✅ Modèle 5B uploadé et nettoyé (~9GB)"
+	@echo "⚠️  Exécution séquentielle pour éviter surcharge disque"
+	@echo "   • 14B: Download → Upload → Deep Clean → 5B démarre"
+	@echo "   • 5B: Download → Upload → Deep Clean → Terminé"
 	@echo ""
-	@echo "📊 Vérification finale:"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "🔵 PHASE 1/2: MODÈLE 14B"
+	@echo "═══════════════════════════════════════════════════════════"
+	@$(MAKE) workflow-14b
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "🟢 PHASE 2/2: MODÈLE 5B"
+	@echo "═══════════════════════════════════════════════════════════"
+	@$(MAKE) workflow-5b
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "🎉 WORKFLOW SÉQUENTIEL TERMINÉ AVEC SUCCÈS"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "📊 Vérification finale des uploads sur OwnCloud:"
 	@echo ""
 	@echo "📦 Modèle 14B:"
 	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-i2v-a14b/
@@ -223,6 +275,8 @@ sequential-upload-workflow: full-workflow-14b full-workflow-5b ## Workflow séqu
 	@echo ""
 	@echo "💾 Espace disque actuel:"
 	@df -h . | tail -1
+	@echo ""
+	@echo "✅ Les deux modèles sont uploadés et nettoyés"
 
 # ==================== RunPod Commands ====================
 

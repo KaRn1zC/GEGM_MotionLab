@@ -10,210 +10,185 @@
 
 ## 📅 Modifications récentes
 
-### [2025-12-09 16:00] - ✅ FIX ARCHITECTURE: Workflow 14B + Migration FP16
+### [2025-12-10 PM #2] - ✅ SIMPLIFICATION WORKFLOWS: 3 commandes principales avec deep-clean
 
-**Problème identifié** : Modèle 14B ne génère pas de vidéo, erreur tensor mismatch (36 vs 16 channels)
-- RuntimeError: `expected input[1, 16, 30, 88, 140] to have 36 channels, but got 16 channels instead`
-- Analyse modèle 14B FP8: `patch_embedding.weight: torch.Size([5120, 36, 1, 2, 2])` → attend 36 canaux
-- Cause: Architecture workflow incorrecte (utilise 2-node moderne au lieu de 1-node legacy)
+**Objectif** : Simplifier les workflows Makefile pour clarté et automatisation complète
 
-**Investigation FP8 vs FP16** :
-- Test modèle 14B FP16: `patch_embedding.weight: torch.Size([5120, 36, 1, 2, 2])` → MÊME architecture
-- Conclusion: FP8 vs FP16 n'est PAS la cause du crash (même nombre de canaux)
-- Différence: FP16 offre meilleure qualité (~28.6GB) vs FP8 (~14GB)
+**Problème initial** :
+- Trop de commandes similaires (`full-workflow-5b`, `full-workflow-14b`, `sequential-upload-workflow`, `full-upload-workflow`)
+- Pas de deep-clean automatique après workflows
+- Workflow séquentiel pouvait surcharger le disque
 
 **Solution implémentée** :
 
-**A. Architecture workflow 14B corrigée** :
-1. **Nouveau workflow dédié** : `wan22_14b_with_upscale.json` créé
-   - Node 7: `WanVideoImageToVideoEncode` (legacy 1-node, correct pour 14B)
-   - Suppression node 7b: `WanVideoEmptyEmbeds` (non utilisé par 14B)
-   - spatial_compress_level: 1 (matching official workflow)
-   - Workflow officiel source: `wanvideo2_2_I2V_A14B_example_WIP.json`
+**A. Création `_models-deep-clean-auto`** (Makefile lignes 106-120) :
+- Version non-interactive de `models-deep-clean` pour automation
+- Supprime TOUT : modèles, VAE, T5, CLIP, upscalers, chunks, cache
+- Pas de confirmation requise (usage interne workflows)
 
-2. **Architecture différente 5B vs 14B** :
-   - 5B: `WanVideoEncode` → `WanVideoEmptyEmbeds` (2-node moderne)
-   - 14B: `WanVideoImageToVideoEncode` (1-node legacy)
+**B. Trois workflows principaux simplifiés** :
 
-**B. Migration FP8 → FP16 pour qualité maximale** :
-1. **setup_wan22_native.sh** (6 modifications) :
-   - Lignes 121, 123: high_noise_14B_fp8 → high_noise_14B_fp16
-   - Lignes 128, 130: low_noise_14B_fp8 → low_noise_14B_fp16
-   - Lignes 151-152, 297-298: Symlinks vers fichiers FP16
+1. **`make workflow-5b`** (lignes 213-244) :
+   - Download modèle 5B + composants (9.3GB + 14GB partagés)
+   - Vérifications intégrité automatiques
+   - Split et upload vers OwnCloud
+   - Vérification upload
+   - **Deep clean automatique** (libère ~120GB)
 
-2. **docker-entrypoint.sh** (3 modifications) :
-   - Ligne 42: Commentaire corrigé (fp8 → fp16)
-   - Lignes 44-45: Vérification présence fichiers FP16
-   - Lignes 80-95: Loop vérification FP16, taille min 12GB → 25GB
+2. **`make workflow-14b`** (lignes 179-211) :
+   - Download modèle 14B + composants (57GB + 14GB partagés)
+   - Vérifications intégrité automatiques
+   - Split et upload vers OwnCloud
+   - Vérification upload
+   - **Deep clean automatique** (libère ~120GB)
+
+3. **`make workflow-both`** (lignes 246-280) :
+   - **SÉQUENTIEL** : Exécute workflow-14b, PUIS workflow-5b
+   - Deep clean après chaque modèle (évite surcharge disque)
+   - Vérification finale des deux uploads
+   - Total : ~140GB max utilisé (au lieu de 180GB en parallèle)
 
 **Fichiers modifiés** :
-- `workflows/templates/wan22_14b_with_upscale.json` : NOUVEAU workflow 14B avec upscale
-- `workflows/templates/wan22_14b_i2v.json` : NOUVEAU workflow 14B sans upscale
-- `workflows/templates/wan22_5b_i2v.json` : Renommé depuis wan22_i2v.json (clarification)
-- `workflows/templates/wan22_5b_with_upscale.json` : Renommé depuis wan22_with_upscale.json (clarification)
-- `scripts/setup_wan22_native.sh` : Download FP16 au lieu de FP8
-- `docker-entrypoint.sh` : Vérifications FP16, taille min 25GB
-- `web_interface/routes.py` : Sélection automatique workflow selon modèle ET upscale
-- `workflows/workflow_manager.py` : Détection fichiers FP16 pour 14B
+- `Makefile` : Workflows simplifiés + deep-clean auto + documentation
 
 **Impact** :
-- ✅ **Architecture correcte** : 14B utilise maintenant WanVideoImageToVideoEncode
-- ✅ **Qualité maximale** : FP16 au lieu de FP8 pour meilleure qualité
-- ✅ **Workflows séparés** : 5B et 14B ont leurs propres workflows avec architectures spécifiques
-- ✅ **Documentation corrigée** : CLAUDE.md précisait à tort que WanVideoImageToVideoEncode était bugué (vrai pour 5B, faux pour 14B)
-
-**Validation requise** : Test génération 14B avec nouveau workflow et fichiers FP16
+- ✅ **3 commandes claires** : Une par modèle + une séquentielle
+- ✅ **Deep clean automatique** : Libération disque garantie après chaque workflow
+- ✅ **Vérifications complètes** : Download → Vérif → Split → Upload → Vérif → Clean
+- ✅ **Séquentiel optimisé** : Évite surcharge disque (14B → clean → 5B → clean)
+- ✅ **Documentation inline** : Header explicatif dans Makefile
+- ✅ **Anciennes commandes supprimées** : Plus de confusion
 
 ---
 
-### [2025-12-09 14:00] - ✅ IMPLÉMENTATION: VAE spécifiques par modèle (5B vs 14B)
+### [2025-12-10 PM] - ✅ CORRECTIONS AUDIT: FP8→FP16 + CLIP/Upscalers OwnCloud (Option A)
 
-**Problème** : Le modèle 14B ne fonctionnait pas avec le VAE du 5B
-- Erreur tensor size mismatch persistante malgré fix spatial_compress_level
-- Analyse révèle : 14B nécessite VAE 2.1 (16 canaux) au lieu de VAE 2.2 (48 canaux)
+**Audit complet effectué** : Vérification minutieuse de tous les workflows
 
-**Cause identifiée** :
-- Stratégies de compression différentes entre 5B et 14B
-- 5B : Compression agressive 16×16×4 → VAE complexe (1.41 GB, 48 canaux)
-- 14B : Compression standard 8×8×4 → VAE simple (254 MB, 16 canaux)
-- Source : HuggingFace Comfy-Org/Wan_2.2_ComfyUI_Repackaged + docs ComfyUI
+**Problèmes critiques corrigés** :
+
+1. **docker-entrypoint.sh ligne 72** : Appel incorrect `setup_wan22_native.sh --model` → `setup_wan22_native.sh`
+   - Script attend argument positionnel, pas option --model
+
+2. **download_models_from_owncloud.py lignes 30, 31, 72, 75** : Références FP8 obsolètes → FP16
+   - Modèle 14B utilise FP16 depuis migration
+   - Correction: `wan2.2_i2v_*_14B_fp8_scaled` → `wan2.2_i2v_*_14B_fp16`
+
+3. **Makefile models-deep-clean** : Manquait clip_vision/ et upscale_models/
+   - Ajout lignes 110-111 : `rm -rf models/clip_vision` et `rm -rf models/upscale_models`
+   - Nettoyage complet maintenant (~2.5 GB supplémentaires)
+
+4. **ARCHITECTURAL: CLIP/Upscalers non uploadés sur OwnCloud** (Option A implémentée)
+
+**Solution Option A** : Symlinks dans dossiers modèles
+
+**A. setup_wan22_native.sh (lignes 468-511)** :
+- Après download CLIP/upscalers dans `models/clip_vision/` et `models/upscale_models/`
+- Création symlinks relatifs dans `models/{model_name}/clip_vision/` et `models/{model_name}/upscale_models/`
+- Symlinks pour 5B ET 14B selon le mode (all/5b/14b)
+- `split_and_upload.py` utilise déjà `--copy-links` → upload automatique du contenu réel
+
+**B. docker-entrypoint.sh (lignes 281-364)** :
+- Section complètement réécrite : "CLIP VISION + UPSCALERS"
+- Logique en 3 étapes pour chaque composant :
+  1. Vérifier si présent dans `$MODEL_DIR/{clip_vision|upscale_models}/` (depuis OwnCloud)
+  2. Si oui → copier vers dossiers globaux ComfyUI
+  3. Si non → fallback upstream (HuggingFace/GitHub)
+- Priorité OwnCloud, fallback upstream automatique
+
+**Fichiers modifiés** :
+- `docker-entrypoint.sh` : Correction appel + logique CLIP/upscalers depuis OwnCloud
+- `scripts/download_models_from_owncloud.py` : FP8 → FP16 (3 occurrences)
+- `Makefile` : models-deep-clean + clip_vision + upscale_models
+- `scripts/setup_wan22_native.sh` : Création symlinks CLIP/upscalers dans models/{model_name}/
+
+**Impact** :
+- ✅ **Upload OwnCloud complet** : Modèles + VAE + T5 + CLIP + Upscalers (TOUT inclus)
+- ✅ **Download OwnCloud complet** : Composants partagés inclus dans backup
+- ✅ **Fallback intelligent** : Si OwnCloud manque CLIP/upscalers → upstream automatique
+- ✅ **Nettoyage complet** : models-deep-clean supprime TOUT (~2.5 GB ajoutés)
+- ✅ **Cohérence FP16** : Plus de références FP8 obsolètes
+- ✅ **Workflow fonctionnel** : `make full-workflow-5b/14b` upload TOUT sur OwnCloud
+
+---
+
+### [2025-12-10 AM] - ✅ SYSTÈME UPSTREAM + CLIP/Upscalers: Download + Healthcheck + Fallback OwnCloud
+
+**Objectif** : Système professionnel de téléchargement avec upstream prioritaire et fallback automatique
+
+**Problème initial** :
+- Composants partagés (CLIP Vision, upscalers) téléchargés uniquement dans container, pas localement
+- Pas de vérification version upstream avant download
+- Pas de cleanup automatique en cas d'échec download
+- Makefile appelait `setup_wan22_native.sh` avec argument modèle individuel non supporté
 
 **Solution implémentée** :
-1. **Download adaptatif** : `setup_wan22_native.sh` télécharge bon VAE par modèle
-   - Lignes 135-140, 281-286 : Download wan_2.1_vae.safetensors pour 14B
-   - Création symlinks vers bons fichiers VAE
 
-2. **Déploiement Docker** : `docker-entrypoint.sh` copie bon VAE selon MODEL_NAME
-   - Lignes 164-170 : Détection modèle et copie VAE correspondant
+**A. Système de métadonnées et healthcheck** :
+1. **models_metadata.json** (NOUVEAU) : Référence des tailles attendues pour détection version
+   - Modèles 5B et 14B (fichiers diffusion + VAE + T5)
+   - Composants partagés (CLIP Vision, UltraSharp, RealESRGAN)
+   - Tolérance ±1% pour variations compression
 
-3. **Injection dynamique** : `workflow_manager.py` injecte vae_name automatiquement
-   - Lignes 204-210 : Détection model_type et injection wan2.2_vae (5B) ou wan_2.1_vae (14B)
+2. **check_upstream_health.py** (NOUVEAU) : Healthcheck upstream avant download
+   - Vérifie disponibilité sources (HuggingFace + GitHub)
+   - Compare tailles fichiers via HEAD requests (rapide, pas de download)
+   - Détecte nouvelles versions upstream automatiquement
+   - Logging Loguru détaillé
 
-4. **Templates compatibles** : Workflows utilisent placeholder {vae_name}
-   - `wan22_i2v.json:92` : WanVideoVAELoader avec model_name={vae_name}
-   - `wan22_with_upscale.json:125` : Idem
+3. **cleanup_partial_downloads.py** (NOUVEAU) : Nettoyage fichiers partiels si échec
+   - Vérifie intégrité basée sur taille attendue (±1%)
+   - Supprime fichiers incomplets/corrompus
+   - Nettoie dossiers temporaires (chunks, .temp_download)
 
-5. **Validation adaptée** : `verify_vae.py` accepte 48ch (5B) ou 16ch (14B)
-   - Lignes 33-44 : Détermination VAE et expected_channels selon modèle
-   - Lignes 177-197 : Validation architecture avec canaux attendus
+**B. Modifications setup_wan22_native.sh** :
+1. **CLIP + Upscalers download** (lignes 334-397) : Download composants partagés
+   - CLIP Vision (~2.4 GB) depuis HuggingFace
+   - 4x-UltraSharp (~67 MB) depuis HuggingFace
+   - RealESRGAN (~64 MB) depuis GitHub Releases
 
-**Fichiers modifiés** :
-- `scripts/setup_wan22_native.sh` : Download wan_2.1_vae pour 14B
-- `docker-entrypoint.sh` : Copie VAE selon modèle
-- `workflows/workflow_manager.py` : Injection vae_name dynamique
-- `workflows/templates/wan22_i2v.json` : Placeholder {vae_name}
-- `workflows/templates/wan22_with_upscale.json` : Placeholder {vae_name}
-- `scripts/verify_vae.py` : Validation spécifique par modèle
+2. **Support download individuel 5B** (lignes 251-318, NOUVEAU) :
+   - Ajout elif branch pour `wan2.2-ti2v-5b`
+   - Download diffusion + T5 + VAE
+   - Création symlinks compatibilité
+   - Vérifications intégrité
 
-**Impact** :
-- ✅ **14B fonctionnel** : Plus d'erreur tensor mismatch due au VAE
-- ✅ **Validation complète** : Workflow 14B validé end-to-end (make full-workflow-14b)
-- ✅ **Automatisation totale** : Système détecte et utilise bon VAE sans intervention
-- ✅ **Documentation complète** : CLAUDE.md et ARCHITECTURE.md mis à jour
+3. **Fix symlinks 14B FP16** (lignes 297-298) :
+   - Correction: pointaient vers fichiers FP8 au lieu de FP16
+   - Symlinks corrigés vers `*_fp16.safetensors`
 
-**Validation** : Logs test_workflow_14B montrent succès complet
+**C. Modifications docker-entrypoint.sh** (lignes 29-209) :
+Logique complète upstream + fallback :
+1. **ÉTAPE 1 - Healthcheck** (lignes 50-58) : `check_upstream_health.py` vérifie disponibilité
+2. **ÉTAPE 2 - Download upstream** (lignes 60-95) : Si healthcheck OK → `setup_wan22_native.sh`
+3. **ÉTAPE 3 - Fallback OwnCloud** (lignes 97-129) : Si healthcheck KO ou download échoue → OwnCloud
+4. **ÉTAPE 4 - Vérification** (lignes 132-209) : Validation fichiers + reconstitution chunks si OwnCloud
+
+**Workflow download** :
+```bash
+1. Healthcheck upstream (HEAD requests rapides)
+2a. Si OK → Download upstream (HuggingFace + GitHub)
+2b. Si échec → Cleanup + Fallback OwnCloud
+3. Vérification intégrité
+4. Reconstitution chunks (si OwnCloud)
 ```
-✅ LE VAE 2.1 EST COMPATIBLE (16 CANAUX)
-decoder.conv1.weight: 16 canaux d'entrée (correct pour VAE 2.1)
-conv2.weight: 16 canaux de sortie (correct pour VAE 2.1)
-```
 
----
-
-### [2025-12-03 18:00] - ✅ Système upscale adaptatif UltraSharp + Génération optimale
-
-**Problème** : Erreur critique détectée dans logs 14B_container1.txt
-- Workflows échouent avec `RuntimeError: tensor size mismatch (88 vs 44)`
-- Cause : Algorithme génération optimale calcule generation_width/height mais ne redimensionne pas l'image
-- Workflow upscale utilise ImageUpscaleWithModel (upscale fixe 4x) sans resize final vers target exacte
-- Variable `scale_ratio` inutilisée (ligne 227-228 routes.py) détectée par ruff
-
-**Solutions implémentées** :
-
-**A. Système redimensionnement pré-génération (2 modifications)** :
-1. **Redimensionnement en 2 étapes** (PIL LANCZOS) :
-   - Étape 1 : Ajustement multiples 32 (LANCZOS rapide) - routes.py lignes 266-292
-   - Étape 2 : Upscale/downscale pré-génération vers résolution génération optimale - routes.py lignes 294-326
-2. **Suppression variable inutilisée** : `scale_ratio` lignes 227-228 supprimées
-
-**B. Workflow upscale adaptatif (3 modifications)** :
-1. **Ajout paramètres target_width/height** : `wan22_with_upscale.json` lignes 86-104
-   - target_width (max 7680), target_height (max 4320)
-   - enable_vae_tiling (boolean)
-2. **Node 11b (ImageScale)** : Resize précis après upscale 4x - lignes 211-220
-   - Input : sortie UltraSharp 4x (node 11)
-   - Output : résolution target exacte (upscale ou downscale selon besoin)
-   - Méthode : Lanczos (haute qualité)
-3. **Version workflow** : v2.0.0 → **v3.0.0** - nom mis à jour "UltraSharp Upscale"
-
-**C. Messages et feedback améliorés (2 modifications)** :
-1. **Logs détaillés stratégie** : `routes.py` lignes 432-455
-   - Affiche : source originale, ajustée (×32), génération WAN, finale
-   - Ratio upscale post-génération avec warning approprié
-2. **Messages upscale adaptatifs** :
-   - Si ratio ≤ 4x : ✅ "Upscale optimal - 4x-UltraSharp + affinage Lanczos"
-   - Si ratio > 4x : ⚠️ "Upscale élevé - 4x UltraSharp + Lanczos supplémentaire"
-
-**D. Passage paramètres target au workflow** : `routes.py` lignes 470-480
-   - Ajout target_width/target_height dans workflow_params
-   - Permet au workflow de connaître la résolution finale exacte
+**Fichiers créés** :
+- `models_metadata.json` : Référence tailles fichiers
+- `scripts/check_upstream_health.py` : Healthcheck + détection version
+- `scripts/cleanup_partial_downloads.py` : Cleanup fichiers partiels
 
 **Fichiers modifiés** :
-- `workflows/templates/wan22_with_upscale.json` : v3.0.0, node 11b, paramètres target
-- `web_interface/routes.py` : redimensionnement PIL LANCZOS 2 étapes, logs améliorés, suppression scale_ratio
+- `scripts/setup_wan22_native.sh` : CLIP + upscalers + branch 5B + fix symlinks FP16
+- `docker-entrypoint.sh` : Healthcheck + fallback OwnCloud + cleanup automatique
 
 **Impact** :
-- ✅ **Fix crash 14B** : Image correctement redimensionnée avant génération (mismatch résolu)
-- ✅ **Upscale adaptatif** : Ratio ≤4x → super-sampling, ratio >4x → upscale mixte
-- ✅ **Qualité maximale** : UltraSharp 4x utilisé optimalement pour tous les upscales
-- ✅ **Flexibilité totale** : Supporte n'importe quelle résolution target (64-7680×64-4320)
-- ✅ **Feedback précis** : Warnings clairs sur qualité attendue selon ratio
-
----
-
-### [2025-12-05 12:00] - ✅ FIX CRITIQUE: spatial_compress_level + Timeout étendu
-
-**Problèmes identifiés** (analyse logs 5B_container3.txt + test_5B.txt) :
-
-1. **CRITIQUE - Incompatibilité spatial_compress_level=1** :
-   - `WanVideoEncode` (node 7) avec `spatial_compress_level=1` produit latents **70x44** (compression ×16)
-   - `WanVideoEmptyEmbeds` (node 7b) utilise `VAE_STRIDE` base et attend **140x88** (compression ×8)
-   - **MISMATCH** : 70x44 ≠ 140x88 → RuntimeError tensor size mismatch
-   - Vérifié dans logs : `WanVideoEncode: Encoded latents shape torch.Size([1, 48, 1, 44, 70])`
-   - Affecte **TOUS** les modèles (5B et 14B)
-
-2. **Timeout insuffisant pour preset "qualité maximale"** :
-   - Preset quality : 30 steps (vs 20 balanced)
-   - Temps d'exécution 5B : ~9min30s
-   - Timeout actuel : 600s (10 minutes)
-   - Résultat : Workflow bloqué à 100% puis timeout
-
-**Solutions implémentées** :
-
-**A. Correction spatial_compress_level (2 fichiers)** :
-1. `workflows/templates/wan22_i2v.json:126` : `spatial_compress_level: 1 → 0`
-2. `workflows/templates/wan22_with_upscale.json:159` : `spatial_compress_level: 1 → 0`
-
-**Impact** :
-- Compression spatiale : 8 (au lieu de 16)
-- Latents produits : **140x88** (match parfait avec WanVideoEmptyEmbeds) ✅
-- Résout crash 14B et timeout 5B
-
-**B. Augmentation timeout websocket** :
-- `src/comfyui_client.py:34` : `websocket_timeout: 600 → 1200` (20 minutes)
-- Marge confortable pour preset quality (30 steps)
-- Supporte jusqu'à 15-18 minutes de génération
-
-**Fichiers modifiés** :
-- `workflows/templates/wan22_i2v.json` : spatial_compress_level=0
-- `workflows/templates/wan22_with_upscale.json` : spatial_compress_level=0
-- `src/comfyui_client.py` : websocket_timeout=1200s
-
-**Résultats** :
-- ✅ **14B fonctionnel** : Plus de RuntimeError tensor mismatch
-- ✅ **5B stable** : Génération complète sans timeout
-- ✅ **Preset quality** : 30 steps supportés (15-18 min max)
-- ✅ **Compatible 5B/14B** : Configuration identique pour les deux modèles
+- ✅ **Download complet** : Tous composants téléchargés localement (models + CLIP + upscalers)
+- ✅ **Détection version** : Healthcheck détecte nouvelles versions upstream automatiquement
+- ✅ **Fallback automatique** : Bascule sur OwnCloud si upstream KO
+- ✅ **Cleanup intelligent** : Suppression fichiers partiels en cas d'échec
+- ✅ **Makefile fonctionnel** : `full-workflow-5b/14b` fonctionnent avec download individuel
+- ✅ **Logging professionnel** : Loguru pour tous les scripts (healthcheck, cleanup)
 
 ---
 

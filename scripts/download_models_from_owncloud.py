@@ -27,8 +27,8 @@ def verify_model_files(model_target: Path) -> bool:
 
     # PRIORITÉ 1 : Format ComfyUI Native (OwnCloud) - fichiers séparés
     native_5b_file = model_target / "wan2.2_ti2v_5B_fp16.safetensors"
-    native_14b_high = model_target / "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
-    native_14b_low = model_target / "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+    native_14b_high = model_target / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
+    native_14b_low = model_target / "wan2.2_i2v_low_noise_14B_fp16.safetensors"
 
     # Vérification modèle 5B (fichier unique)
     if native_5b_file.exists():
@@ -69,13 +69,13 @@ def verify_model_files(model_target: Path) -> bool:
             return False
         else:
             logger.info(
-                f"✅ wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors: {high_size / 1024**3:.2f} GB"
+                f"✅ wan2.2_i2v_high_noise_14B_fp16.safetensors: {high_size / 1024**3:.2f} GB"
             )
             logger.info(
-                f"✅ wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors: {low_size / 1024**3:.2f} GB"
+                f"✅ wan2.2_i2v_low_noise_14B_fp16.safetensors: {low_size / 1024**3:.2f} GB"
             )
             logger.success(
-                f"✅ Format ComfyUI Native détecté (14B - total: {total_size / 1024**3:.2f} GB)"
+                f"✅ Format ComfyUI Native détecté (14B FP16 - total: {total_size / 1024**3:.2f} GB)"
             )
             return True
 
