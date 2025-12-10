@@ -81,12 +81,13 @@
 
 ### Modèle 14B
 - **Fichiers** :
-  - `wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors`
-  - `wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors`
+  - `wan2.2_i2v_high_noise_14B_fp16.safetensors` (~28.6 GB)
+  - `wan2.2_i2v_low_noise_14B_fp16.safetensors` (~28.6 GB)
 - **Résolution max native** : **720p** (identique 5B, upscale requis pour >720p)
 - **GPU** : H100 SXM 80GB
-- **Qualité** : Supérieure au 5B (MoE architecture)
-- **Template** : `wan22_with_upscale.json`
+- **Qualité** : Supérieure au 5B (MoE architecture + FP16)
+- **Template** : `wan22_14b_with_upscale.json` (architecture différente du 5B)
+- **Architecture workflow** : `WanVideoImageToVideoEncode` (1-node legacy)
 
 ### T5 Encoder (partagé 5B/14B)
 - **Fichier** : `umt5_xxl_fp16.safetensors` (11.4 GB)
@@ -114,10 +115,10 @@
 ### Modèles 14B
 ```
 /workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/
-├── wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
-├── wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
-├── umt5_xxl_fp16.safetensors             # 11.4 GB (partagé)
-├── wan_2.1_vae.safetensors               # 254 MB (VAE 2.1 - 16ch)
+├── wan2.2_i2v_high_noise_14B_fp16.safetensors  # 28.6 GB (qualité maximale)
+├── wan2.2_i2v_low_noise_14B_fp16.safetensors   # 28.6 GB (qualité maximale)
+├── umt5_xxl_fp16.safetensors                   # 11.4 GB (partagé)
+├── wan_2.1_vae.safetensors                     # 254 MB (VAE 2.1 - 16ch)
 └── config.json
 ```
 
@@ -181,11 +182,16 @@ COMFYUI_PORT=8188
 
 ## Points critiques
 
-1. **VAE spécifiques** : 5B et 14B utilisent des VAE DIFFÉRENTS et NON INTERCHANGEABLES
+1. **Architecture workflow DIFFÉRENTE** : 5B et 14B utilisent des architectures de nodes DIFFÉRENTES
+   - 5B: `WanVideoEncode` → `WanVideoEmptyEmbeds` (2-node moderne)
+   - 14B: `WanVideoImageToVideoEncode` (1-node legacy)
+   - Templates: `wan22_i2v.json` (5B) vs `wan22_14b_with_upscale.json` (14B)
+2. **VAE spécifiques** : 5B et 14B utilisent des VAE DIFFÉRENTS et NON INTERCHANGEABLES
    - 5B: wan2.2_vae.safetensors (1.41 GB, 48 canaux)
    - 14B: wan_2.1_vae.safetensors (254 MB, 16 canaux)
    - Injection automatique par workflow_manager.py
-2. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
-3. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 1200s)
-4. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
-5. **VRAM** : 48GB minimum (5B), 80GB (14B)
+3. **Précision modèle 14B** : FP16 (~28.6GB par fichier) pour qualité maximale (au lieu de FP8 ~14GB)
+4. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
+5. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 1200s)
+6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
+7. **VRAM** : 48GB minimum (5B), 80GB+ (14B FP16)

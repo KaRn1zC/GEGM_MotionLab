@@ -10,6 +10,62 @@
 
 ## 📅 Modifications récentes
 
+### [2025-12-09 16:00] - ✅ FIX ARCHITECTURE: Workflow 14B + Migration FP16
+
+**Problème identifié** : Modèle 14B ne génère pas de vidéo, erreur tensor mismatch (36 vs 16 channels)
+- RuntimeError: `expected input[1, 16, 30, 88, 140] to have 36 channels, but got 16 channels instead`
+- Analyse modèle 14B FP8: `patch_embedding.weight: torch.Size([5120, 36, 1, 2, 2])` → attend 36 canaux
+- Cause: Architecture workflow incorrecte (utilise 2-node moderne au lieu de 1-node legacy)
+
+**Investigation FP8 vs FP16** :
+- Test modèle 14B FP16: `patch_embedding.weight: torch.Size([5120, 36, 1, 2, 2])` → MÊME architecture
+- Conclusion: FP8 vs FP16 n'est PAS la cause du crash (même nombre de canaux)
+- Différence: FP16 offre meilleure qualité (~28.6GB) vs FP8 (~14GB)
+
+**Solution implémentée** :
+
+**A. Architecture workflow 14B corrigée** :
+1. **Nouveau workflow dédié** : `wan22_14b_with_upscale.json` créé
+   - Node 7: `WanVideoImageToVideoEncode` (legacy 1-node, correct pour 14B)
+   - Suppression node 7b: `WanVideoEmptyEmbeds` (non utilisé par 14B)
+   - spatial_compress_level: 1 (matching official workflow)
+   - Workflow officiel source: `wanvideo2_2_I2V_A14B_example_WIP.json`
+
+2. **Architecture différente 5B vs 14B** :
+   - 5B: `WanVideoEncode` → `WanVideoEmptyEmbeds` (2-node moderne)
+   - 14B: `WanVideoImageToVideoEncode` (1-node legacy)
+
+**B. Migration FP8 → FP16 pour qualité maximale** :
+1. **setup_wan22_native.sh** (6 modifications) :
+   - Lignes 121, 123: high_noise_14B_fp8 → high_noise_14B_fp16
+   - Lignes 128, 130: low_noise_14B_fp8 → low_noise_14B_fp16
+   - Lignes 151-152, 297-298: Symlinks vers fichiers FP16
+
+2. **docker-entrypoint.sh** (3 modifications) :
+   - Ligne 42: Commentaire corrigé (fp8 → fp16)
+   - Lignes 44-45: Vérification présence fichiers FP16
+   - Lignes 80-95: Loop vérification FP16, taille min 12GB → 25GB
+
+**Fichiers modifiés** :
+- `workflows/templates/wan22_14b_with_upscale.json` : NOUVEAU workflow 14B avec upscale
+- `workflows/templates/wan22_14b_i2v.json` : NOUVEAU workflow 14B sans upscale
+- `workflows/templates/wan22_5b_i2v.json` : Renommé depuis wan22_i2v.json (clarification)
+- `workflows/templates/wan22_5b_with_upscale.json` : Renommé depuis wan22_with_upscale.json (clarification)
+- `scripts/setup_wan22_native.sh` : Download FP16 au lieu de FP8
+- `docker-entrypoint.sh` : Vérifications FP16, taille min 25GB
+- `web_interface/routes.py` : Sélection automatique workflow selon modèle ET upscale
+- `workflows/workflow_manager.py` : Détection fichiers FP16 pour 14B
+
+**Impact** :
+- ✅ **Architecture correcte** : 14B utilise maintenant WanVideoImageToVideoEncode
+- ✅ **Qualité maximale** : FP16 au lieu de FP8 pour meilleure qualité
+- ✅ **Workflows séparés** : 5B et 14B ont leurs propres workflows avec architectures spécifiques
+- ✅ **Documentation corrigée** : CLAUDE.md précisait à tort que WanVideoImageToVideoEncode était bugué (vrai pour 5B, faux pour 14B)
+
+**Validation requise** : Test génération 14B avec nouveau workflow et fichiers FP16
+
+---
+
 ### [2025-12-09 14:00] - ✅ IMPLÉMENTATION: VAE spécifiques par modèle (5B vs 14B)
 
 **Problème** : Le modèle 14B ne fonctionnait pas avec le VAE du 5B

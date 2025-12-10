@@ -39,10 +39,10 @@ echo "📦 Modèle configuré: $MODEL_NAME"
 
 # Vérifier la présence des fichiers ComfyUI Native (Comfy-Org)
 # 5B: wan2.2_ti2v_5B_fp16.safetensors
-# 14B: wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors + wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+# 14B: wan2.2_i2v_high_noise_14B_fp16.safetensors + wan2.2_i2v_low_noise_14B_fp16.safetensors
 if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
-   { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" ] || \
-                                                  [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ]; }; }; then
+   { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp16.safetensors" ] || \
+                                                  [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp16.safetensors" ]; }; }; then
     echo ""
     echo "📥 Téléchargement du modèle depuis OwnCloud..."
     echo "   Ceci peut prendre 5-15 minutes..."
@@ -76,8 +76,8 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
             echo "✅ wan2.2_ti2v_5B_fp16.safetensors: $size_gb GB"
 
         elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-            # 14B: vérifier les deux fichiers high/low noise (~14GB chacun)
-            for file in "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"; do
+            # 14B: vérifier les deux fichiers high/low noise FP16 (~28GB chacun)
+            for file in "wan2.2_i2v_high_noise_14B_fp16.safetensors" "wan2.2_i2v_low_noise_14B_fp16.safetensors"; do
                 if [ ! -f "$MODEL_DIR/$file" ]; then
                     echo "❌ Fichier manquant: $file"
                     exit 1
@@ -86,8 +86,8 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
                 size=$(stat -f%z "$MODEL_DIR/$file" 2>/dev/null || stat -c%s "$MODEL_DIR/$file" 2>/dev/null)
                 size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
 
-                if [ $size -lt 12000000000 ]; then
-                    echo "❌ $file incomplet: $size_gb GB (minimum 12GB)"
+                if [ $size -lt 25000000000 ]; then
+                    echo "❌ $file incomplet: $size_gb GB (minimum 25GB)"
                     exit 1
                 fi
 
