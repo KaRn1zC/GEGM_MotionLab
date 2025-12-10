@@ -10,6 +10,35 @@
 
 ## 📅 Modifications récentes
 
+### [2025-12-10 PM #4] - ✅ FIX CRITIQUE: wget → curl pour compatibilité macOS
+
+**Problème** : Workflow échouait avec "wget: command not found" sur macOS
+- `wget` utilisé pour télécharger CLIP Vision, UltraSharp, RealESRGAN
+- `wget` n'est pas installé par défaut sur macOS
+- Les modèles principaux utilisaient `huggingface-cli download` (fonctionnel)
+
+**Solution implémentée** :
+
+**scripts/setup_wan22_native.sh** (3 corrections) :
+- Ligne 416: CLIP Vision `wget --progress=bar:force` → `curl -L --progress-bar`
+- Ligne 436: 4x-UltraSharp `wget -q --show-progress` → `curl -L -#`
+- Ligne 453: RealESRGAN `wget -q --show-progress` → `curl -L -#`
+
+**Flags curl** :
+- `-L` : Suit les redirections (essentiel pour HuggingFace et GitHub)
+- `--progress-bar` ou `-#` : Affiche barre de progression
+- `-o` : Spécifie fichier de sortie (équivalent `wget -O`)
+
+**Fichiers modifiés** :
+- `scripts/setup_wan22_native.sh` : wget → curl pour CLIP/upscalers
+
+**Impact** :
+- ✅ **Compatible macOS** : `curl` disponible par défaut sur macOS et Linux
+- ✅ **Workflow fonctionnel** : Téléchargement CLIP/upscalers opérationnel
+- ✅ **Cohérence** : Utilise outils disponibles partout (curl, huggingface-cli)
+
+---
+
 ### [2025-12-10 PM #3] - ✅ FIX CRITIQUE: verify_diffusion_model.py références FP8 manquées
 
 **Problème** : Workflow échouait avec "Fichier introuvable: wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
