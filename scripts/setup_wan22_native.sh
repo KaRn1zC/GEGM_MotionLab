@@ -413,9 +413,9 @@ mkdir -p models/upscale_models
 CLIP_FILE="models/clip_vision/clip-vit-large-patch14-336.safetensors"
 if [ ! -f "$CLIP_FILE" ] || [ ! -s "$CLIP_FILE" ]; then
     echo "  1/3: CLIP Vision (~2.4 GB)..."
-    wget --progress=bar:force \
+    curl -L --progress-bar \
         "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
-        -O "$CLIP_FILE"
+        -o "$CLIP_FILE"
 
     if [ $? -eq 0 ] && [ -s "$CLIP_FILE" ]; then
         FILE_SIZE=$(du -h "$CLIP_FILE" | cut -f1)
@@ -433,9 +433,9 @@ fi
 ULTRASHARP_FILE="models/upscale_models/4x-UltraSharp.pth"
 if [ ! -f "$ULTRASHARP_FILE" ]; then
     echo "  2/3: 4x-UltraSharp (~67 MB)..."
-    wget -q --show-progress \
+    curl -L -# \
         "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
-        -O "$ULTRASHARP_FILE"
+        -o "$ULTRASHARP_FILE"
 
     if [ $? -eq 0 ]; then
         echo "  ✅ 4x-UltraSharp téléchargé ($(du -h $ULTRASHARP_FILE | cut -f1))"
@@ -450,9 +450,9 @@ fi
 REALESRGAN_FILE="models/upscale_models/RealESRGAN_x4plus.pth"
 if [ ! -f "$REALESRGAN_FILE" ]; then
     echo "  3/3: RealESRGAN (~64 MB)..."
-    wget -q --show-progress \
+    curl -L -# \
         "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
-        -O "$REALESRGAN_FILE"
+        -o "$REALESRGAN_FILE"
 
     if [ $? -eq 0 ]; then
         echo "  ✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
