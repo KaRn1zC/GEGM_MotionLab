@@ -116,18 +116,18 @@ if [ "$MODEL" = "all" ]; then
     echo ""
 
     # 1. Diffusion high noise
-    echo "  1/4: Diffusion high noise..."
+    echo "  1/4: Diffusion high noise FP16..."
     hf download "$REPO" \
-        split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors \
+        split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" ./models/diffusion_models/
+    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors" ./models/diffusion_models/
 
     # 2. Diffusion low noise
-    echo "  2/4: Diffusion low noise..."
+    echo "  2/4: Diffusion low noise FP16..."
     hf download "$REPO" \
-        split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors \
+        split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ./models/diffusion_models/
+    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors" ./models/diffusion_models/
 
     # 3. Text encoder FP16 (déjà téléchargé pour 5B)
     echo "  3/4: Text encoder FP16 (déjà téléchargé)"
@@ -148,8 +148,8 @@ if [ "$MODEL" = "all" ]; then
     echo ""
     echo "🔗 Création de symlinks pour compatibilité 14B..."
     mkdir -p models/wan2.2-i2v-a14b
-    ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
-    ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors models/wan2.2-i2v-a14b/
+    ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-i2v-a14b/
     ln -sf ../vae/wan_2.1_vae.safetensors models/wan2.2-i2v-a14b/
     echo "✅ Symlinks créés"
@@ -258,18 +258,18 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     mkdir -p "$TEMP_DL"
 
     # 1. Diffusion high noise
-    echo "  1/4: Diffusion high noise..."
+    echo "  1/4: Diffusion high noise FP16..."
     hf download "$REPO" \
-        split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors \
+        split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors" ./models/diffusion_models/
+    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors" ./models/diffusion_models/
 
     # 2. Diffusion low noise
-    echo "  2/4: Diffusion low noise..."
+    echo "  2/4: Diffusion low noise FP16..."
     hf download "$REPO" \
-        split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors \
+        split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors \
         --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors" ./models/diffusion_models/
+    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors" ./models/diffusion_models/
 
     # 3. Text encoder FP16
     echo "  3/4: Text encoder FP16 (~11.4 GB)..."

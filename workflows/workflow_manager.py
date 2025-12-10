@@ -130,13 +130,13 @@ class WorkflowTemplate:
                 return f"{model_name}/{first_checkpoint.name}"
 
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
-            # Modèle 14B : chercher les fichiers ComfyUI Native (Comfy-Org)
+            # Modèle 14B : chercher les fichiers ComfyUI Native FP16 (Comfy-Org)
             comfyui_native_high = (
-                model_path / "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+                model_path / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
             )
             if comfyui_native_high.exists():
                 logger.info(
-                    f"✅ Modèle 14B ComfyUI Native détecté : {comfyui_native_high.name}"
+                    f"✅ Modèle 14B ComfyUI Native FP16 détecté : {comfyui_native_high.name}"
                 )
                 return f"{model_name}/{comfyui_native_high.name}"
 

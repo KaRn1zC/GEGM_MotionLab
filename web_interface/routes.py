@@ -359,11 +359,22 @@ async def process_cinemagraph_generation(job_id: str):
         target_pixels = adjusted_target_width * adjusted_target_height
         enable_vae_tiling = target_pixels > (1920 * 1080) or upscale_ratio > 4.0
 
-        # Sélectionner le workflow
+        # Détecter le modèle disponible (5B ou 14B)
+        from workflows.workflow_manager import WorkflowTemplate
+
+        temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
+        detected_model, model_type = temp_template._detect_available_model()
+        logger.info(f"🤖 Modèle détecté: {detected_model} (type: {model_type})")
+
+        # Sélectionner le workflow selon modèle ET upscale
         if upscale_ratio > 1.5:  # Besoin d'upscale intelligent
-            selected_workflow = "wan22_with_upscale"
+            if model_type == "14b":
+                selected_workflow = "wan22_14b_with_upscale"
+            else:
+                selected_workflow = "wan22_5b_with_upscale"
+
             logger.info(
-                f"🔍 Workflow upscale sélectionné (ratio: {upscale_ratio:.2f}x)"
+                f"🔍 Workflow {model_type.upper()} avec upscale sélectionné (ratio: {upscale_ratio:.2f}x)"
             )
 
             # Pour le workflow upscale, utiliser la résolution de génération optimale calculée
@@ -385,8 +396,14 @@ async def process_cinemagraph_generation(job_id: str):
                     f"🔧 VAE tiling activé (résolution finale: {adjusted_target_width}x{adjusted_target_height}, upscale: {upscale_ratio:.2f}x)"
                 )
         else:
-            selected_workflow = "wan22_i2v"
-            logger.info(f"✅ Workflow standard (ratio: {upscale_ratio:.2f}x)")
+            if model_type == "14b":
+                selected_workflow = "wan22_14b_i2v"
+            else:
+                selected_workflow = "wan22_5b_i2v"
+
+            logger.info(
+                f"✅ Workflow {model_type.upper()} standard (ratio: {upscale_ratio:.2f}x)"
+            )
 
             # Pour génération standard, utiliser les dimensions optimales
             workflow_params = {

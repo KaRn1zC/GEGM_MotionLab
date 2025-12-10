@@ -47,7 +47,9 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         return False
 
     print(f"🔍 Vérification de l'intégrité du VAE pour {model_name}...")
-    logger.info(f"🔍 Vérification de l'intégrité du VAE {vae_version} ({expected_channels} canaux)...")
+    logger.info(
+        f"🔍 Vérification de l'intégrité du VAE {vae_version} ({expected_channels} canaux)..."
+    )
     logger.info(f"📂 Fichier: {vae_file}")
 
     # 1. Vérifier que le fichier existe
@@ -237,7 +239,9 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
 
     print("")
     print(f"✅ LE VAE {vae_version} EST COMPATIBLE ({expected_channels} CANAUX)")
-    logger.success(f"✅ LE VAE {vae_version} EST COMPATIBLE ({expected_channels} CANAUX)")
+    logger.success(
+        f"✅ LE VAE {vae_version} EST COMPATIBLE ({expected_channels} CANAUX)"
+    )
 
     # 6. Vérification finale
     print("")
