@@ -54,8 +54,11 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
     echo "🔍 Vérification de la disponibilité des sources upstream..."
     echo "   (HuggingFace + GitHub)"
 
+    # Désactiver exit-on-error temporairement pour capturer le exit code
+    set +e
     python /workspace/scripts/check_upstream_health.py "$MODEL_NAME"
     HEALTHCHECK_EXIT_CODE=$?
+    set -e  # Réactiver exit-on-error
 
     if [ $HEALTHCHECK_EXIT_CODE -eq 0 ]; then
         echo ""

@@ -1,29 +1,29 @@
 {
-  "version": "1.0.0",
-  "last_updated": "2025-12-09",
+  "version": "1.0.1",
+  "last_updated": "2025-12-11",
   "description": "Référence des tailles de fichiers pour détection de versions upstream",
 
   "models": {
     "wan2.2-ti2v-5b": {
       "files": {
         "wan2.2_ti2v_5B_fp16.safetensors": {
-          "size": 9999220736,
+          "size": 9999658848,
           "size_human": "9.31 GB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
           "type": "diffusion_model"
         },
         "umt5_xxl_fp16.safetensors": {
-          "size": 12244934656,
-          "size_human": "11.4 GB",
+          "size": 11366399385,
+          "size_human": "10.59 GB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
           "type": "text_encoder",
           "shared": true
         },
         "wan2.2_vae.safetensors": {
-          "size": 1514266624,
-          "size_human": "1.41 GB",
+          "size": 1409400960,
+          "size_human": "1.31 GB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/vae/wan2.2_vae.safetensors",
           "type": "vae"
@@ -34,30 +34,30 @@
     "wan2.2-i2v-a14b": {
       "files": {
         "wan2.2_i2v_high_noise_14B_fp16.safetensors": {
-          "size": 30707793920,
-          "size_human": "28.6 GB",
+          "size": 28577914792,
+          "size_human": "26.62 GB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
           "type": "diffusion_model"
         },
         "wan2.2_i2v_low_noise_14B_fp16.safetensors": {
-          "size": 30707793920,
-          "size_human": "28.6 GB",
+          "size": 28577914792,
+          "size_human": "26.62 GB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors",
           "type": "diffusion_model"
         },
         "umt5_xxl_fp16.safetensors": {
-          "size": 12244934656,
-          "size_human": "11.4 GB",
+          "size": 11366399385,
+          "size_human": "10.59 GB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
           "type": "text_encoder",
           "shared": true
         },
         "wan_2.1_vae.safetensors": {
-          "size": 266338304,
-          "size_human": "254 MB",
+          "size": 253815318,
+          "size_human": "242 MB",
           "repo": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
           "path": "split_files/vae/wan_2.1_vae.safetensors",
           "type": "vae"
@@ -68,21 +68,21 @@
 
   "shared_components": {
     "clip-vit-large-patch14-336.safetensors": {
-      "size": 2576980480,
-      "size_human": "2.4 GB",
+      "size": 2528373448,
+      "size_human": "2.35 GB",
       "url": "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors",
       "type": "clip_vision",
       "required_for": ["wan2.2-ti2v-5b", "wan2.2-i2v-a14b"]
     },
     "4x-UltraSharp.pth": {
-      "size": 70254592,
-      "size_human": "67 MB",
+      "size": 66961958,
+      "size_human": "64 MB",
       "url": "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth",
       "type": "upscale_model",
       "required_for": ["wan2.2-ti2v-5b", "wan2.2-i2v-a14b"]
     },
     "RealESRGAN_x4plus.pth": {
-      "size": 67108864,
+      "size": 67040989,
       "size_human": "64 MB",
       "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
       "type": "upscale_model",
@@ -93,6 +93,7 @@
   "notes": {
     "size_tolerance": "Tolérance de ±1% pour variations mineures de compression",
     "shared_files": "umt5_xxl_fp16.safetensors est partagé entre 5B et 14B",
-    "update_policy": "Mettre à jour ce fichier après validation de nouvelles versions upstream"
+    "update_policy": "Mettre à jour ce fichier après validation de nouvelles versions upstream",
+    "last_verification": "2025-12-11 - Tailles vérifiées via HEAD requests sur HuggingFace/GitHub"
   }
 }
