@@ -94,6 +94,30 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
                     fi
                 done
 
+                # Recréer les symlinks dans le dossier du modèle (fix: symlinks cassés après déplacement)
+                echo "🔗 Recréation des symlinks dans $MODEL_NAME..."
+                cd /workspace/comfyui/ComfyUI/models/checkpoints
+                if [ -d "$MODEL_NAME" ]; then
+                    cd "$MODEL_NAME"
+                    # Supprimer les symlinks cassés
+                    find . -maxdepth 1 -type l -delete
+
+                    # Recréer les symlinks avec les bons chemins relatifs
+                    if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+                        ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors .
+                        ln -sf ../text_encoders/umt5_xxl_fp16.safetensors .
+                        ln -sf ../vae/wan2.2_vae.safetensors .
+                        echo "   ✅ Symlinks 5B recréés"
+                    elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
+                        ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors .
+                        ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors .
+                        ln -sf ../text_encoders/umt5_xxl_fp16.safetensors .
+                        ln -sf ../vae/wan_2.1_vae.safetensors .
+                        echo "   ✅ Symlinks 14B recréés"
+                    fi
+                    cd /workspace
+                fi
+
                 # Nettoyer le dossier models temporaire
                 rm -rf /workspace/models
 
