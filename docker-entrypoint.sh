@@ -69,14 +69,34 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
         # ========================================
         # ÉTAPE 2: TÉLÉCHARGEMENT UPSTREAM
         # ========================================
-        cd /workspace/comfyui/ComfyUI/models/checkpoints
-
         if [ -f "/workspace/scripts/setup_wan22_native.sh" ]; then
             bash /workspace/scripts/setup_wan22_native.sh "$MODEL_NAME"
 
             if [ $? -eq 0 ]; then
                 echo ""
                 echo "✅ Téléchargement upstream réussi"
+
+                # Déplacer les fichiers vers le répertoire ComfyUI
+                echo "📦 Déplacement des fichiers vers ComfyUI..."
+                mkdir -p /workspace/comfyui/ComfyUI/models/checkpoints
+
+                # Déplacer le dossier du modèle
+                if [ -d "/workspace/models/$MODEL_NAME" ]; then
+                    mv /workspace/models/$MODEL_NAME /workspace/comfyui/ComfyUI/models/checkpoints/
+                    echo "   ✅ Modèle déplacé: $MODEL_NAME"
+                fi
+
+                # Déplacer diffusion_models, text_encoders, vae si présents
+                for dir in diffusion_models text_encoders vae; do
+                    if [ -d "/workspace/models/$dir" ]; then
+                        mv /workspace/models/$dir /workspace/comfyui/ComfyUI/models/checkpoints/
+                        echo "   ✅ Dossier déplacé: $dir"
+                    fi
+                done
+
+                # Nettoyer le dossier models temporaire
+                rm -rf /workspace/models
+
                 DOWNLOAD_SUCCESS=true
             else
                 echo ""
@@ -94,8 +114,6 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
             echo "⚠️  Basculement vers OwnCloud (fallback)..."
             USE_OWNCLOUD_FALLBACK=true
         fi
-
-        cd /workspace
 
     else
         echo ""
