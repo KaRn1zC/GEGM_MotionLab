@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Détection du répertoire du script (pour chemins absolus)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Argument: nom du modèle spécifique ou "all" (défaut)
 MODEL="${1:-all}"
 
@@ -95,7 +98,7 @@ if [ "$MODEL" = "all" ]; then
     # Vérification intégrité 5B
     echo ""
     echo "🔍 Vérification intégrité modèle de diffusion (5B)..."
-    python scripts/verify_diffusion_model.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Modèle de diffusion 5B corrompu ou incomplet"
         exit 1
@@ -103,7 +106,7 @@ if [ "$MODEL" = "all" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité Text Encoder (5B)..."
-    python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Text Encoder 5B corrompu ou incomplet"
         exit 1
@@ -111,7 +114,7 @@ if [ "$MODEL" = "all" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité VAE (5B)..."
-    python scripts/verify_vae.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_vae.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: VAE 5B corrompu ou incomplet"
         exit 1
@@ -164,7 +167,7 @@ if [ "$MODEL" = "all" ]; then
     # Vérification intégrité 14B
     echo ""
     echo "🔍 Vérification intégrité modèle de diffusion (14B)..."
-    python scripts/verify_diffusion_model.py wan2.2-i2v-a14b
+    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-i2v-a14b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Modèle de diffusion 14B corrompu ou incomplet"
         exit 1
@@ -172,7 +175,7 @@ if [ "$MODEL" = "all" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité Text Encoder (14B)..."
-    python scripts/verify_t5_integrity.py wan2.2-i2v-a14b
+    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-i2v-a14b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Text Encoder 14B corrompu ou incomplet"
         exit 1
@@ -180,7 +183,7 @@ if [ "$MODEL" = "all" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité VAE (14B)..."
-    python scripts/verify_vae.py wan2.2-i2v-a14b
+    python "$SCRIPT_DIR/verify_vae.py" wan2.2-i2v-a14b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: VAE 14B corrompu ou incomplet"
         exit 1
@@ -233,7 +236,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
     # Vérifications
     echo ""
     echo "🔍 Vérification intégrité modèle de diffusion..."
-    python scripts/verify_diffusion_model.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
         exit 1
@@ -241,7 +244,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité Text Encoder..."
-    python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
         exit 1
@@ -249,7 +252,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité VAE..."
-    python scripts/verify_vae.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_vae.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: VAE corrompu ou incomplet"
         exit 1
@@ -302,7 +305,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
     # Vérifications
     echo ""
     echo "🔍 Vérification intégrité modèle de diffusion..."
-    python scripts/verify_diffusion_model.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
         exit 1
@@ -310,7 +313,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité Text Encoder..."
-    python scripts/verify_t5_integrity.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
         exit 1
@@ -318,7 +321,7 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité VAE..."
-    python scripts/verify_vae.py wan2.2-ti2v-5b
+    python "$SCRIPT_DIR/verify_vae.py" wan2.2-ti2v-5b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: VAE corrompu ou incomplet"
         exit 1
@@ -379,7 +382,7 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     # Vérifications
     echo ""
     echo "🔍 Vérification intégrité modèle de diffusion..."
-    python scripts/verify_diffusion_model.py wan2.2-i2v-a14b
+    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-i2v-a14b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
         exit 1
@@ -387,7 +390,7 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité Text Encoder..."
-    python scripts/verify_t5_integrity.py wan2.2-i2v-a14b
+    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-i2v-a14b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
         exit 1
@@ -395,7 +398,7 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
 
     echo ""
     echo "🔍 Vérification intégrité VAE..."
-    python scripts/verify_vae.py wan2.2-i2v-a14b
+    python "$SCRIPT_DIR/verify_vae.py" wan2.2-i2v-a14b
     if [ $? -ne 0 ]; then
         echo "❌ ÉCHEC: VAE corrompu ou incomplet"
         exit 1
