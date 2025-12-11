@@ -107,7 +107,8 @@ def check_model_health(model_name: str, metadata: Dict) -> bool:
         metadata: Données models_metadata.json
 
     Returns:
-        True si tous les fichiers OK, False sinon
+        True si tous les fichiers CRITIQUES OK, False sinon
+        (Les composants optionnels n'affectent pas le résultat)
     """
     logger.info(f"🔍 Vérification upstream pour {model_name}...")
 
@@ -116,9 +117,10 @@ def check_model_health(model_name: str, metadata: Dict) -> bool:
         return False
 
     model_data = metadata["models"][model_name]
-    all_valid = True
+    all_critical_valid = True
+    optional_failed = []
 
-    # Vérifier les fichiers du modèle
+    # Vérifier les fichiers du modèle (TOUS critiques)
     logger.info("📦 Vérification des fichiers du modèle...")
     for filename, file_data in model_data["files"].items():
         repo = file_data["repo"]
@@ -127,7 +129,7 @@ def check_model_health(model_name: str, metadata: Dict) -> bool:
 
         is_valid, _ = check_huggingface_repo_file(repo, path, expected_size, filename)
         if not is_valid:
-            all_valid = False
+            all_critical_valid = False
 
     # Vérifier les composants partagés (CLIP, upscalers)
     logger.info("🔧 Vérification des composants partagés...")
@@ -136,12 +138,28 @@ def check_model_health(model_name: str, metadata: Dict) -> bool:
         if model_name in file_data["required_for"]:
             url = file_data["url"]
             expected_size = file_data["size"]
+            is_optional = file_data.get("optional", False)
 
             is_valid, _ = check_file_size(url, expected_size, filename)
             if not is_valid:
-                all_valid = False
+                if is_optional:
+                    # Composant optionnel : logger mais ne pas bloquer
+                    optional_failed.append(filename)
+                    logger.warning(
+                        f"   ⚠️  {filename} indisponible (optionnel, sera téléchargé plus tard)"
+                    )
+                else:
+                    # Composant critique : bloquer
+                    all_critical_valid = False
 
-    return all_valid
+    # Logger les composants optionnels échoués
+    if optional_failed:
+        logger.info(
+            f"ℹ️  Composants optionnels indisponibles: {', '.join(optional_failed)}"
+        )
+        logger.info("   → Seront téléchargés pendant le setup si disponibles")
+
+    return all_critical_valid
 
 
 def main():

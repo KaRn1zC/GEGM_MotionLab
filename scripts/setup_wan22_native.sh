@@ -456,18 +456,40 @@ else
     echo "  ✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
 fi
 
-# RealESRGAN (~64 MB) - Upscaler backup
+# RealESRGAN (~64 MB) - Upscaler backup (optionnel)
 REALESRGAN_FILE="models/upscale_models/RealESRGAN_x4plus.pth"
 if [ ! -f "$REALESRGAN_FILE" ]; then
-    echo "  3/3: RealESRGAN (~64 MB)..."
-    curl -L -# \
-        "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
-        -o "$REALESRGAN_FILE"
+    echo "  3/3: RealESRGAN (~64 MB, optionnel)..."
 
-    if [ $? -eq 0 ]; then
-        echo "  ✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
-    else
-        echo "  ⚠️ Échec téléchargement RealESRGAN (non bloquant)"
+    # Retry jusqu'à 3 fois avec délai croissant (GitHub peut être temporairement indisponible)
+    RETRY_COUNT=0
+    MAX_RETRIES=3
+    SUCCESS=false
+
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = false ]; do
+        if [ $RETRY_COUNT -gt 0 ]; then
+            WAIT_TIME=$((RETRY_COUNT * 2))
+            echo "  ⏳ Retry $RETRY_COUNT/$MAX_RETRIES après ${WAIT_TIME}s..."
+            sleep $WAIT_TIME
+        fi
+
+        curl -L -# --connect-timeout 10 --max-time 60 \
+            "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
+            -o "$REALESRGAN_FILE" 2>/dev/null
+
+        if [ $? -eq 0 ] && [ -f "$REALESRGAN_FILE" ] && [ -s "$REALESRGAN_FILE" ]; then
+            echo "  ✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
+            SUCCESS=true
+        else
+            rm -f "$REALESRGAN_FILE"  # Nettoyer fichier partiel
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+        fi
+    done
+
+    if [ "$SUCCESS" = false ]; then
+        echo "  ⚠️ RealESRGAN indisponible après $MAX_RETRIES tentatives (non bloquant)"
+        echo "     GitHub Releases peut être temporairement inaccessible"
+        echo "     Le système fonctionnera avec 4x-UltraSharp uniquement"
     fi
 else
     echo "  ✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
