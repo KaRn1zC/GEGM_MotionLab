@@ -86,7 +86,9 @@
       "size_human": "64 MB",
       "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
       "type": "upscale_model",
-      "required_for": ["wan2.2-ti2v-5b", "wan2.2-i2v-a14b"]
+      "required_for": ["wan2.2-ti2v-5b", "wan2.2-i2v-a14b"],
+      "optional": true,
+      "note": "Upscaler secondaire (backup), hébergé sur GitHub Releases (peut être temporairement indisponible)"
     }
   },
 
