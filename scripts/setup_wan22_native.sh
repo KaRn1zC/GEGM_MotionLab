@@ -7,13 +7,20 @@ MODEL="${1:-all}"
 echo "🎬 Setup WAN 2.2 - Version ComfyUI Native (Comfy-Org)"
 echo "====================================================="
 
-# Vérifier l'environnement virtuel
-if [[ "$VIRTUAL_ENV" != *".venv"* ]]; then
-    echo "❌ Environnement .venv non activé"
-    exit 1
+# Vérifier l'environnement virtuel (sauf sur Docker/RunPod)
+# Docker/RunPod : Python installé globalement, pas de venv nécessaire
+if [[ ! -f "/.dockerenv" ]] && [[ -z "$RUNPOD_POD_ID" ]] && [[ "$PWD" != "/workspace"* ]]; then
+    # Environnement local : vérifier venv requis
+    if [[ "$VIRTUAL_ENV" != *".venv"* ]]; then
+        echo "❌ Environnement .venv non activé (requis en local)"
+        echo "   Activez-le avec: source .venv/bin/activate"
+        exit 1
+    fi
+    echo "✅ Environnement virtuel: $VIRTUAL_ENV"
+else
+    # Docker/RunPod : skip vérification venv
+    echo "✅ Environnement Docker/RunPod détecté (Python global)"
 fi
-
-echo "✅ Environnement virtuel: $VIRTUAL_ENV"
 
 # Étape 1: Installer huggingface-cli
 echo "📦 Installation huggingface-cli..."
