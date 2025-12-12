@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B + UltraSharp Upscale",
   "description": "Pipeline 14B: génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B"],
 
@@ -141,6 +141,10 @@
         "num_frames": "{frames}",
         "temporal_compress_level": 0,
         "spatial_compress_level": 1,
+        "start_latent_strength": 1.0,
+        "end_latent_strength": 1.0,
+        "noise_aug_strength": 0.0,
+        "force_offload": true,
         "enable_vae_tiling": "{enable_vae_tiling}"
       }
     },
@@ -235,6 +239,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v1.1.0": "Ajout paramètres requis WanVideoImageToVideoEncode (start/end_latent_strength, noise_aug_strength, force_offload)",
       "v1.0.0": "Workflow 14B utilisant WanVideoImageToVideoEncode (architecture officielle)"
     }
   }
