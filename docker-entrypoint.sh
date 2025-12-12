@@ -181,15 +181,21 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
         echo ""
         echo "🔍 Vérification des fichiers téléchargés (ComfyUI Native)..."
 
+        # Chemin de base après déplacement
+        CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
+        DIFFUSION_DIR="$CHECKPOINTS_BASE/diffusion_models"
+
         # Vérifier selon le modèle (ComfyUI Native format from Comfy-Org)
         if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
             # 5B: vérifier wan2.2_ti2v_5B_fp16.safetensors (~9.3GB)
-            if [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; then
+            DIFFUSION_FILE="$DIFFUSION_DIR/wan2.2_ti2v_5B_fp16.safetensors"
+
+            if [ ! -f "$DIFFUSION_FILE" ]; then
                 echo "❌ Fichier manquant: wan2.2_ti2v_5B_fp16.safetensors"
                 exit 1
             fi
 
-            size=$(stat -f%z "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" 2>/dev/null || stat -c%s "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" 2>/dev/null)
+            size=$(stat -f%z "$DIFFUSION_FILE" 2>/dev/null || stat -c%s "$DIFFUSION_FILE" 2>/dev/null)
             size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
 
             if [ $size -lt 8000000000 ]; then
@@ -202,12 +208,14 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
         elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
             # 14B: vérifier les deux fichiers high/low noise FP16 (~28GB chacun)
             for file in "wan2.2_i2v_high_noise_14B_fp16.safetensors" "wan2.2_i2v_low_noise_14B_fp16.safetensors"; do
-                if [ ! -f "$MODEL_DIR/$file" ]; then
+                DIFFUSION_FILE="$DIFFUSION_DIR/$file"
+
+                if [ ! -f "$DIFFUSION_FILE" ]; then
                     echo "❌ Fichier manquant: $file"
                     exit 1
                 fi
 
-                size=$(stat -f%z "$MODEL_DIR/$file" 2>/dev/null || stat -c%s "$MODEL_DIR/$file" 2>/dev/null)
+                size=$(stat -f%z "$DIFFUSION_FILE" 2>/dev/null || stat -c%s "$DIFFUSION_FILE" 2>/dev/null)
                 size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
 
                 if [ $size -lt 25000000000 ]; then
@@ -283,12 +291,16 @@ echo "✅ VAE ComfyUI Native inclus dans le modèle (déjà compatible 48 canaux
 VAE_DIR="/workspace/comfyui/ComfyUI/models/vae"
 mkdir -p "$VAE_DIR"
 
+# Utiliser le chemin réel après déplacement (dans vae/ au lieu du symlink dans $MODEL_DIR)
+CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
+VAE_BASE="$CHECKPOINTS_BASE/vae"
+
 # Déterminer le nom du fichier VAE selon le modèle
 if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
-    VAE_SOURCE="$MODEL_DIR/wan2.2_vae.safetensors"
+    VAE_SOURCE="$VAE_BASE/wan2.2_vae.safetensors"
     echo "   Chemin source 5B: $VAE_SOURCE (1.41 GB)"
 elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-    VAE_SOURCE="$MODEL_DIR/wan_2.1_vae.safetensors"
+    VAE_SOURCE="$VAE_BASE/wan_2.1_vae.safetensors"
     echo "   Chemin source 14B: $VAE_SOURCE (254 MB - VAE 2.1 spécifique au 14B)"
 fi
 
@@ -311,8 +323,12 @@ echo "✅ T5 Encoder ComfyUI Native (FP16)"
 T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
 mkdir -p "$T5_DIR"
 
+# Utiliser le chemin réel après déplacement (dans text_encoders/ au lieu du symlink dans $MODEL_DIR)
+CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
+T5_BASE="$CHECKPOINTS_BASE/text_encoders"
+
 # Le T5 est le même pour 5B et 14B (partagé)
-T5_SOURCE="$MODEL_DIR/umt5_xxl_fp16.safetensors"
+T5_SOURCE="$T5_BASE/umt5_xxl_fp16.safetensors"
 echo "   Chemin source: $T5_SOURCE"
 
 if [ -f "$T5_SOURCE" ]; then
