@@ -1,30 +1,7 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-09 (v3.9.0 - VAE spécifiques 5B/14B)
+**Dernière mise à jour** : 2025-12-12 (v3.12.0 - Fix templates 14B + vérification chemins réels)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
-
----
-
-## Vue d'ensemble
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    GEGM MotionLab                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────┐        ┌──────────────┐                  │
-│  │    Flask     │◄──────►│   ComfyUI    │                  │
-│  │   (5000)     │ WebSocket│   (8188)    │                  │
-│  └──────────────┘        └──────────────┘                  │
-│         │                        │                          │
-│  ┌──────▼──────┐        ┌───────▼────────┐                │
-│  │  Web UI     │        │  WAN 2.2 Model │                │
-│  │  Job Queue  │        │  T5 Encoder    │                │
-│  │  OwnCloud   │        │  VAE 48ch      │                │
-│  └─────────────┘        └────────────────┘                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -103,31 +80,9 @@
 
 ## Chemins critiques (RunPod)
 
-### Modèles 5B
-```
-/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/
-├── wan2.2_ti2v_5B_fp16.safetensors       # 9.31 GB
-├── umt5_xxl_fp16.safetensors             # 11.4 GB (partagé)
-├── wan2.2_vae.safetensors                # 1.41 GB (VAE 2.2 - 48ch)
-└── config.json
-```
-
-### Modèles 14B
-```
-/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/
-├── wan2.2_i2v_high_noise_14B_fp16.safetensors  # 28.6 GB (qualité maximale)
-├── wan2.2_i2v_low_noise_14B_fp16.safetensors   # 28.6 GB (qualité maximale)
-├── umt5_xxl_fp16.safetensors                   # 11.4 GB (partagé)
-├── wan_2.1_vae.safetensors                     # 254 MB (VAE 2.1 - 16ch)
-└── config.json
-```
-
-### Output
-```
-/app/output/        # Vidéos générées
-/app/uploads/       # Images uploadées
-/app/logs/          # Logs application
-```
+- Modèles 5B : `/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/`
+- Modèles 14B : `/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/`
+- Output : `/app/output/` (vidéos), `/app/uploads/` (images), `/app/logs/`
 
 ---
 
@@ -136,7 +91,7 @@
 1. Affichage infos système (GPU, Python, PyTorch)
 2. Download modèles OwnCloud (si absent)
 3. Reconstitution fichiers découpés
-4. Vérification intégrité (diffusion + T5 FP16)
+4. Vérification intégrité (diffusion + T5 FP16) - **UTILISE CHEMINS RÉELS**
 5. Configuration symlinks (modèles, VAE, T5)
 6. Download CLIP Vision + modèles upscale (4x-UltraSharp, RealESRGAN backup)
 7. Démarrage ComfyUI (port 8188)
@@ -144,6 +99,11 @@
 9. Démarrage Flask (port 5000)
 
 **Fichier** : `docker-entrypoint.sh`
+
+**Point critique étape 4** :
+- ⚠️ Vérification utilise chemins réels (pas symlinks) après move des fichiers
+- Chemins : `$DIFFUSION_DIR/wan2.2_ti2v_5B_fp16.safetensors`, `$VAE_BASE/wan2.2_vae.safetensors`, `$T5_BASE/umt5_xxl_fp16.safetensors`
+- Évite faux négatifs (0 GB) qui causent restart (lignes 177-340)
 
 ---
 
@@ -170,13 +130,7 @@ COMFYUI_PORT=8188
 
 ## Stack technique
 
-- **Python** : 3.11
-- **Flask** : 3.0+
-- **PyTorch** : 2.10.dev + CUDA 12.8
-- **ComfyUI** : latest
-- **Custom Nodes** : WanVideoWrapper, PyramidFlowWrapper, VideoHelperSuite
-- **Format modèles** : SafeTensors (ComfyUI Native)
-- **GPU** : NVIDIA 48GB+ VRAM
+Python 3.11 + Flask 3.0+ + PyTorch 2.10.dev (CUDA 12.8) + ComfyUI (WanVideoWrapper, PyramidFlowWrapper, VideoHelperSuite) + SafeTensors (ComfyUI Native) + NVIDIA GPU 48GB+ VRAM
 
 ---
 
@@ -184,8 +138,9 @@ COMFYUI_PORT=8188
 
 1. **Architecture workflow DIFFÉRENTE** : 5B et 14B utilisent des architectures de nodes DIFFÉRENTES
    - 5B: `WanVideoEncode` → `WanVideoEmptyEmbeds` (2-node moderne)
-   - 14B: `WanVideoImageToVideoEncode` (1-node legacy)
-   - Templates: `wan22_i2v.json` (5B) vs `wan22_14b_with_upscale.json` (14B)
+   - 14B: `WanVideoImageToVideoEncode` (1-node legacy) avec 4 paramètres REQUIS (v1.1.0+)
+     - start_latent_strength: 1.0, end_latent_strength: 1.0, noise_aug_strength: 0.0, force_offload: true
+   - Templates: `wan22_5b_i2v.json` (5B) vs `wan22_14b_with_upscale.json` (14B)
 2. **VAE spécifiques** : 5B et 14B utilisent des VAE DIFFÉRENTS et NON INTERCHANGEABLES
    - 5B: wan2.2_vae.safetensors (1.41 GB, 48 canaux)
    - 14B: wan_2.1_vae.safetensors (254 MB, 16 canaux)
@@ -195,3 +150,4 @@ COMFYUI_PORT=8188
 5. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 1200s)
 6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
 7. **VRAM** : 48GB minimum (5B), 80GB+ (14B FP16)
+8. **Vérification fichiers** : docker-entrypoint.sh DOIT utiliser chemins réels (pas symlinks) pour éviter restart (lignes 177-340)
