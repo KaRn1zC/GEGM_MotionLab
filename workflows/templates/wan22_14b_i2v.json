@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B Image-to-Video",
   "description": "Pipeline 14B: génération directe sans upscale (résolutions ≤ 720p)",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "14B", "i2v"],
 
@@ -121,7 +121,7 @@
       "class_type": "WanVideoImageToVideoEncode",
       "inputs": {
         "vae": ["3", 0],
-        "image": ["1", 0],
+        "start_image": ["1", 0],
         "width": "{width}",
         "height": "{height}",
         "num_frames": "{frames}",
@@ -200,6 +200,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v1.2.0": "Fix paramètre image → start_image dans WanVideoImageToVideoEncode (résout TypeError)",
       "v1.1.0": "Ajout paramètres requis WanVideoImageToVideoEncode (start/end_latent_strength, noise_aug_strength, force_offload)",
       "v1.0.0": "Workflow 14B sans upscale utilisant WanVideoImageToVideoEncode (architecture officielle)"
     }
