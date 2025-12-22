@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 Image-to-Video",
   "description": "Génération de cinemagraphs avec WAN 2.2 5B - Version corrigée compatible wrapper récent",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
 
@@ -84,7 +84,7 @@
         "model": "{checkpoint_path}",
         "base_precision": "bf16",
         "quantization": "disabled",
-        "load_device": "offload_device"
+        "load_device": "gpu"
       }
     },
     "3": {
@@ -145,7 +145,7 @@
         "cfg": "{cfg_scale}",
         "shift": 5.0,
         "seed": "{seed}",
-        "force_offload": true,
+        "force_offload": false,
         "scheduler": "unipc",
         "riflex_freq_index": 0
       }
@@ -201,6 +201,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v4.1.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
       "v4.0.0": "BREAKING: Remplacé WanVideoImageToVideoEncode par WanVideoEncode + WanVideoEmptyEmbeds (fix erreur 48/96 canaux)"
     }
   }
