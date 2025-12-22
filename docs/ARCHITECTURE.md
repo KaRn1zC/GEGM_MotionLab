@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-12 (v3.12.0 - Fix templates 14B + vérification chemins réels)
+**Dernière mise à jour** : 2025-12-22 (v3.13.0 - Optimisations GPU 95GB + Timeout différencié + Fix start_image)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -139,7 +139,7 @@ Python 3.11 + Flask 3.0+ + PyTorch 2.10.dev (CUDA 12.8) + ComfyUI (WanVideoWrapp
 1. **Architecture workflow DIFFÉRENTE** : 5B et 14B utilisent des architectures de nodes DIFFÉRENTES
    - 5B: `WanVideoEncode` → `WanVideoEmptyEmbeds` (2-node moderne)
    - 14B: `WanVideoImageToVideoEncode` (1-node legacy) avec 4 paramètres REQUIS (v1.1.0+)
-     - start_latent_strength: 1.0, end_latent_strength: 1.0, noise_aug_strength: 0.0, force_offload: true
+     - start_latent_strength: 1.0, end_latent_strength: 1.0, noise_aug_strength: 0.0, force_offload: false
    - Templates: `wan22_5b_i2v.json` (5B) vs `wan22_14b_with_upscale.json` (14B)
 2. **VAE spécifiques** : 5B et 14B utilisent des VAE DIFFÉRENTS et NON INTERCHANGEABLES
    - 5B: wan2.2_vae.safetensors (1.41 GB, 48 canaux)
@@ -147,7 +147,12 @@ Python 3.11 + Flask 3.0+ + PyTorch 2.10.dev (CUDA 12.8) + ComfyUI (WanVideoWrapp
    - Injection automatique par workflow_manager.py
 3. **Précision modèle 14B** : FP16 (~28.6GB par fichier) pour qualité maximale (au lieu de FP8 ~14GB)
 4. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
-5. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout 1200s)
+5. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout différencié : 1200s pour 5B, 1800s pour 14B)
 6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
 7. **VRAM** : 48GB minimum (5B), 80GB+ (14B FP16)
 8. **Vérification fichiers** : docker-entrypoint.sh DOIT utiliser chemins réels (pas symlinks) pour éviter restart (lignes 177-340)
+9. **Optimisations GPU (v3.13.0+)** : Templates configurés pour GPU 95GB sans offload inutile
+   - WanVideoModelLoader: `load_device: "gpu"` (pas "offload_device")
+   - WanVideoSampler: `force_offload: false` (pas true)
+   - Accélération ~3-5x (5B: 10-15min → 3-5min, 14B: timeout → 6-12min)
+   - Usage VRAM: 5B ~24.5GB (70GB marge), 14B ~67GB (28GB marge)

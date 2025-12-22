@@ -445,7 +445,15 @@ async def process_cinemagraph_generation(job_id: str):
                 job_id, current_step="Génération en cours...", progress=0.5
             )
 
-            workflow_result = await client.wait_for_completion(comfyui_workflow_id)
+            # Timeout adapté au modèle : 20 min (5B) ou 30 min (14B avec upscale)
+            workflow_timeout = 1800 if model_type == "14b" else 1200
+            logger.info(
+                f"⏱️  Timeout workflow {model_type.upper()}: {workflow_timeout}s ({workflow_timeout // 60} min)"
+            )
+
+            workflow_result = await client.wait_for_completion(
+                comfyui_workflow_id, timeout=workflow_timeout
+            )
             logger.info(
                 f"Workflow terminé: {workflow_result.status if hasattr(workflow_result, 'status') else 'completed'}"
             )
