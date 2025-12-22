@@ -10,7 +10,7 @@
 
 ## 📅 Modifications récentes
 
-### [2025-12-22] - ✅ OPTIMISATION MAJEURE: GPU 95GB + Timeout différencié + Fix start_image
+### [2025-12-22] - ✅ OPTIMISATION MAJEURE: GPU 95GB + Timeout différencié + Fix start_image + Fix load_device
 
 **Problème 1** : Workflows 14B timeout systématiquement à 20 minutes
 - Container 8 logs (3884 lignes) : Timeout à 12:16:42 après 1200s exactement
@@ -28,6 +28,11 @@
 - Paramètre correct : `start_image` (pas `image`)
 - Source: API ComfyUI-WanVideoWrapper
 
+**Problème 4** : Erreur HTTP 400 validation workflow (container 9)
+- Node 2 (`WanVideoModelLoader`) erreur : "load_device: 'gpu' not in ['main_device', 'offload_device']"
+- Valeur `"gpu"` n'existe pas dans l'API WanVideoWrapper
+- Valeurs acceptées : `"main_device"` (garde GPU) ou `"offload_device"` (offload CPU/GPU)
+
 **Solutions implémentées** :
 
 **1. web_interface/routes.py** (lignes 448-456) :
@@ -38,7 +43,7 @@ workflow_result = await client.wait_for_completion(comfyui_workflow_id, timeout=
 ```
 
 **2. Optimisations GPU tous templates** (5B + 14B) :
-- Node 2 : `load_device: "offload_device"` → `"gpu"` (modèle reste en GPU)
+- Node 2 : `load_device: "offload_device"` → `"main_device"` (modèle reste en GPU, conforme API)
 - Node 7/8 : `force_offload: true` → `false` (pas de transfert CPU/GPU)
 
 **3. Fix paramètre templates 14B** :
@@ -46,16 +51,17 @@ workflow_result = await client.wait_for_completion(comfyui_workflow_id, timeout=
 
 **Fichiers modifiés** :
 - `web_interface/routes.py` : Timeout différencié selon modèle
-- `workflows/templates/wan22_5b_i2v.json` : v4.0.0 → v4.1.0 (GPU optimized)
-- `workflows/templates/wan22_5b_with_upscale.json` : v3.0.0 → v3.1.0 (GPU optimized)
-- `workflows/templates/wan22_14b_i2v.json` : v1.1.0 → v1.3.0 (start_image + GPU optimized)
-- `workflows/templates/wan22_14b_with_upscale.json` : v1.1.0 → v1.3.0 (start_image + GPU optimized)
+- `workflows/templates/wan22_5b_i2v.json` : v4.0.0 → v4.2.0 (GPU optimized + fix load_device)
+- `workflows/templates/wan22_5b_with_upscale.json` : v3.0.0 → v3.2.0 (GPU optimized + fix load_device)
+- `workflows/templates/wan22_14b_i2v.json` : v1.1.0 → v1.4.0 (start_image + GPU optimized + fix load_device)
+- `workflows/templates/wan22_14b_with_upscale.json` : v1.1.0 → v1.4.0 (start_image + GPU optimized + fix load_device)
 
 **Impact** :
 - ✅ **Timeout 14B résolu** : 30 min au lieu de 20 min (marge confortable)
 - ✅ **Accélération 3-5x** : Workflows 5B ~3-5 min (au lieu de 10-15 min), 14B ~6-12 min (au lieu de timeout)
 - ✅ **GPU pleinement exploité** : 95 GB VRAM utilisés efficacement sans offload inutile
 - ✅ **TypeError résolu** : Templates 14B conformes à l'API WanVideoWrapper
+- ✅ **Validation HTTP 400 résolue** : load_device conforme à l'API (main_device/offload_device)
 - ⚡ **Gain temps total** : ~10-15 minutes par génération
 
 **Temps estimés après optimisations** :

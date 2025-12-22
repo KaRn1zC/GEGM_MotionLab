@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-22 (v3.13.0 - Optimisations GPU 95GB + Timeout différencié + Fix start_image)
+**Dernière mise à jour** : 2025-12-22 (v3.14.0 - Fix load_device API + Optimisations GPU 95GB)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -151,8 +151,9 @@ Python 3.11 + Flask 3.0+ + PyTorch 2.10.dev (CUDA 12.8) + ComfyUI (WanVideoWrapp
 6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale
 7. **VRAM** : 48GB minimum (5B), 80GB+ (14B FP16)
 8. **Vérification fichiers** : docker-entrypoint.sh DOIT utiliser chemins réels (pas symlinks) pour éviter restart (lignes 177-340)
-9. **Optimisations GPU (v3.13.0+)** : Templates configurés pour GPU 95GB sans offload inutile
-   - WanVideoModelLoader: `load_device: "gpu"` (pas "offload_device")
+9. **Optimisations GPU (v3.14.0+)** : Templates configurés pour GPU 95GB sans offload inutile
+   - WanVideoModelLoader: `load_device: "main_device"` (conforme API WanVideoWrapper, garde modèle en GPU)
    - WanVideoSampler: `force_offload: false` (pas true)
    - Accélération ~3-5x (5B: 10-15min → 3-5min, 14B: timeout → 6-12min)
    - Usage VRAM: 5B ~24.5GB (70GB marge), 14B ~67GB (28GB marge)
+   - Valeurs API acceptées: "main_device" (GPU) ou "offload_device" (CPU/GPU offload)

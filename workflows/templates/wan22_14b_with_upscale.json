@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B + UltraSharp Upscale",
   "description": "Pipeline 14B: génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B"],
 
@@ -103,7 +103,7 @@
         "model": "{checkpoint_path}",
         "base_precision": "bf16",
         "quantization": "disabled",
-        "load_device": "gpu"
+        "load_device": "main_device"
       }
     },
     "3": {
@@ -239,6 +239,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v1.4.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v1.3.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
       "v1.2.0": "Fix paramètre image → start_image dans WanVideoImageToVideoEncode (résout TypeError)",
       "v1.1.0": "Ajout paramètres requis WanVideoImageToVideoEncode (start/end_latent_strength, noise_aug_strength, force_offload)",
