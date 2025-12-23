@@ -22,7 +22,8 @@
       "WebFetch(domain:comfyanonymous.github.io)",
       "Bash(source:*)",
       "Bash(hf download --help:*)",
-      "Bash(split:*)"
+      "Bash(split:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

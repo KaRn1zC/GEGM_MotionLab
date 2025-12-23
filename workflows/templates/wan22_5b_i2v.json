@@ -82,7 +82,7 @@
       "class_type": "WanVideoModelLoader",
       "inputs": {
         "model": "{checkpoint_path}",
-        "base_precision": "fp16",
+        "base_precision": "bf16",
         "quantization": "disabled",
         "load_device": "main_device"
       }
@@ -91,7 +91,7 @@
       "class_type": "WanVideoVAELoader",
       "inputs": {
         "model_name": "{vae_name}",
-        "precision": "fp16"
+        "precision": "bf16"
       }
     },
     "4": {
@@ -104,7 +104,7 @@
       "class_type": "WanVideoTextEncodeCached",
       "inputs": {
         "model_name": "t5/umt5_xxl_fp16.safetensors",
-        "precision": "fp16",
+        "precision": "bf16",
         "positive_prompt": "{prompt}",
         "negative_prompt": "{negative_prompt}",
         "quantization": "disabled",
