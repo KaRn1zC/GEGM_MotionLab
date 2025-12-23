@@ -779,7 +779,16 @@ def generate_cinemagraph():
     )
     # Log du workflow qui sera utilisé
     scale_ratio = (final_width * final_height) / (source_width * source_height)
-    expected_workflow = "wan22_with_upscale" if scale_ratio > 1.5 else "wan22_i2v"
+    # Détecter le modèle pour log informatif
+    from workflows.workflow_manager import WorkflowTemplate
+
+    temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
+    _, log_model_type = temp_template._detect_available_model()
+    expected_workflow = (
+        f"wan22_{log_model_type}_with_upscale"
+        if scale_ratio > 1.5
+        else f"wan22_{log_model_type}_i2v"
+    )
     logger.info(f"   Workflow: {expected_workflow} (ratio: {scale_ratio:.2f}x)")
 
     return jsonify(
