@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B + UltraSharp Upscale",
   "description": "Pipeline 14B: génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B"],
 
@@ -101,7 +101,7 @@
       "class_type": "WanVideoModelLoader",
       "inputs": {
         "model": "{checkpoint_path}",
-        "base_precision": "bf16",
+        "base_precision": "fp16",
         "quantization": "disabled",
         "load_device": "main_device"
       }
@@ -110,7 +110,7 @@
       "class_type": "WanVideoVAELoader",
       "inputs": {
         "model_name": "{vae_name}",
-        "precision": "bf16"
+        "precision": "fp16"
       }
     },
     "4": {
@@ -123,7 +123,7 @@
       "class_type": "WanVideoTextEncodeCached",
       "inputs": {
         "model_name": "t5/umt5_xxl_fp16.safetensors",
-        "precision": "bf16",
+        "precision": "fp16",
         "positive_prompt": "{prompt}",
         "negative_prompt": "{negative_prompt}",
         "quantization": "disabled",
