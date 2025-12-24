@@ -92,15 +92,6 @@ class WorkflowTemplate:
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
 
-        # DEBUG: Lister TOUS les dossiers dans checkpoints/
-        if comfyui_models_dir.exists():
-            all_dirs = [d for d in comfyui_models_dir.iterdir() if d.is_dir()]
-            logger.warning(f"🔍 DEBUG - Dossiers dans {comfyui_models_dir}:")
-            for d in all_dirs:
-                logger.warning(f"   - {d.name}/")
-        else:
-            logger.error(f"❌ Le dossier {comfyui_models_dir} n'existe pas!")
-
         model_path = comfyui_models_dir / model_name
 
         # Détection automatique selon la structure des fichiers (ComfyUI Native)

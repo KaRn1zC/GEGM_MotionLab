@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-22 (v3.14.0 - Fix load_device API + Optimisations GPU 95GB)
+**Dernière mise à jour** : 2025-12-24 (v3.16.0 - Fix Précision Modèles FP16)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -145,7 +145,13 @@ Python 3.11 + Flask 3.0+ + PyTorch 2.10.dev (CUDA 12.8) + ComfyUI (WanVideoWrapp
    - 5B: wan2.2_vae.safetensors (1.41 GB, 48 canaux)
    - 14B: wan_2.1_vae.safetensors (254 MB, 16 canaux)
    - Injection automatique par workflow_manager.py
-3. **Précision modèle 14B** : FP16 (~28.6GB par fichier) pour qualité maximale (au lieu de FP8 ~14GB)
+3. **Mixed precision REQUIS (v3.16.0+)** : Architecture mixte pour éviter artefacts catastrophiques
+   - WanVideoModelLoader (node 2): `base_precision: "fp16"` (match fichiers safetensors FP16)
+   - WanVideoVAELoader (node 3): `precision: "bf16"` (stabilité numérique encodage)
+   - WanVideoTextEncodeCached (node 5): `precision: "bf16"` (préservation sémantique)
+   - ⚠️ CRITIQUE: base_precision="bf16" sur node 2 cause conversion FP16→BF16 → bruit massif
+   - Conforme workflow officiel Kijai (wanvideo2_2_I2V_A14B_example_WIP.json)
+   - Templates corrigés: v1.6.0 (14B), v4.4.0/v3.4.0 (5B)
 4. **Récupération vidéos** : get_output_images() DOIT chercher clés "gifs" (VHS_VideoCombine) ET "images" (SaveImage)
 5. **Détection fin workflow** : Le client WebSocket DOIT détecter `node = null` (sinon timeout différencié : 1200s pour 5B, 1800s pour 14B)
 6. **Sélection auto** : Image ≤720p → 5B, >720p → 14B + upscale

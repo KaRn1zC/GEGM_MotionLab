@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 Image-to-Video",
   "description": "Génération de cinemagraphs avec WAN 2.2 5B - Version corrigée compatible wrapper récent",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
 
@@ -82,7 +82,7 @@
       "class_type": "WanVideoModelLoader",
       "inputs": {
         "model": "{checkpoint_path}",
-        "base_precision": "bf16",
+        "base_precision": "fp16",
         "quantization": "disabled",
         "load_device": "main_device"
       }
