@@ -406,11 +406,17 @@ async def process_cinemagraph_generation(job_id: str):
 
             # Pour le workflow upscale, utiliser la résolution de génération optimale calculée
             # L'upscaling sera fait par 4x-UltraSharp (node 11) + resize Lanczos (node 11b)
+            # IMPORTANT: Créer workflow_params SANS utiliser job.parameters pour width/height
+            # car job.parameters contient la résolution cible (final_width/final_height)
+            # mais nous voulons utiliser generation_width/generation_height
+            base_params = {
+                k: v for k, v in job.parameters.items() if k not in ["width", "height"]
+            }
             workflow_params = {
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
-                **job.parameters,
+                **base_params,  # Tous les params sauf width/height
                 "width": generation_width,  # Résolution génération WAN 2.2
                 "height": generation_height,
                 "target_width": adjusted_target_width,  # Résolution finale après upscale
@@ -433,11 +439,15 @@ async def process_cinemagraph_generation(job_id: str):
             )
 
             # Pour génération standard, utiliser les dimensions optimales
+            # IMPORTANT: Exclure width/height de job.parameters pour éviter conflit
+            base_params = {
+                k: v for k, v in job.parameters.items() if k not in ["width", "height"]
+            }
             workflow_params = {
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
-                **job.parameters,
+                **base_params,  # Tous les params sauf width/height
                 "width": generation_width,
                 "height": generation_height,
                 "enable_vae_tiling": enable_vae_tiling,
