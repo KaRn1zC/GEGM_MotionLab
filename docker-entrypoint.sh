@@ -37,6 +37,41 @@ MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
 
+# ========================================
+# NETTOYAGE: Supprimer d'éventuels anciens modèles T2V ou formats obsolètes
+# ========================================
+echo ""
+echo "🧹 Nettoyage des anciens modèles (si présents)..."
+
+CHECKPOINTS_DIR="/workspace/comfyui/ComfyUI/models/checkpoints"
+
+# Lister tous les dossiers dans checkpoints pour debugging
+if [ -d "$CHECKPOINTS_DIR" ]; then
+    echo "📂 Dossiers présents dans checkpoints/:"
+    ls -la "$CHECKPOINTS_DIR" | grep "^d" || echo "   (aucun dossier)"
+fi
+
+# Supprimer les anciens formats connus du 14B (T2V, Diffusers, formats obsolètes)
+OBSOLETE_PATTERNS=(
+    "Wan2.1*"
+    "*T2V*"
+    "*t2v*"
+    "*Diffusers*"
+    "*diffusers*"
+    "high_noise_model"
+    "low_noise_model"
+)
+
+for pattern in "${OBSOLETE_PATTERNS[@]}"; do
+    find "$CHECKPOINTS_DIR" -name "$pattern" -type f -delete 2>/dev/null && \
+        echo "   ✅ Supprimé: $pattern" || true
+    find "$CHECKPOINTS_DIR" -name "$pattern" -type d -exec rm -rf {} + 2>/dev/null && \
+        echo "   ✅ Dossier supprimé: $pattern" || true
+done
+
+echo "✅ Nettoyage terminé"
+echo ""
+
 # Vérifier la présence des fichiers ComfyUI Native (Comfy-Org)
 # 5B: wan2.2_ti2v_5B_fp16.safetensors
 # 14B: wan2.2_i2v_high_noise_14B_fp16.safetensors + wan2.2_i2v_low_noise_14B_fp16.safetensors

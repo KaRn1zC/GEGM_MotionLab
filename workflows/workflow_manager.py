@@ -92,6 +92,15 @@ class WorkflowTemplate:
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("../comfyui/ComfyUI/models/checkpoints")
 
+        # DEBUG: Lister TOUS les dossiers dans checkpoints/
+        if comfyui_models_dir.exists():
+            all_dirs = [d for d in comfyui_models_dir.iterdir() if d.is_dir()]
+            logger.warning(f"🔍 DEBUG - Dossiers dans {comfyui_models_dir}:")
+            for d in all_dirs:
+                logger.warning(f"   - {d.name}/")
+        else:
+            logger.error(f"❌ Le dossier {comfyui_models_dir} n'existe pas!")
+
         model_path = comfyui_models_dir / model_name
 
         # Détection automatique selon la structure des fichiers (ComfyUI Native)
@@ -134,11 +143,30 @@ class WorkflowTemplate:
             comfyui_native_high = (
                 model_path / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
             )
+
+            # DEBUG: Lister TOUS les fichiers dans le dossier du modèle
+            if model_path.exists():
+                all_files = list(model_path.glob("*.safetensors"))
+                logger.warning(f"🔍 DEBUG - Fichiers dans {model_path}:")
+                for f in all_files:
+                    logger.warning(
+                        f"   - {f.name} ({f.stat().st_size / 1024**3:.2f} GB)"
+                    )
+            else:
+                logger.error(f"❌ Le dossier {model_path} n'existe pas!")
+
             if comfyui_native_high.exists():
+                checkpoint_path = f"{model_name}/{comfyui_native_high.name}"
                 logger.info(
                     f"✅ Modèle 14B ComfyUI Native FP16 détecté : {comfyui_native_high.name}"
                 )
-                return f"{model_name}/{comfyui_native_high.name}"
+                logger.warning(
+                    f"🔍 DEBUG - Checkpoint path retourné: {checkpoint_path}"
+                )
+                logger.warning(
+                    f"🔍 DEBUG - Chemin absolu: {comfyui_native_high.absolute()}"
+                )
+                return checkpoint_path
 
             # Fallback : ancien format fusionné (v3.1.8)
             merged_checkpoint = model_path / "diffusion_pytorch_model.safetensors"
