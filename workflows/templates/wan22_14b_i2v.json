@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B Image-to-Video",
   "description": "Pipeline 14B: génération directe sans upscale (résolutions ≤ 720p)",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "14B", "i2v"],
 
@@ -87,7 +87,7 @@
       "class_type": "WanVideoModelLoader",
       "inputs": {
         "model": "{checkpoint_path}",
-        "base_precision": "bf16",
+        "base_precision": "fp16",
         "quantization": "disabled",
         "load_device": "main_device"
       }
