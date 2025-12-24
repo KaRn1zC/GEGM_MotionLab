@@ -73,6 +73,7 @@ def calculate_optimal_generation_strategy(
     source_height: int,
     target_width: int,
     target_height: int,
+    model_type: str = "5b",
 ) -> dict:
     """
     Calcule la stratégie de génération optimale pour WAN 2.2.
@@ -84,9 +85,18 @@ def calculate_optimal_generation_strategy(
     4. Génération WAN 2.2 à résolution optimale (~720p)
     5. Post-génération : UltraSharp 4x + Lanczos vers target
 
+    IMPORTANT 14B: Le modèle 14B avec spatial_compress_level=1 (compression 32×32)
+    utilise une compression 16x plus agressive que le 5B (compression 8×8).
+    Pour éviter les artefacts catastrophiques dus à la compression excessive,
+    le 14B génère TOUJOURS à la résolution source (pas d'upscale pré-génération).
+    L'upscaling complet est géré par UltraSharp 4x post-génération.
+
+    Référence: Workflow officiel Kijai utilise 832×480 max pour le 14B.
+
     Args:
         source_width, source_height: Dimensions image source (déjà ajustées multiples 32)
         target_width, target_height: Dimensions cible finales
+        model_type: Type de modèle ('5b' ou '14b')
 
     Returns:
         dict: {
@@ -113,32 +123,47 @@ def calculate_optimal_generation_strategy(
     total_ratio = target_pixels / source_pixels
     aspect_ratio = source_width / source_height
 
-    # Calculer résolution de génération optimale (~720p max)
-    # On veut maximiser la résolution de génération sans dépasser 720p
-
-    # Calculer dimensions max possibles en conservant ratio
-    if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-        # Limité par largeur (image wide)
-        gen_w = WAN22_MAX_WIDTH
-        gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
+    # FIX CRITIQUE 14B: Le modèle 14B utilise spatial_compress_level=1 (compression 32×32)
+    # ce qui est 16x plus aggressif que le 5B (compression 8×8).
+    # À résolution élevée (>720p), la compression excessive cause des artefacts catastrophiques
+    # (bruit, déformation, perte totale de détails - confirmé par analyse Gemini).
+    #
+    # Solution: Le 14B génère TOUJOURS à la résolution source ajustée (pas d'upscale pré-gen).
+    # L'upscaling complet est géré par UltraSharp 4x en post-génération.
+    #
+    # Workflow officiel Kijai: 832×480 max pour 14B (vs 1120×704 pour 5B).
+    if model_type == "14b":
+        # 14B: Génération à résolution source (déjà ajustée aux multiples de 32)
+        # Pas d'upscale pré-génération pour éviter compression excessive
+        gen_w = source_width
+        gen_h = source_height
     else:
-        # Limité par hauteur (image tall)
-        gen_h = WAN22_MAX_HEIGHT
-        gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
+        # 5B: Calculer résolution de génération optimale (~720p max)
+        # Le 5B tolère l'upscale pré-génération grâce à sa compression plus douce (8×8)
 
-    # Ajuster aux multiples de 32
-    gen_w = adjust_to_32(gen_w)
-    gen_h = adjust_to_32(gen_h)
-
-    # Vérifier si on dépasse encore 720p après ajustement
-    if gen_w * gen_h > WAN22_MAX_PIXELS:
-        # Réduire légèrement pour rester sous la limite
+        # Calculer dimensions max possibles en conservant ratio
         if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-            gen_w = adjust_to_32(WAN22_MAX_WIDTH - 32)
-            gen_h = adjust_to_32(gen_w / aspect_ratio)
+            # Limité par largeur (image wide)
+            gen_w = WAN22_MAX_WIDTH
+            gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
         else:
-            gen_h = adjust_to_32(WAN22_MAX_HEIGHT - 32)
-            gen_w = adjust_to_32(gen_h * aspect_ratio)
+            # Limité par hauteur (image tall)
+            gen_h = WAN22_MAX_HEIGHT
+            gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
+
+        # Ajuster aux multiples de 32
+        gen_w = adjust_to_32(gen_w)
+        gen_h = adjust_to_32(gen_h)
+
+        # Vérifier si on dépasse encore 720p après ajustement
+        if gen_w * gen_h > WAN22_MAX_PIXELS:
+            # Réduire légèrement pour rester sous la limite
+            if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
+                gen_w = adjust_to_32(WAN22_MAX_WIDTH - 32)
+                gen_h = adjust_to_32(gen_w / aspect_ratio)
+            else:
+                gen_h = adjust_to_32(WAN22_MAX_HEIGHT - 32)
+                gen_w = adjust_to_32(gen_h * aspect_ratio)
 
     # Déterminer si redimensionnement pré-génération nécessaire
     needs_pregen_resize = gen_w != source_width or gen_h != source_height
@@ -245,12 +270,21 @@ async def process_cinemagraph_generation(job_id: str):
         adjusted_target_width = adjust_dimension(target_width)
         adjusted_target_height = adjust_dimension(target_height)
 
-        # Calculer la stratégie de génération optimale
+        # Détecter le modèle disponible (5B ou 14B) AVANT le calcul de stratégie
+        # CRITIQUE: Le 14B nécessite une stratégie différente (génération à résolution source)
+        from workflows.workflow_manager import WorkflowTemplate
+
+        temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
+        detected_model, model_type = temp_template._detect_available_model()
+        logger.info(f"🤖 Modèle détecté: {detected_model} (type: {model_type})")
+
+        # Calculer la stratégie de génération optimale selon le modèle
         strategy = calculate_optimal_generation_strategy(
             adjusted_source_width,
             adjusted_source_height,
             adjusted_target_width,
             adjusted_target_height,
+            model_type=model_type,
         )
 
         generation_width = strategy["generation_width"]
@@ -358,13 +392,6 @@ async def process_cinemagraph_generation(job_id: str):
         # Calculer si VAE tiling doit être activé (pour résolutions >1080p ou upscale >4x)
         target_pixels = adjusted_target_width * adjusted_target_height
         enable_vae_tiling = target_pixels > (1920 * 1080) or upscale_ratio > 4.0
-
-        # Détecter le modèle disponible (5B ou 14B)
-        from workflows.workflow_manager import WorkflowTemplate
-
-        temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
-        detected_model, model_type = temp_template._detect_available_model()
-        logger.info(f"🤖 Modèle détecté: {detected_model} (type: {model_type})")
 
         # Sélectionner le workflow selon modèle ET upscale
         if upscale_ratio > 1.5:  # Besoin d'upscale intelligent
@@ -590,9 +617,19 @@ def calc_resolution():
         adjusted_source_w = adjust_dimension(source_w)
         adjusted_source_h = adjust_dimension(source_h)
 
-        # Calculer la stratégie de génération complète
+        # Détecter le modèle disponible (5B ou 14B) pour calcul stratégie
+        from workflows.workflow_manager import WorkflowTemplate
+
+        temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
+        detected_model, model_type = temp_template._detect_available_model()
+
+        # Calculer la stratégie de génération complète selon le modèle
         strategy = calculate_optimal_generation_strategy(
-            adjusted_source_w, adjusted_source_h, final_w, final_h
+            adjusted_source_w,
+            adjusted_source_h,
+            final_w,
+            final_h,
+            model_type=model_type,
         )
 
         upscale_ratio = strategy["upscale_ratio"]
