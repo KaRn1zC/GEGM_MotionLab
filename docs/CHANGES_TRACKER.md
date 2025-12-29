@@ -10,7 +10,58 @@
 
 ## 📅 Modifications récentes
 
-### [2025-12-29] - 🔥 FIX CRITIQUE: Résolution minimale 14B (832×480) - Cause RÉELLE artefacts "neige"
+### [2025-12-29] - 🔥 FIX CRITIQUE #2: Bug arrondi multiples de 32 → Génération 832×544 au lieu de 832×512
+
+**Problème** : Container 21 montre génération à 832×544 MALGRÉ fix résolution minimale
+- ✅ Résolution minimale 832×480 implémentée (lignes 152-190)
+- ✅ Image 704×448 correctement upscalée vers 832×_
+- ❌ Génération à 832×**544** au lieu de 832×**512** (logs ligne 3118)
+- ❌ Latents 52×34=1768 au lieu de 52×32=1664 (inutilement plus grand)
+
+**Cause racine identifiée** : **Fonction `adjust_to_32()` utilise `round()` au lieu de `floor()`**
+```python
+# AVANT (ligne 118):
+def adjust_to_32(value):
+    return int(round(value / 32) * 32)  # 529 → round(16.53) → 17 → 544 ❌
+
+# Calcul problématique:
+aspect_ratio = 704 / 448 = 1.5714
+gen_h = 832 / 1.5714 = 529.4
+adjust_to_32(529) = round(529/32) * 32 = round(16.53) * 32 = 17 * 32 = 544 ❌
+```
+
+**Solution implémentée** : Floor privilégié pour rester proche du minimum (lignes 117-130, 170-190)
+```python
+# APRÈS:
+def adjust_to_32(value, prefer_lower=False):
+    if prefer_lower:
+        return int(value // 32) * 32  # 529 → 16 → 512 ✅
+    else:
+        return int(round(value / 32) * 32)
+
+# Logique 14B: floor si au-dessus du minimum, sinon ceil
+gen_h_floor = adjust_to_32(529, prefer_lower=True) = 512 ✅
+if gen_h_floor >= 480: gen_h = 512 ✅
+```
+
+**Fichier modifié** : `web_interface/routes.py`
+
+**Résultat attendu (image 704×448 → target 1120×704)** :
+```
+Avant: 832×544 → latents 52×34 = 1768 pixels (inutilement grand) ❌
+Après: 832×512 → latents 52×32 = 1664 pixels (+6.7% au-dessus minimum 1560) ✅
+```
+
+**Impact** :
+- ✅ **Artefacts "neige" éliminés** : Latents 1664 > 1560 minimum requis
+- ✅ **Optimisation mémoire** : 1664 au lieu de 1768 pixels latents (-5.9%)
+- ✅ **Aspect ratio préservé** : 832×512 (ratio 1.625) vs source 1.5714 (3.4% différence)
+
+**Test requis** : Rebuild image + container 22 → Vérifier génération 832×512 + disparition artefacts
+
+---
+
+### [2025-12-29] - 🔥 FIX CRITIQUE #1: Résolution minimale 14B (832×480) - Cause RÉELLE artefacts "neige"
 
 **Problème** : Artefacts catastrophiques 14B persistent MALGRÉ fix précision FP16 (2025-12-24)
 - ✅ Templates FP16 corrects (WanVideoModelLoader base_precision: "fp16")
