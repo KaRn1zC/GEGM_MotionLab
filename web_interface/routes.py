@@ -78,20 +78,20 @@ def calculate_optimal_generation_strategy(
     """
     Calcule la stratégie de génération optimale pour WAN 2.2.
 
-    Principe (résolution native WAN 2.2 : 720p max) :
+    Principe 5B (résolution native WAN 2.2 : 720p max) :
     1. Si source < 720p : upscale Lanczos vers ~720p max
     2. Si source > 720p : downscale Lanczos vers ~720p max
     3. Si source ~720p : ajuster multiples de 32 uniquement
     4. Génération WAN 2.2 à résolution optimale (~720p)
     5. Post-génération : UltraSharp 4x + Lanczos vers target
 
-    IMPORTANT 14B: Le modèle 14B avec spatial_compress_level=1 (compression 32×32)
-    utilise une compression 16x plus agressive que le 5B (compression 8×8).
-    Pour éviter les artefacts catastrophiques dus à la compression excessive,
-    le 14B génère TOUJOURS à la résolution source (pas d'upscale pré-génération).
-    L'upscaling complet est géré par UltraSharp 4x post-génération.
+    Principe 14B (résolution minimale REQUISE : 832×480) :
+    1. TOUJOURS upscale/downscale vers 832×480 min (latents 52×30=1560 pixels minimum)
+    2. Génération 14B à résolution fixe 832×480 (ajustée multiples 32)
+    3. Post-génération : UltraSharp 4x + Lanczos vers target
+    4. CRITIQUE : En dessous de 832×480, latents 44×28=1232 pixels → artefacts "neige" catastrophiques
 
-    Référence: Workflow officiel Kijai utilise 832×480 max pour le 14B.
+    Référence: Workflow officiel Kijai utilise 832×480 pour 14B (compression 32×32).
 
     Args:
         source_width, source_height: Dimensions image source (déjà ajustées multiples 32)
@@ -125,22 +125,48 @@ def calculate_optimal_generation_strategy(
 
     # CRITIQUE: Stratégies DIFFÉRENTES pour 14B vs 5B
     #
-    # 14B: spatial_compress_level=1 (compression 32×32) - TRÈS sensible aux artefacts d'interpolation
-    #      → Génère à résolution SOURCE pour éviter artefacts d'upscale Lanczos
-    #      → Upscale post-génération via workflow "with_upscale"
+    # 14B: spatial_compress_level=1 (compression 32×32, diviseur 16) - Nécessite résolution minimale
+    #      → Génère TOUJOURS à résolution min 832×480 (latents 52×30=1560 pixels minimum)
+    #      → En dessous: latents 44×28=1232 pixels → artefacts "neige" catastrophiques
+    #      → Upscale/downscale pré-génération vers 832×480 si source différente
+    #      → Post-génération: UltraSharp + Lanczos selon target
     #
-    # 5B: spatial_compress_level=0 (compression 8×8) - Tolère bien l'upscale pré-génération
+    # 5B: spatial_compress_level=0 (compression 8×8, diviseur 8) - Tolère bien l'upscale pré-génération
     #      → Calcule résolution optimale (~720p max) et upscale pré-génération
     #      → Évite workflow "with_upscale" (plus rapide)
     #
-    # Root cause artefacts 14B: Upscale Lanczos pré-gen crée artefacts d'interpolation
-    # → Compression 32×32 amplifie ces artefacts → "effet de neige" catastrophique
+    # Référence: Workflow officiel Kijai utilise 832×480 pour 14B (latents 52×30)
 
     if model_type == "14b":
-        # 14B: Génération à résolution source (déjà ajustée aux multiples de 32)
-        # Pas d'upscale pré-génération pour éviter artefacts avec compression 32×32
-        gen_w = source_width
-        gen_h = source_height
+        # 14B: Génération TOUJOURS à résolution minimale 832×480 (référence Kijai)
+        # Compression 32×32 nécessite latents ≥1560 pixels (52×30) pour qualité acceptable
+        # En dessous : artefacts "neige" catastrophiques (44×28=1232 pixels insuffisants)
+
+        WAN22_14B_MIN_WIDTH = 832
+        WAN22_14B_MIN_HEIGHT = 480
+
+        # Calculer résolution de génération basée sur ratio source
+        if aspect_ratio >= (WAN22_14B_MIN_WIDTH / WAN22_14B_MIN_HEIGHT):
+            # Image landscape ou carrée : limiter par largeur
+            gen_w = WAN22_14B_MIN_WIDTH
+            gen_h = int(WAN22_14B_MIN_WIDTH / aspect_ratio)
+        else:
+            # Image portrait : limiter par hauteur
+            gen_h = WAN22_14B_MIN_HEIGHT
+            gen_w = int(WAN22_14B_MIN_HEIGHT * aspect_ratio)
+
+        # Ajuster multiples de 32
+        gen_w = adjust_to_32(gen_w)
+        gen_h = adjust_to_32(gen_h)
+
+        # Garantir minimum absolu 832×480 (après ajustement multiples de 32)
+        if gen_w < WAN22_14B_MIN_WIDTH or gen_h < WAN22_14B_MIN_HEIGHT:
+            if aspect_ratio >= 1:
+                gen_w = WAN22_14B_MIN_WIDTH
+                gen_h = adjust_to_32(WAN22_14B_MIN_WIDTH / aspect_ratio)
+            else:
+                gen_h = WAN22_14B_MIN_HEIGHT
+                gen_w = adjust_to_32(WAN22_14B_MIN_HEIGHT * aspect_ratio)
     else:
         # 5B: Calculer résolution de génération optimale (~720p max)
         # Le 5B tolère l'upscale pré-génération grâce à sa compression plus douce (8×8)

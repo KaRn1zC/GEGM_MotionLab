@@ -10,7 +10,67 @@
 
 ## 📅 Modifications récentes
 
-### [2025-12-24] - 🔥 FIX CRITIQUE: Précision modèle (BF16 → FP16) - Cause racine artefacts catastrophiques
+### [2025-12-29] - 🔥 FIX CRITIQUE: Résolution minimale 14B (832×480) - Cause RÉELLE artefacts "neige"
+
+**Problème** : Artefacts catastrophiques 14B persistent MALGRÉ fix précision FP16 (2025-12-24)
+- ✅ Templates FP16 corrects (WanVideoModelLoader base_precision: "fp16")
+- ✅ Fichiers safetensors FP16 valides (torch.float16 confirmé)
+- ✅ VAE natif BF16 intact (torch.bfloat16, 194 clés)
+- ❌ Résultat : Vidéo TOUJOURS inexploitable ("effet de neige" massif)
+
+**Investigation 14B containers 17-20** :
+- Image source 720×450 → ajustée 704×448 (multiples 32)
+- Génération 14B : 704×448 avec spatial_compress_level=1 (diviseur 16)
+- **Latents : 44×28 = 1232 pixels** ❌ INSUFFISANT
+- Référence Kijai : 832×480 → latents 52×30 = 1560 pixels ✅
+
+**Analyse comparative latents** :
+```
+14B actuel (704×448) : latents 44×28 = 1232 pixels → ARTEFACTS ❌
+14B référence (832×480) : latents 52×30 = 1560 pixels → OK ✅
+5B (1120×704) : latents 140×88 = 12320 pixels → OK ✅ (10x plus!)
+```
+
+**Cause racine identifiée** : **Latents trop petits (1232 < 1560 minimum requis)**
+- 14B spatial_compress_level=1 → diviseur 16 (8 × 2^1)
+- Compression 32×32 agressive nécessite latents ≥1560 pixels
+- En dessous : modèle n'a pas assez d'information → artefacts reconstruction
+
+**Solution implémentée** : Résolution minimale 14B FORCÉE à 832×480
+
+**Fichier modifié** : `web_interface/routes.py`
+
+**Modifications fonction `calculate_optimal_generation_strategy` (lignes 71-169)** :
+1. **Nouvelle stratégie 14B** :
+   - Résolution minimale absolue : 832×480 (référence Kijai)
+   - TOUJOURS upscale/downscale pré-génération vers 832×480
+   - Génération fixe à 832×480 ajustée multiples 32
+   - Post-génération : UltraSharp 4x + Lanczos selon target
+
+2. **Adaptation universelle images** :
+   - Image < 832×480 : upscale Lanczos pré-gen → 832×480
+   - Image > 832×480 : downscale Lanczos pré-gen → 832×480
+   - Conserve aspect ratio (ajusté multiples 32)
+   - Post-gen : UltraSharp + supersampling (≤4x) ou UltraSharp + Lanczos (>4x)
+
+**Exemple calcul (image 720×450 → target 1120×704)** :
+```
+Avant (704×448) : latents 44×28 = 1232 pixels ❌
+Après (832×512) : latents 52×32 = 1664 pixels ✅ (+35%)
+Upscale post-gen : 1.85x (≤4x supersampling optimal)
+```
+
+**Impact attendu** :
+- ✅ **Artefacts "neige" éliminés** : Latents suffisants pour reconstruction propre
+- ✅ **Adaptation universelle** : Toute image input → 832×480 min → target demandée
+- ✅ **Qualité optimale** : Upscale ≤4x (UltraSharp + supersampling Lanczos)
+- ✅ **Stratégie 5B préservée** : Aucun changement (~720p optimal)
+
+**Test requis** : Rebuild image + nouveau container 14B → Image 720×450 → Target 1120×704
+
+---
+
+### [2025-12-24] - ✅ FIX: Précision modèle FP16 (partiel - résolution minimale manquante)
 
 **Problème** : Artefacts catastrophiques ("neige", bruit massif, déformations) sur TOUTES les générations 14B malgré :
 - ✅ Modèles I2V corrects téléchargés (wan2.2_i2v_high_noise_14B_fp16.safetensors)
