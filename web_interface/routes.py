@@ -114,8 +114,20 @@ def calculate_optimal_generation_strategy(
     WAN22_MAX_HEIGHT = 720
     WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
 
-    def adjust_to_32(value):
-        return int(round(value / 32) * 32)
+    def adjust_to_32(value, prefer_lower=False):
+        """
+        Ajuste une valeur au multiple de 32 le plus proche.
+
+        Args:
+            value: Valeur à ajuster
+            prefer_lower: Si True, arrondit vers le bas (floor) plutôt que round
+        """
+        if prefer_lower:
+            # Floor: arrondit vers le bas (ex: 529 → 512)
+            return int(value // 32) * 32
+        else:
+            # Round: arrondit au plus proche (ex: 529 → 544)
+            return int(round(value / 32) * 32)
 
     # Calculer ratios et dimensions
     source_pixels = source_width * source_height
@@ -155,18 +167,27 @@ def calculate_optimal_generation_strategy(
             gen_h = WAN22_14B_MIN_HEIGHT
             gen_w = int(WAN22_14B_MIN_HEIGHT * aspect_ratio)
 
-        # Ajuster multiples de 32
-        gen_w = adjust_to_32(gen_w)
-        gen_h = adjust_to_32(gen_h)
+        # Ajuster multiples de 32 (prefer_lower=True pour rester proche du minimum)
+        # Ex: 529 → 512 (floor) plutôt que 544 (round)
+        gen_w_floor = adjust_to_32(gen_w, prefer_lower=True)
+        gen_h_floor = adjust_to_32(gen_h, prefer_lower=True)
 
-        # Garantir minimum absolu 832×480 (après ajustement multiples de 32)
-        if gen_w < WAN22_14B_MIN_WIDTH or gen_h < WAN22_14B_MIN_HEIGHT:
-            if aspect_ratio >= 1:
-                gen_w = WAN22_14B_MIN_WIDTH
-                gen_h = adjust_to_32(WAN22_14B_MIN_WIDTH / aspect_ratio)
-            else:
-                gen_h = WAN22_14B_MIN_HEIGHT
-                gen_w = adjust_to_32(WAN22_14B_MIN_HEIGHT * aspect_ratio)
+        # Vérifier que floor ne descend pas sous le minimum
+        if gen_w_floor >= WAN22_14B_MIN_WIDTH:
+            gen_w = gen_w_floor
+        else:
+            # Si floor < minimum, utiliser ceil (arrondi supérieur)
+            gen_w = adjust_to_32(gen_w + 16, prefer_lower=False)
+
+        if gen_h_floor >= WAN22_14B_MIN_HEIGHT:
+            gen_h = gen_h_floor
+        else:
+            # Si floor < minimum, utiliser ceil (arrondi supérieur)
+            gen_h = adjust_to_32(gen_h + 16, prefer_lower=False)
+
+        # Double vérification: garantir minimum absolu après ajustement
+        gen_w = max(gen_w, WAN22_14B_MIN_WIDTH)
+        gen_h = max(gen_h, WAN22_14B_MIN_HEIGHT)
     else:
         # 5B: Calculer résolution de génération optimale (~720p max)
         # Le 5B tolère l'upscale pré-génération grâce à sa compression plus douce (8×8)
