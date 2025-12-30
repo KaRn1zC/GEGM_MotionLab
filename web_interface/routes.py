@@ -1102,6 +1102,55 @@ def check_owncloud():
     )
 
 
+@api_bp.route("/model-info", methods=["GET"])
+def get_model_info():
+    """
+    Retourne les informations sur le modèle WAN 2.2 déployé
+
+    Returns:
+        JSON avec:
+        - model_type: "5b" ou "14b"
+        - model_name: Nom complet du modèle
+        - display_name: Nom d'affichage pour l'UI
+        - estimated_time: Temps estimé pour preset "Naturel" (30 steps)
+    """
+    from workflows.workflow_manager import WorkflowTemplate
+
+    try:
+        # Charger un template temporaire pour détecter le modèle
+        temp_template = WorkflowTemplate("wan22_5b_i2v")
+        detected_model, model_type = temp_template._detect_available_model()
+
+        # Temps estimés pour preset "Naturel" avec 30 steps
+        # Basé sur les benchmarks réels
+        estimated_times = {"5b": "~8 min", "14b": "~15 min"}
+
+        return jsonify(
+            {
+                "model_type": model_type,
+                "model_name": detected_model,
+                "display_name": f"WAN 2.2 {model_type.upper()}",
+                "estimated_time": estimated_times.get(model_type, "~10 min"),
+                "gpu_recommendation": "48GB+ VRAM"
+                if model_type == "5b"
+                else "80GB+ VRAM",
+            }
+        )
+
+    except Exception as e:
+        logger.warning(f"Impossible de détecter le modèle: {e}")
+        # Fallback par défaut
+        return jsonify(
+            {
+                "model_type": "5b",
+                "model_name": "wan2.2-ti2v-5b",
+                "display_name": "WAN 2.2 5B",
+                "estimated_time": "~8 min",
+                "gpu_recommendation": "48GB+ VRAM",
+            }
+        )
+
+
 @api_bp.route("/jobs/<job_id>/thumbnail", methods=["GET"])
 def get_thumbnail(job_id):
     """Retourne une miniature du résultat (placeholder pour l'instant)"""
