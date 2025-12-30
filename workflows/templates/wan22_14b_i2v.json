@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B Image-to-Video",
   "description": "Pipeline 14B: génération directe sans upscale (résolutions ≤ 720p)",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "14B", "i2v"],
 
@@ -125,8 +125,6 @@
         "width": "{width}",
         "height": "{height}",
         "num_frames": "{frames}",
-        "temporal_compress_level": 0,
-        "spatial_compress_level": 1,
         "start_latent_strength": 1.0,
         "end_latent_strength": 1.0,
         "noise_aug_strength": 0.0,
@@ -200,6 +198,9 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v1.8.0": "Retrait paramètres obsolètes spatial_compress_level et temporal_compress_level (non valides dans API actuelle)",
+      "v1.7.0": "FIX CRITIQUE: spatial_compress_level 1→0 (alignement workflow officiel Kijai - CAUSE RÉELLE artefacts neige)",
+      "v1.6.0": "Fix base_precision: bf16→fp16 (matching fichiers safetensors FP16)",
       "v1.4.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v1.3.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
       "v1.2.0": "Fix paramètre image → start_image dans WanVideoImageToVideoEncode (résout TypeError)",

@@ -78,25 +78,20 @@ def calculate_optimal_generation_strategy(
     """
     Calcule la stratégie de génération optimale pour WAN 2.2.
 
-    Principe 5B (résolution native WAN 2.2 : 720p max) :
+    Principe UNIFIÉ 5B et 14B (résolution native WAN 2.2 : 720p max) :
     1. Si source < 720p : upscale Lanczos vers ~720p max
     2. Si source > 720p : downscale Lanczos vers ~720p max
     3. Si source ~720p : ajuster multiples de 32 uniquement
     4. Génération WAN 2.2 à résolution optimale (~720p)
     5. Post-génération : UltraSharp 4x + Lanczos vers target
 
-    Principe 14B (résolution minimale REQUISE : 832×480) :
-    1. TOUJOURS upscale/downscale vers 832×480 min (latents 52×30=1560 pixels minimum)
-    2. Génération 14B à résolution fixe 832×480 (ajustée multiples 32)
-    3. Post-génération : UltraSharp 4x + Lanczos vers target
-    4. CRITIQUE : En dessous de 832×480, latents 44×28=1232 pixels → artefacts "neige" catastrophiques
-
-    Référence: Workflow officiel Kijai utilise 832×480 pour 14B (compression 32×32).
+    Les deux modèles utilisent désormais la même stratégie d'upscale adaptatif.
+    Référence: Documentation officielle WAN 2.2 supporte 480P et 720P pour 14B.
 
     Args:
         source_width, source_height: Dimensions image source (déjà ajustées multiples 32)
         target_width, target_height: Dimensions cible finales
-        model_type: Type de modèle ('5b' ou '14b')
+        model_type: Type de modèle ('5b' ou '14b') - même stratégie pour les deux
 
     Returns:
         dict: {
@@ -109,7 +104,7 @@ def calculate_optimal_generation_strategy(
             'strategy': str                # Description stratégie
         }
     """
-    # Constantes officielles WAN 2.2
+    # Constantes officielles WAN 2.2 (identiques pour 5B et 14B)
     WAN22_MAX_WIDTH = 1280
     WAN22_MAX_HEIGHT = 720
     WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
@@ -135,91 +130,43 @@ def calculate_optimal_generation_strategy(
     total_ratio = target_pixels / source_pixels
     aspect_ratio = source_width / source_height
 
-    # CRITIQUE: Stratégies DIFFÉRENTES pour 14B vs 5B
-    #
-    # 14B: spatial_compress_level=1 (compression 32×32, diviseur 16) - Nécessite résolution minimale
-    #      → Génère TOUJOURS à résolution min 832×480 (latents 52×30=1560 pixels minimum)
-    #      → En dessous: latents 44×28=1232 pixels → artefacts "neige" catastrophiques
-    #      → Upscale/downscale pré-génération vers 832×480 si source différente
-    #      → Post-génération: UltraSharp + Lanczos selon target
-    #
-    # 5B: spatial_compress_level=0 (compression 8×8, diviseur 8) - Tolère bien l'upscale pré-génération
-    #      → Calcule résolution optimale (~720p max) et upscale pré-génération
-    #      → Évite workflow "with_upscale" (plus rapide)
-    #
-    # Référence: Workflow officiel Kijai utilise 832×480 pour 14B (latents 52×30)
+    # STRATÉGIE UNIFIÉE 5B et 14B
+    # Les deux modèles utilisent la même logique d'upscale adaptatif vers ~720p max
+    # Référence: Documentation officielle WAN 2.2 confirme support 480P/720P pour 14B
 
-    if model_type == "14b":
-        # 14B: Génération TOUJOURS à résolution minimale 832×480 (référence Kijai)
-        # Compression 32×32 nécessite latents ≥1560 pixels (52×30) pour qualité acceptable
-        # En dessous : artefacts "neige" catastrophiques (44×28=1232 pixels insuffisants)
+    # Note: Le paramètre model_type est conservé pour compatibilité future
+    # mais la stratégie est maintenant identique pour 5B et 14B
+    _ = model_type  # Unused but kept for API compatibility
 
-        WAN22_14B_MIN_WIDTH = 832
-        WAN22_14B_MIN_HEIGHT = 480
-
-        # Calculer résolution de génération basée sur ratio source
-        if aspect_ratio >= (WAN22_14B_MIN_WIDTH / WAN22_14B_MIN_HEIGHT):
-            # Image landscape ou carrée : limiter par largeur
-            gen_w = WAN22_14B_MIN_WIDTH
-            gen_h = int(WAN22_14B_MIN_WIDTH / aspect_ratio)
-        else:
-            # Image portrait : limiter par hauteur
-            gen_h = WAN22_14B_MIN_HEIGHT
-            gen_w = int(WAN22_14B_MIN_HEIGHT * aspect_ratio)
-
-        # Ajuster multiples de 32 (prefer_lower=True pour rester proche du minimum)
-        # Ex: 529 → 512 (floor) plutôt que 544 (round)
-        gen_w_floor = adjust_to_32(gen_w, prefer_lower=True)
-        gen_h_floor = adjust_to_32(gen_h, prefer_lower=True)
-
-        # Vérifier que floor ne descend pas sous le minimum
-        if gen_w_floor >= WAN22_14B_MIN_WIDTH:
-            gen_w = gen_w_floor
-        else:
-            # Si floor < minimum, utiliser ceil (arrondi supérieur)
-            gen_w = adjust_to_32(gen_w + 16, prefer_lower=False)
-
-        if gen_h_floor >= WAN22_14B_MIN_HEIGHT:
-            gen_h = gen_h_floor
-        else:
-            # Si floor < minimum, utiliser ceil (arrondi supérieur)
-            gen_h = adjust_to_32(gen_h + 16, prefer_lower=False)
-
-        # Double vérification: garantir minimum absolu après ajustement
-        gen_w = max(gen_w, WAN22_14B_MIN_WIDTH)
-        gen_h = max(gen_h, WAN22_14B_MIN_HEIGHT)
+    # Calculer résolution de génération optimale (~720p max)
+    # EXCEPTION: Si target ≤ source, générer à résolution source (pas d'upscale inutile)
+    if target_width <= source_width and target_height <= source_height:
+        gen_w = source_width
+        gen_h = source_height
     else:
-        # 5B: Calculer résolution de génération optimale (~720p max)
-        # Le 5B tolère l'upscale pré-génération grâce à sa compression plus douce (8×8)
-
-        # EXCEPTION: Si target ≤ source, générer à résolution source (pas d'upscale inutile)
-        if target_width <= source_width and target_height <= source_height:
-            gen_w = source_width
-            gen_h = source_height
+        # Calculer dimensions max possibles en conservant ratio
+        if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
+            # Limité par largeur (image wide)
+            gen_w = WAN22_MAX_WIDTH
+            gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
         else:
-            # Calculer dimensions max possibles en conservant ratio
+            # Limité par hauteur (image tall)
+            gen_h = WAN22_MAX_HEIGHT
+            gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
+
+        # Ajuster aux multiples de 32
+        gen_w = adjust_to_32(gen_w)
+        gen_h = adjust_to_32(gen_h)
+
+        # Vérifier si on dépasse encore 720p après ajustement
+        if gen_w * gen_h > WAN22_MAX_PIXELS:
+            # Réduire légèrement pour rester sous la limite
             if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-                # Limité par largeur (image wide)
-                gen_w = WAN22_MAX_WIDTH
-                gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
+                gen_w = adjust_to_32(WAN22_MAX_WIDTH - 32)
+                gen_h = adjust_to_32(gen_w / aspect_ratio)
             else:
-                # Limité par hauteur (image tall)
-                gen_h = WAN22_MAX_HEIGHT
-                gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
-
-            # Ajuster aux multiples de 32
-            gen_w = adjust_to_32(gen_w)
-            gen_h = adjust_to_32(gen_h)
-
-            # Vérifier si on dépasse encore 720p après ajustement
-            if gen_w * gen_h > WAN22_MAX_PIXELS:
-                # Réduire légèrement pour rester sous la limite
-                if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-                    gen_w = adjust_to_32(WAN22_MAX_WIDTH - 32)
-                    gen_h = adjust_to_32(gen_w / aspect_ratio)
-                else:
-                    gen_h = adjust_to_32(WAN22_MAX_HEIGHT - 32)
-                    gen_w = adjust_to_32(gen_h * aspect_ratio)
+                gen_h = adjust_to_32(WAN22_MAX_HEIGHT - 32)
+                gen_w = adjust_to_32(gen_h * aspect_ratio)
 
     # Déterminer si redimensionnement pré-génération nécessaire
     needs_pregen_resize = gen_w != source_width or gen_h != source_height
