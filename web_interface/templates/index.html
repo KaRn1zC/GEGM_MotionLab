@@ -49,7 +49,7 @@
                 <div class="hidden md:block">
                     <div class="bg-white bg-opacity-20 backdrop-blur rounded-lg px-6 py-3">
                         <p class="text-sm font-semibold">Modèle</p>
-                        <p class="text-2xl font-bold">WAN 2.2</p>
+                        <p id="headerModelName" class="text-2xl font-bold">WAN 2.2</p>
                     </div>
                 </div>
             </div>
@@ -723,15 +723,15 @@
                     <div class="space-y-2">
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-600">Générations aujourd'hui</span>
-                            <span class="font-bold text-purple-600">0</span>
+                            <span id="statsGenerationsToday" class="font-bold text-purple-600">0</span>
                         </div>
                         <div class="flex justify-between text-sm">
-                            <span class="text-gray-600">Temps moyen</span>
-                            <span class="font-bold text-purple-600">~5 min</span>
+                            <span class="text-gray-600">Temps moyen estimé</span>
+                            <span id="statsEstimatedTime" class="font-bold text-purple-600">~8 min</span>
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-600">Modèle actif</span>
-                            <span class="font-bold text-purple-600">WAN 2.2 5B</span>
+                            <span id="statsModelName" class="font-bold text-purple-600">WAN 2.2 5B</span>
                         </div>
                     </div>
                 </div>
@@ -975,16 +975,23 @@
         });
 
         // ============================================
-        // POLL JOB STATUS
+        // POLL JOB STATUS (avec résilience réseau)
         // ============================================
-        
+
         async function pollJobStatus(jobId) {
+            let consecutiveErrors = 0;
+            const MAX_CONSECUTIVE_ERRORS = 5;
+            const BASE_POLL_INTERVAL = 2000;
+
             const interval = setInterval(async () => {
                 try {
                     const response = await fetch(`/api/jobs/${jobId}`);
-                    if (!response.ok) throw new Error('Erreur statut');
-                    
+                    if (!response.ok) throw new Error('Erreur statut HTTP ' + response.status);
+
                     const job = await response.json();
+
+                    // Reset error counter on success
+                    consecutiveErrors = 0;
 
                     const progress = Math.round(job.progress * 100);
                     progressBar.style.width = progress + '%';
@@ -1003,12 +1010,22 @@
                         generateBtn.disabled = false;
                     }
                 } catch (error) {
-                    clearInterval(interval);
-                    alert('Erreur lors de la vérification du statut');
-                    progressCard.classList.add('hidden');
-                    generateBtn.disabled = false;
+                    consecutiveErrors++;
+                    console.warn(`Erreur polling (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error.message);
+
+                    // Update UI to show temporary issue
+                    progressText.textContent = `⚠️ Connexion instable (retry ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})...`;
+
+                    // Only abandon after MAX_CONSECUTIVE_ERRORS failures
+                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                        clearInterval(interval);
+                        alert('❌ Connexion perdue après plusieurs tentatives.\n\n💡 Le workflow peut continuer en arrière-plan.\nRechargez la page pour vérifier le statut.');
+                        progressCard.classList.add('hidden');
+                        generateBtn.disabled = false;
+                    }
+                    // Otherwise, continue polling - will retry on next interval
                 }
-            }, 2000);
+            }, BASE_POLL_INTERVAL);
         }
 
         // ============================================
@@ -1042,10 +1059,47 @@
         }
 
         // ============================================
+        // LOAD MODEL INFO (détection dynamique du modèle)
+        // ============================================
+
+        async function loadModelInfo() {
+            try {
+                const response = await fetch('/api/model-info');
+                if (!response.ok) throw new Error('Erreur chargement model-info');
+
+                const data = await response.json();
+
+                // Mettre à jour le header
+                const headerModelName = document.getElementById('headerModelName');
+                if (headerModelName) {
+                    headerModelName.textContent = data.display_name;
+                }
+
+                // Mettre à jour les statistiques
+                const statsModelName = document.getElementById('statsModelName');
+                if (statsModelName) {
+                    statsModelName.textContent = data.display_name;
+                }
+
+                const statsEstimatedTime = document.getElementById('statsEstimatedTime');
+                if (statsEstimatedTime) {
+                    statsEstimatedTime.textContent = data.estimated_time;
+                }
+
+                console.log(`✅ Modèle détecté: ${data.display_name} (${data.model_name})`);
+
+            } catch (error) {
+                console.warn('Impossible de charger les infos du modèle:', error.message);
+                // Garder les valeurs par défaut si erreur
+            }
+        }
+
+        // ============================================
         // INITIALIZE
         // ============================================
-        
+
         updateFrames();
+        loadModelInfo();
 
         // ============================================
         // FONCTION PRESETS
