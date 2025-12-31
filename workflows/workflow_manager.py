@@ -70,7 +70,7 @@ class WorkflowTemplate:
         )
         return env_model, model_type
 
-    def _get_model_checkpoint_path(self, model_name: str) -> str:
+    def _get_model_checkpoint_path(self, model_name: str) -> str | tuple[str, str]:
         """
         Retourne le chemin du checkpoint selon le type de modèle
 
@@ -78,7 +78,8 @@ class WorkflowTemplate:
             model_name: Nom du dossier (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
 
         Returns:
-            str: Chemin du fichier checkpoint principal
+            str: Chemin du fichier checkpoint (5B)
+            tuple[str, str]: (high_noise_path, low_noise_path) pour 14B MoE
         """
 
         # Chemins possibles des modèles
@@ -130,32 +131,42 @@ class WorkflowTemplate:
                 return f"{model_name}/{first_checkpoint.name}"
 
         elif "14b" in model_name.lower() or "a14b" in model_name.lower():
-            # Modèle 14B : chercher les fichiers ComfyUI Native FP16 (Comfy-Org)
+            # Modèle 14B MoE : chercher les DEUX fichiers ComfyUI Native FP16 (Comfy-Org)
+            # Architecture MoE = high_noise expert + low_noise expert
             comfyui_native_high = (
                 model_path / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
+            )
+            comfyui_native_low = (
+                model_path / "wan2.2_i2v_low_noise_14B_fp16.safetensors"
             )
 
             # DEBUG: Lister TOUS les fichiers dans le dossier du modèle
             if model_path.exists():
                 all_files = list(model_path.glob("*.safetensors"))
-                logger.warning(f"🔍 DEBUG - Fichiers dans {model_path}:")
+                logger.info(f"🔍 Fichiers dans {model_path}:")
                 for f in all_files:
-                    logger.warning(
-                        f"   - {f.name} ({f.stat().st_size / 1024**3:.2f} GB)"
-                    )
+                    logger.info(f"   - {f.name} ({f.stat().st_size / 1024**3:.2f} GB)")
             else:
                 logger.error(f"❌ Le dossier {model_path} n'existe pas!")
 
-            if comfyui_native_high.exists():
+            # Vérifier les DEUX fichiers MoE
+            if comfyui_native_high.exists() and comfyui_native_low.exists():
+                high_path = f"{model_name}/{comfyui_native_high.name}"
+                low_path = f"{model_name}/{comfyui_native_low.name}"
+                logger.info("✅ Modèle 14B MoE ComfyUI Native FP16 détecté :")
+                logger.info(f"   - High-noise expert: {comfyui_native_high.name}")
+                logger.info(f"   - Low-noise expert: {comfyui_native_low.name}")
+                # Retourner un tuple (high_path, low_path) pour MoE
+                return (high_path, low_path)
+            elif comfyui_native_high.exists():
+                # Fallback: seulement high_noise disponible (ancien workflow)
                 checkpoint_path = f"{model_name}/{comfyui_native_high.name}"
-                logger.info(
-                    f"✅ Modèle 14B ComfyUI Native FP16 détecté : {comfyui_native_high.name}"
+                logger.warning("⚠️ Seul le modèle high_noise trouvé - MoE incomplet!")
+                logger.warning(
+                    "   Fichier manquant: wan2.2_i2v_low_noise_14B_fp16.safetensors"
                 )
                 logger.warning(
-                    f"🔍 DEBUG - Checkpoint path retourné: {checkpoint_path}"
-                )
-                logger.warning(
-                    f"🔍 DEBUG - Chemin absolu: {comfyui_native_high.absolute()}"
+                    "   La qualité sera dégradée (artefacts 'neige' probables)"
                 )
                 return checkpoint_path
 
@@ -230,8 +241,20 @@ class WorkflowTemplate:
 
         # Construire le chemin de checkpoint adapté au modèle
         checkpoint_path = self._get_model_checkpoint_path(detected_model)
-        validated_params["checkpoint_path"] = checkpoint_path
-        logger.info(f"📁 Chemin checkpoint: {checkpoint_path}")
+
+        # Gérer le cas MoE 14B (tuple de deux chemins)
+        if isinstance(checkpoint_path, tuple):
+            high_path, low_path = checkpoint_path
+            validated_params["checkpoint_path_high"] = high_path
+            validated_params["checkpoint_path_low"] = low_path
+            # Garder checkpoint_path pour compatibilité (pointe vers high_noise)
+            validated_params["checkpoint_path"] = high_path
+            logger.info("📁 Chemins checkpoint MoE 14B:")
+            logger.info(f"   - High-noise: {high_path}")
+            logger.info(f"   - Low-noise: {low_path}")
+        else:
+            validated_params["checkpoint_path"] = checkpoint_path
+            logger.info(f"📁 Chemin checkpoint: {checkpoint_path}")
 
         # Remplacer seed=-1 par un seed aléatoire
         if "seed" in validated_params and validated_params["seed"] == -1:

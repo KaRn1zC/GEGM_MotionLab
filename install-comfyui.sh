@@ -53,6 +53,15 @@ if [ -f requirements.txt ]; then
 fi
 cd ..
 
+# ComfyUI-WanMoeKSampler (pour MoE WAN 2.2 14B - switching high/low noise experts)
+echo "Installing WanMoeKSampler (MoE support for 14B)..."
+git clone https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git
+cd ComfyUI-WanMoeKSampler
+if [ -f requirements.txt ]; then
+    pip install --no-cache-dir -r requirements.txt
+fi
+cd ..
+
 cd /workspace/comfyui/ComfyUI
 
 # Créer les dossiers de modèles
