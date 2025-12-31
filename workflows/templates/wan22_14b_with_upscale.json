@@ -1,9 +1,9 @@
 {
-  "name": "WAN 2.2 14B + UltraSharp Upscale",
-  "description": "Pipeline 14B: génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
-  "version": "1.8.0",
+  "name": "WAN 2.2 14B + UltraSharp Upscale (MoE)",
+  "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling 4x UltraSharp",
+  "version": "2.0.0",
   "author": "Comfy_Img_to_Loop",
-  "tags": ["pipeline", "cinemagraph", "upscale", "14B"],
+  "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
 
   "parameters": {
     "input_image": {
@@ -30,10 +30,10 @@
     },
     "cfg_scale": {
       "type": "float",
-      "default": 7.5,
+      "default": 3.5,
       "min": 1.0,
       "max": 20.0,
-      "description": "CFG scale"
+      "description": "CFG scale (3.5 recommandé pour MoE)"
     },
     "frames": {
       "type": "integer",
@@ -82,11 +82,6 @@
       "min": 64,
       "max": 4320,
       "description": "Hauteur finale après upscale"
-    },
-    "enable_vae_tiling": {
-      "type": "boolean",
-      "default": false,
-      "description": "Activer VAE tiling pour grandes résolutions"
     }
   },
 
@@ -98,79 +93,102 @@
       }
     },
     "2": {
-      "class_type": "WanVideoModelLoader",
+      "class_type": "UNETLoader",
       "inputs": {
-        "model": "{checkpoint_path}",
-        "base_precision": "fp16",
-        "quantization": "disabled",
-        "load_device": "main_device"
-      }
+        "unet_name": "{checkpoint_path_high}",
+        "weight_dtype": "fp16"
+      },
+      "_comment": "High-noise expert (early denoising - layout)"
+    },
+    "2b": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "{checkpoint_path_low}",
+        "weight_dtype": "fp16"
+      },
+      "_comment": "Low-noise expert (late denoising - detail refinement)"
     },
     "3": {
-      "class_type": "WanVideoVAELoader",
+      "class_type": "VAELoader",
       "inputs": {
-        "model_name": "{vae_name}",
-        "precision": "bf16"
+        "vae_name": "{vae_name}"
       }
     },
     "4": {
-      "class_type": "CLIPVisionLoader",
+      "class_type": "CLIPLoader",
       "inputs": {
-        "clip_name": "clip-vit-large-patch14-336.safetensors"
+        "clip_name": "t5/umt5_xxl_fp16.safetensors",
+        "type": "wan"
       }
     },
     "5": {
-      "class_type": "WanVideoTextEncodeCached",
+      "class_type": "CLIPTextEncode",
       "inputs": {
-        "model_name": "t5/umt5_xxl_fp16.safetensors",
-        "precision": "bf16",
-        "positive_prompt": "{prompt}",
-        "negative_prompt": "{negative_prompt}",
-        "quantization": "disabled",
-        "use_disk_cache": true,
-        "device": "gpu"
+        "clip": ["4", 0],
+        "text": "{prompt}"
       }
     },
-    "7": {
-      "class_type": "WanVideoImageToVideoEncode",
+    "5b": {
+      "class_type": "CLIPTextEncode",
       "inputs": {
+        "clip": ["4", 0],
+        "text": "{negative_prompt}"
+      }
+    },
+    "6": {
+      "class_type": "ModelSamplingSD3",
+      "inputs": {
+        "model": ["2", 0],
+        "shift": 5.0
+      },
+      "_comment": "Apply sigma shift to high-noise model (5.0 for I2V)"
+    },
+    "6b": {
+      "class_type": "ModelSamplingSD3",
+      "inputs": {
+        "model": ["2b", 0],
+        "shift": 5.0
+      },
+      "_comment": "Apply sigma shift to low-noise model (5.0 for I2V)"
+    },
+    "7": {
+      "class_type": "WanImageToVideo",
+      "inputs": {
+        "positive": ["5", 0],
+        "negative": ["5b", 0],
         "vae": ["3", 0],
-        "start_image": ["1", 0],
         "width": "{width}",
         "height": "{height}",
-        "num_frames": "{frames}",
-        "start_latent_strength": 1.0,
-        "end_latent_strength": 1.0,
-        "noise_aug_strength": 0.0,
-        "force_offload": false,
-        "enable_vae_tiling": "{enable_vae_tiling}"
+        "length": "{frames}",
+        "batch_size": 1,
+        "image": ["1", 0]
       }
     },
     "8": {
-      "class_type": "WanVideoSampler",
+      "class_type": "WanMoeKSampler",
       "inputs": {
-        "model": ["2", 0],
-        "image_embeds": ["7", 0],
-        "text_embeds": ["5", 0],
-        "steps": "{steps_generation}",
-        "cfg": "{cfg_scale}",
-        "shift": 5.0,
+        "model_high_noise": ["6", 0],
+        "model_low_noise": ["6b", 0],
+        "boundary": 0.9,
         "seed": "{seed}",
-        "force_offload": false,
-        "scheduler": "unipc",
-        "riflex_freq_index": 0
-      }
+        "steps": "{steps_generation}",
+        "cfg_high_noise": "{cfg_scale}",
+        "cfg_low_noise": "{cfg_scale}",
+        "sampler_name": "uni_pc",
+        "scheduler": "simple",
+        "sigma_shift": 5.0,
+        "positive": ["7", 0],
+        "negative": ["7", 1],
+        "latent_image": ["7", 2],
+        "denoise": 1.0
+      },
+      "_comment": "MoE sampler: boundary=0.9 means 10% high_noise, 90% low_noise for I2V"
     },
     "9": {
-      "class_type": "WanVideoDecode",
+      "class_type": "VAEDecode",
       "inputs": {
         "vae": ["3", 0],
-        "samples": ["8", 0],
-        "enable_vae_tiling": "{enable_vae_tiling}",
-        "tile_x": 272,
-        "tile_y": 272,
-        "tile_stride_x": 144,
-        "tile_stride_y": 128
+        "samples": ["8", 0]
       }
     },
     "10": {
@@ -201,7 +219,7 @@
       "inputs": {
         "frame_rate": "{fps}",
         "loop_count": 0,
-        "filename_prefix": "wan22_14b_upscaled",
+        "filename_prefix": "wan22_14b_moe_upscaled",
         "format": "video/h264-mp4",
         "crf": 18,
         "pingpong": false,
@@ -215,36 +233,45 @@
     "video": {
       "node": "12",
       "output": 0,
-      "description": "Cinemagraph 14B upscalé"
+      "description": "Cinemagraph 14B MoE upscalé"
     }
   },
 
   "metadata": {
     "comfyui_version": ">=0.3.0",
-    "wanvideowrapper_version": "kijai_dec2024",
-    "tags": ["pipeline", "cinemagraph", "upscale", "14B"],
+    "required_custom_nodes": [
+      "ComfyUI-WanMoeKSampler",
+      "ComfyUI-VideoHelperSuite"
+    ],
+    "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
     "required_nodes": [
       "LoadImage",
-      "WanVideoModelLoader",
-      "WanVideoVAELoader",
-      "CLIPVisionLoader",
-      "WanVideoTextEncodeCached",
-      "WanVideoImageToVideoEncode",
-      "WanVideoSampler",
-      "WanVideoDecode",
+      "UNETLoader",
+      "VAELoader",
+      "CLIPLoader",
+      "CLIPTextEncode",
+      "ModelSamplingSD3",
+      "WanImageToVideo",
+      "WanMoeKSampler",
+      "VAEDecode",
       "UpscaleModelLoader",
       "ImageUpscaleWithModel",
+      "ImageScale",
       "VHS_VideoCombine"
     ],
+    "moe_architecture": {
+      "description": "Mixture of Experts with 2 specialized experts",
+      "high_noise_expert": "wan2.2_i2v_high_noise_14B_fp16.safetensors (early denoising, layout)",
+      "low_noise_expert": "wan2.2_i2v_low_noise_14B_fp16.safetensors (late denoising, detail)",
+      "i2v_boundary": 0.9,
+      "sigma_shift": 5.0,
+      "total_params": "27B (2x14B experts, only 14B active per step)"
+    },
     "changelog": {
-      "v1.8.0": "Retrait paramètres obsolètes spatial_compress_level et temporal_compress_level (non valides dans API actuelle)",
-      "v1.7.0": "FIX CRITIQUE: spatial_compress_level 1→0 (alignement workflow officiel Kijai - CAUSE RÉELLE artefacts neige)",
-      "v1.6.0": "Fix base_precision: bf16→fp16 (matching fichiers safetensors FP16)",
-      "v1.4.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
-      "v1.3.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
-      "v1.2.0": "Fix paramètre image → start_image dans WanVideoImageToVideoEncode (résout TypeError)",
-      "v1.1.0": "Ajout paramètres requis WanVideoImageToVideoEncode (start/end_latent_strength, noise_aug_strength, force_offload)",
-      "v1.0.0": "Workflow 14B utilisant WanVideoImageToVideoEncode (architecture officielle)"
+      "v2.0.0": "BREAKING: Migration vers architecture MoE avec WanMoeKSampler (fix artefacts neige - cause réelle: utilisation d'un seul expert)",
+      "v1.8.0": "Retrait paramètres obsolètes spatial_compress_level et temporal_compress_level",
+      "v1.7.0": "FIX CRITIQUE: spatial_compress_level 1→0 (non applicable - architecture différente)",
+      "v1.6.0": "Fix base_precision: bf16→fp16 (matching fichiers safetensors FP16)"
     }
   }
 }

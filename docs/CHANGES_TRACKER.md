@@ -3,63 +3,53 @@
 **Objectif** : Tracking temporaire des changements pour alimenter la mise à jour de `CLAUDE.md`.
 
 **Usage** :
-- ✅ Ajouter une entrée après chaque correction/modification
-- ✅ Après mise à jour de `CLAUDE.md`, **NETTOYER** ce fichier (garder max 2-3 entrées récentes)
+- Ajouter une entrée après chaque correction/modification
+- Après mise à jour de `CLAUDE.md`, **NETTOYER** ce fichier (garder max 2-3 entrées récentes)
 
 ---
 
-## 📅 Modifications récentes
+## Modifications récentes
 
-### [2025-12-30] - Nettoyage templates 14B + Stratégie upscale unifiée
+### [2025-12-31] - FIX CRITIQUE: Architecture MoE 14B (2 experts high/low noise)
+
+**Cause racine des artefacts "neige" identifiée** :
+- Le modèle WAN 2.2 14B utilise une architecture **Mixture of Experts (MoE)** avec DEUX modèles distincts
+- Nos templates n'utilisaient qu'UN SEUL modèle (high_noise) → artefacts catastrophiques
+
+**Architecture MoE officielle** :
+- `wan2.2_i2v_high_noise_14B_fp16.safetensors` : Expert early denoising (layout, structure)
+- `wan2.2_i2v_low_noise_14B_fp16.safetensors` : Expert late denoising (détails, raffinement)
+- **Switching I2V** : boundary=0.9 (10% high_noise, 90% low_noise)
+- **Paramètres totaux** : 27B (2×14B), mais seulement 14B actifs par step
 
 **Modifications apportées** :
 
-#### 1. Retrait paramètres obsolètes des templates 14B
-- `spatial_compress_level` et `temporal_compress_level` retirés de Node 7 (WanVideoImageToVideoEncode)
-- Ces paramètres n'apparaissent pas dans la documentation officielle du node actuel
-- Peuvent avoir été des paramètres legacy silencieusement ignorés
+1. **install-comfyui.sh** : Ajout installation `ComfyUI-WanMoeKSampler` (stduhpf)
+2. **workflow_manager.py** :
+   - `_get_model_checkpoint_path()` retourne tuple (high_path, low_path) pour 14B
+   - `apply_parameters()` injecte `checkpoint_path_high` et `checkpoint_path_low`
+3. **Templates 14B v2.0.0** (BREAKING CHANGE) :
+   - Migration de Kijai WanVideoWrapper vers nodes natifs ComfyUI
+   - 2× UNETLoader (high_noise + low_noise)
+   - CLIPLoader (T5) + CLIPTextEncode (positive/negative)
+   - ModelSamplingSD3 (sigma_shift=5.0 pour I2V)
+   - WanImageToVideo (I2V conditioning)
+   - WanMoeKSampler (boundary=0.9, cfg=3.5)
+   - VAEDecode (au lieu de WanVideoDecode)
 
-**Templates modifiés** (v1.7.0 → v1.8.0) :
-- `workflows/templates/wan22_14b_with_upscale.json`
-- `workflows/templates/wan22_14b_i2v.json`
-
-#### 2. Stratégie upscale 14B alignée sur 5B
-- Suppression logique spécifique 14B (résolution minimale forcée 832×480)
-- Les deux modèles utilisent maintenant la même stratégie :
-  - Upscale/downscale pré-génération vers ~720p max
-  - Génération à résolution optimale (~720p)
-  - Post-génération : UltraSharp 4x + Lanczos vers target
-
-**Fichier modifié** : `web_interface/routes.py` (fonction `calculate_optimal_generation_strategy`)
-
-**Justification** :
-- Documentation officielle WAN 2.2 confirme support 480P et 720P pour 14B
-- Workflow officiel Kijai utilise 832×480 par défaut mais pas comme minimum absolu
-- Simplification du code (une seule stratégie au lieu de deux)
+**Sources** :
+- [ComfyUI-WanMoeKSampler](https://github.com/stduhpf/ComfyUI-WanMoeKSampler)
+- [HuggingFace Wan2.2-I2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B)
+- [ComfyUI Official Docs WAN 2.2](https://docs.comfy.org/tutorials/video/wan/wan2_2)
 
 ---
 
-### [2025-12-30] - Analyse approfondie workflow 14B (recherche sources officielles)
-
-**Recherche effectuée** sur :
-- [Kijai GitHub ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)
-- [ComfyUI Official Docs](https://docs.comfy.org/tutorials/video/wan/wan2_2)
-- [HuggingFace Wan-AI](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B)
-
-**Résultats** :
-- Précisions confirmées : FP16 (modèle) + BF16 (VAE/T5) ✅
-- VAE correct : `wan_2.1_vae.safetensors` pour 14B ✅
-- Architecture : `WanVideoImageToVideoEncode` pour 14B ✅
-- Paramètres `spatial_compress_level` et `temporal_compress_level` : Non documentés dans API actuelle
-
----
-
-## 🔄 WORKFLOW OBLIGATOIRE
+## WORKFLOW OBLIGATOIRE
 
 **Après chaque correction** :
-1. ✅ Ajouter entrée `CHANGES_TRACKER.md`
-2. ✅ MàJ `CLAUDE.md` avec infos essentielles
-3. ✅ MàJ `ARCHITECTURE.md` si changement architectural
-4. ✅ **NETTOYER `CHANGES_TRACKER.md`** (max 2-3 entrées, ~60 lignes)
-5. ✅ **NETTOYER `ARCHITECTURE.md`** (supprimer obsolète)
-6. ⏸️ Attendre demande utilisateur pour README
+1. Ajouter entrée `CHANGES_TRACKER.md`
+2. MàJ `CLAUDE.md` avec infos essentielles
+3. MàJ `ARCHITECTURE.md` si changement architectural
+4. **NETTOYER** fichiers documentation (max lignes définies)
+5. Attendre demande utilisateur pour README
+6. **JAMAIS git add/commit/push auto** (uniquement sur demande explicite)

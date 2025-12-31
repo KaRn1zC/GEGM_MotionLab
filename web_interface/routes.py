@@ -1114,12 +1114,49 @@ def get_model_info():
         - display_name: Nom d'affichage pour l'UI
         - estimated_time: Temps estimé pour preset "Naturel" (30 steps)
     """
-    from workflows.workflow_manager import WorkflowTemplate
+    import os
+    from pathlib import Path
 
     try:
-        # Charger un template temporaire pour détecter le modèle
-        temp_template = WorkflowTemplate("wan22_5b_i2v")
-        detected_model, model_type = temp_template._detect_available_model()
+        # Détection directe du modèle disponible (sans dépendre d'un template)
+        # Priorité : 14B > 5B (14B est le modèle plus puissant)
+        comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/diffusion_models")
+
+        # Fallback si diffusion_models n'existe pas
+        if not comfyui_models_dir.exists():
+            comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
+
+        # Recherche des modèles disponibles
+        model_priority = [
+            ("wan2.2-i2v-a14b", "14b"),
+            ("wan2.2-ti2v-5b", "5b"),
+        ]
+
+        detected_model = None
+        model_type = None
+
+        for model_name, m_type in model_priority:
+            model_path = comfyui_models_dir / model_name
+            if model_path.exists() and any(model_path.glob("*.safetensors")):
+                detected_model = model_name
+                model_type = m_type
+                logger.info(
+                    f"✅ API model-info: Modèle détecté: {model_name} (type: {m_type})"
+                )
+                break
+
+        # Si aucun modèle trouvé dans les dossiers, utiliser variable d'environnement
+        if not detected_model:
+            env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
+            detected_model = env_model
+            model_type = (
+                "14b"
+                if "14b" in env_model.lower() or "a14b" in env_model.lower()
+                else "5b"
+            )
+            logger.warning(
+                f"⚠️ API model-info: Utilisation env var: {env_model} (type: {model_type})"
+            )
 
         # Temps estimés pour preset "Naturel" avec 30 steps
         # Basé sur les benchmarks réels
@@ -1139,14 +1176,20 @@ def get_model_info():
 
     except Exception as e:
         logger.warning(f"Impossible de détecter le modèle: {e}")
-        # Fallback par défaut
+        # Fallback par défaut - utiliser variable d'environnement
+        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
+        model_type = (
+            "14b" if "14b" in env_model.lower() or "a14b" in env_model.lower() else "5b"
+        )
         return jsonify(
             {
-                "model_type": "5b",
-                "model_name": "wan2.2-ti2v-5b",
-                "display_name": "WAN 2.2 5B",
-                "estimated_time": "~8 min",
-                "gpu_recommendation": "48GB+ VRAM",
+                "model_type": model_type,
+                "model_name": env_model,
+                "display_name": f"WAN 2.2 {model_type.upper()}",
+                "estimated_time": "~15 min" if model_type == "14b" else "~8 min",
+                "gpu_recommendation": "80GB+ VRAM"
+                if model_type == "14b"
+                else "48GB+ VRAM",
             }
         )
 
