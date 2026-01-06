@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B + UltraSharp Upscale (MoE)",
   "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling 4x UltraSharp",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
 
@@ -161,8 +161,9 @@
         "height": "{height}",
         "length": "{frames}",
         "batch_size": 1,
-        "image": ["1", 0]
-      }
+        "start_image": ["1", 0]
+      },
+      "_comment": "I2V conditioning - start_image is required (not 'image')"
     },
     "8": {
       "class_type": "WanMoeKSampler",
@@ -268,6 +269,7 @@
       "total_params": "27B (2x14B experts, only 14B active per step)"
     },
     "changelog": {
+      "v2.0.2": "FIX CRITIQUE: WanImageToVideo 'image'→'start_image' (paramètre invalide causait TypeError)",
       "v2.0.1": "FIX: UNETLoader weight_dtype: 'fp16'→'default' (fp16 n'est pas une option valide, default charge nativement en FP16)",
       "v2.0.0": "BREAKING: Migration vers architecture MoE avec WanMoeKSampler (fix artefacts neige - cause réelle: utilisation d'un seul expert)",
       "v1.8.0": "Retrait paramètres obsolètes spatial_compress_level et temporal_compress_level",

@@ -10,6 +10,45 @@
 
 ## Modifications récentes
 
+### [2026-01-06] - FEATURE: Implémentation paramètres frontend → ComfyUI
+
+**Problème** : Les paramètres du frontend (denoise, motion_intensity, consistency, etc.) n'étaient PAS transmis au workflow
+
+**Solution** : Ajout de `_transform_frontend_params()` dans workflow_manager.py
+
+**Mapping implémenté** :
+| Frontend | ComfyUI | Description |
+|----------|---------|-------------|
+| motion_intensity + noise_level + denoise | shift (3.0-10.0) | Force changement temporel |
+| consistency (0-100%) | riflex_freq_index (0-2) | Cohérence temporelle |
+| loop_smooth (none/basic/advanced) | pingpong (bool) | Boucle aller-retour |
+| color_preservation (0-100%) | cfg_scale ajusté | Préservation couleurs |
+| motion_area (full/center/edges) | prompt modifié | Zone de mouvement |
+
+**Fichiers modifiés** :
+- `workflows/workflow_manager.py` : Ajout `_transform_frontend_params()`
+- `wan22_5b_i2v.json` v4.4.0 → v4.5.0
+- `wan22_5b_with_upscale.json` v3.4.0 → v3.5.0
+
+---
+
+### [2026-01-06] - FIX CRITIQUE: WanImageToVideo paramètre 'image' invalide
+
+**Erreur identifiée** (logs container26, ligne 3162) :
+```
+TypeError: WanImageToVideo.execute() got an unexpected keyword argument 'image'
+```
+
+**Cause** : Le node `WanImageToVideo` natif de ComfyUI attend `start_image` et non `image`
+
+**Solution** : `"image": ["1", 0]` → `"start_image": ["1", 0]`
+
+**Fichiers modifiés** :
+- `wan22_14b_i2v.json` v2.0.1 → v2.0.2
+- `wan22_14b_with_upscale.json` v2.0.1 → v2.0.2
+
+---
+
 ### [2025-12-31] - FIX: UNETLoader weight_dtype invalide
 
 **Erreur identifiée** (logs container25, ligne 3142) :
