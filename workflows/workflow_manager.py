@@ -209,6 +209,123 @@ class WorkflowTemplate:
 
         return random.randint(0, 2**31 - 1)
 
+    def _transform_frontend_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transforme les paramètres high-level du frontend en paramètres low-level ComfyUI
+
+        Mapping des paramètres:
+        - denoise (0-100) → influence sur shift
+        - motion_intensity (subtle/moderate/intense) → shift (5.0/7.0/9.0)
+        - noise_level (low/medium/high) → ajustement shift
+        - loop_smooth (none/basic/advanced) → pingpong (false/true/true)
+        - consistency (0-100) → riflex_freq_index (0-2)
+        - color_preservation (0-100) → ajustement cfg_scale
+        - motion_area (full/center/edges) → ajout au prompt
+        - frame_blending (1-10) → info seulement (non supporté directement)
+
+        Args:
+            params: Paramètres du frontend
+
+        Returns:
+            Dict: Paramètres transformés pour ComfyUI
+        """
+        transformed = params.copy()
+
+        # === SHIFT (contrôle intensité du mouvement) ===
+        # Base shift selon motion_intensity
+        motion_intensity = params.get("motion_intensity", "moderate")
+        base_shift = {
+            "subtle": 4.0,  # Mouvement très léger
+            "moderate": 5.0,  # Mouvement normal (défaut)
+            "intense": 7.0,  # Mouvement prononcé
+        }.get(motion_intensity, 5.0)
+
+        # Ajuster selon noise_level
+        noise_level = params.get("noise_level", "high")
+        noise_modifier = {
+            "low": -1.0,  # Moins de bruit = plus stable
+            "medium": 0.0,  # Neutre
+            "high": 1.0,  # Plus de bruit = plus créatif
+        }.get(noise_level, 0.0)
+
+        # Ajuster selon denoise (0-100)
+        denoise = params.get("denoise", 75)
+        # denoise 50 = neutre, <50 = plus stable, >50 = plus créatif
+        denoise_modifier = (denoise - 50) / 50 * 1.0  # -1.0 à +1.0
+
+        # Calculer shift final (clamp entre 3.0 et 10.0)
+        final_shift = base_shift + noise_modifier + denoise_modifier
+        final_shift = max(3.0, min(10.0, final_shift))
+        transformed["shift"] = round(final_shift, 1)
+
+        # === RIFLEX_FREQ_INDEX (cohérence temporelle) ===
+        # consistency 0-100 → riflex 0-2
+        consistency = params.get("consistency", 80)
+        if consistency >= 85:
+            transformed["riflex_freq_index"] = 2  # Très stable
+        elif consistency >= 60:
+            transformed["riflex_freq_index"] = 1  # Équilibré
+        else:
+            transformed["riflex_freq_index"] = 0  # Plus créatif
+
+        # === PINGPONG (boucle fluide) ===
+        loop_smooth = params.get("loop_smooth", "basic")
+        transformed["pingpong"] = loop_smooth in ["basic", "advanced"]
+
+        # === CFG_SCALE ajusté selon color_preservation ===
+        base_cfg = params.get("cfg_scale", 7.5)
+        color_pres = params.get("color_preservation", 70)
+        # Plus de préservation couleur = CFG plus élevé (suit plus le prompt)
+        cfg_modifier = (color_pres - 50) / 100 * 2.0  # -1.0 à +1.0
+        final_cfg = base_cfg + cfg_modifier
+        final_cfg = max(3.0, min(15.0, final_cfg))
+        transformed["cfg_scale"] = round(final_cfg, 1)
+
+        # === PROMPT ENGINEERING pour motion_area ===
+        motion_area = params.get("motion_area", "full")
+        prompt = params.get("prompt", "")
+
+        if motion_area == "center" and "center" not in prompt.lower():
+            # Ajouter instruction pour mouvement au centre
+            transformed["prompt"] = (
+                f"{prompt}, movement focused in center, static edges"
+            )
+        elif motion_area == "edges" and "edge" not in prompt.lower():
+            # Ajouter instruction pour mouvement sur les bords
+            transformed["prompt"] = f"{prompt}, movement on edges only, static center"
+
+        # === LOG des transformations ===
+        logger.info("🔧 Transformation paramètres frontend → ComfyUI:")
+        logger.info(
+            f"   motion_intensity={motion_intensity}, noise_level={noise_level}, denoise={denoise}%"
+        )
+        logger.info(f"   → shift={transformed['shift']} (base={base_shift})")
+        logger.info(
+            f"   consistency={consistency}% → riflex_freq_index={transformed['riflex_freq_index']}"
+        )
+        logger.info(
+            f"   loop_smooth={loop_smooth} → pingpong={transformed['pingpong']}"
+        )
+        logger.info(
+            f"   color_preservation={color_pres}% → cfg_scale={transformed['cfg_scale']}"
+        )
+        if motion_area != "full":
+            logger.info(f"   motion_area={motion_area} → prompt modifié")
+
+        # === MAPPING steps → steps_generation pour templates upscale ===
+        # Certains templates utilisent steps_generation au lieu de steps
+        if "steps" in params:
+            transformed["steps_generation"] = params["steps"]
+
+        # Info sur paramètres non supportés
+        frame_blending = params.get("frame_blending", 3)
+        if frame_blending != 3:
+            logger.warning(
+                f"   ⚠️ frame_blending={frame_blending} (non supporté - valeur ignorée)"
+            )
+
+        return transformed
+
     def apply_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Applique les paramètres au template et retourne le workflow final
@@ -219,8 +336,11 @@ class WorkflowTemplate:
         Returns:
             Dict: Workflow ComfyUI prêt à l'emploi
         """
-        # Valider les paramètres
-        validated_params = self._validate_parameters(params)
+        # Transformer les paramètres frontend en paramètres ComfyUI
+        transformed_params = self._transform_frontend_params(params)
+
+        # Valider les paramètres transformés
+        validated_params = self._validate_parameters(transformed_params)
 
         # Détecter et injecter le modèle automatiquement
         if "model_name" not in validated_params:

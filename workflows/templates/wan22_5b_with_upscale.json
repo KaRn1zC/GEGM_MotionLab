@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 + UltraSharp Upscale",
   "description": "Pipeline complet : génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
 
@@ -101,6 +101,25 @@
       "type": "boolean",
       "default": false,
       "description": "Activer VAE tiling pour grandes résolutions"
+    },
+    "shift": {
+      "type": "float",
+      "default": 5.0,
+      "min": 3.0,
+      "max": 10.0,
+      "description": "Force du changement temporel (calculé depuis motion_intensity/noise_level/denoise)"
+    },
+    "riflex_freq_index": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 2,
+      "description": "Cohérence temporelle: 0=créatif, 1=équilibré, 2=stable (depuis consistency)"
+    },
+    "pingpong": {
+      "type": "boolean",
+      "default": false,
+      "description": "Boucle aller-retour pour transition fluide (depuis loop_smooth)"
     }
   },
 
@@ -176,12 +195,13 @@
         "text_embeds": ["5", 0],
         "steps": "{steps_generation}",
         "cfg": "{cfg_scale}",
-        "shift": 5.0,
+        "shift": "{shift}",
         "seed": "{seed}",
         "force_offload": false,
         "scheduler": "unipc",
-        "riflex_freq_index": 0
-      }
+        "riflex_freq_index": "{riflex_freq_index}"
+      },
+      "_comment": "shift et riflex_freq_index calculés depuis motion_intensity/denoise/consistency"
     },
     "9": {
       "class_type": "WanVideoDecode",
@@ -226,10 +246,11 @@
         "filename_prefix": "wan22_upscaled",
         "format": "video/h264-mp4",
         "crf": 18,
-        "pingpong": false,
+        "pingpong": "{pingpong}",
         "save_output": true,
         "images": ["11b", 0]
-      }
+      },
+      "_comment": "pingpong=true pour boucle fluide (depuis loop_smooth)"
     }
   },
 
@@ -260,6 +281,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v3.5.0": "FEATURE: Implémentation paramètres frontend (shift, riflex_freq_index, pingpong) - contrôle motion_intensity/denoise/consistency/loop_smooth",
       "v3.2.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v3.1.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
       "v3.0.0": "Système upscale adaptatif UltraSharp 4x avec node 11b (ImageScale resize vers target exacte)",

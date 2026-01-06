@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 Image-to-Video",
   "description": "Génération de cinemagraphs avec WAN 2.2 5B - Version corrigée compatible wrapper récent",
-  "version": "4.4.0",
+  "version": "4.5.0",
   "author": "Comfy_Img_to_Loop",
   "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
 
@@ -33,7 +33,7 @@
       "default": 7.5,
       "min": 1.0,
       "max": 20.0,
-      "description": "Échelle de guidance CFG"
+      "description": "Échelle de guidance CFG (ajusté par color_preservation)"
     },
     "seed": {
       "type": "integer",
@@ -68,6 +68,25 @@
       "min": 64,
       "max": 2160,
       "description": "Hauteur de la vidéo (sera ajustée automatiquement)"
+    },
+    "shift": {
+      "type": "float",
+      "default": 5.0,
+      "min": 3.0,
+      "max": 10.0,
+      "description": "Force du changement temporel (calculé depuis motion_intensity/noise_level/denoise)"
+    },
+    "riflex_freq_index": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 2,
+      "description": "Cohérence temporelle: 0=créatif, 1=équilibré, 2=stable (depuis consistency)"
+    },
+    "pingpong": {
+      "type": "boolean",
+      "default": false,
+      "description": "Boucle aller-retour pour transition fluide (depuis loop_smooth)"
     }
   },
 
@@ -143,12 +162,13 @@
         "text_embeds": ["5", 0],
         "steps": "{steps}",
         "cfg": "{cfg_scale}",
-        "shift": 5.0,
+        "shift": "{shift}",
         "seed": "{seed}",
         "force_offload": false,
         "scheduler": "unipc",
-        "riflex_freq_index": 0
-      }
+        "riflex_freq_index": "{riflex_freq_index}"
+      },
+      "_comment": "shift et riflex_freq_index calculés depuis motion_intensity/denoise/consistency"
     },
     "9": {
       "class_type": "WanVideoDecode",
@@ -170,10 +190,11 @@
         "filename_prefix": "wan22_cinemagraph",
         "format": "video/h264-mp4",
         "crf": 18,
-        "pingpong": false,
+        "pingpong": "{pingpong}",
         "save_output": true,
         "images": ["9", 0]
-      }
+      },
+      "_comment": "pingpong=true pour boucle fluide (depuis loop_smooth)"
     }
   },
 
@@ -201,6 +222,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v4.5.0": "FEATURE: Implémentation paramètres frontend (shift, riflex_freq_index, pingpong) - contrôle motion_intensity/denoise/consistency/loop_smooth",
       "v4.2.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v4.1.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
       "v4.0.0": "BREAKING: Remplacé WanVideoImageToVideoEncode par WanVideoEncode + WanVideoEmptyEmbeds (fix erreur 48/96 canaux)"
