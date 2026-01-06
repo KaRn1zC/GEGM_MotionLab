@@ -10,6 +10,23 @@
 
 ## Modifications récentes
 
+### [2025-12-31] - FIX: UNETLoader weight_dtype invalide
+
+**Erreur identifiée** (logs container25, ligne 3142) :
+```
+weight_dtype: 'fp16' not in ['default', 'fp8_e4m3fn', 'fp8_e4m3fn_fast', 'fp8_e5m2']
+```
+
+**Cause** : Le node `UNETLoader` natif de ComfyUI n'accepte pas `"fp16"` comme valeur
+
+**Solution** : `weight_dtype: "fp16"` → `"default"` (charge le modèle dans sa précision native, donc FP16)
+
+**Fichiers modifiés** :
+- `wan22_14b_i2v.json` v2.0.0 → v2.0.1
+- `wan22_14b_with_upscale.json` v2.0.0 → v2.0.1
+
+---
+
 ### [2025-12-31] - FIX CRITIQUE: Architecture MoE 14B (2 experts high/low noise)
 
 **Cause racine des artefacts "neige" identifiée** :

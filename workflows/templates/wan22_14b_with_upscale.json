@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B + UltraSharp Upscale (MoE)",
   "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling 4x UltraSharp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
 
@@ -96,17 +96,17 @@
       "class_type": "UNETLoader",
       "inputs": {
         "unet_name": "{checkpoint_path_high}",
-        "weight_dtype": "fp16"
+        "weight_dtype": "default"
       },
-      "_comment": "High-noise expert (early denoising - layout)"
+      "_comment": "High-noise expert (early denoising - layout) - default loads FP16 safetensors natively"
     },
     "2b": {
       "class_type": "UNETLoader",
       "inputs": {
         "unet_name": "{checkpoint_path_low}",
-        "weight_dtype": "fp16"
+        "weight_dtype": "default"
       },
-      "_comment": "Low-noise expert (late denoising - detail refinement)"
+      "_comment": "Low-noise expert (late denoising - detail refinement) - default loads FP16 safetensors natively"
     },
     "3": {
       "class_type": "VAELoader",
@@ -268,6 +268,7 @@
       "total_params": "27B (2x14B experts, only 14B active per step)"
     },
     "changelog": {
+      "v2.0.1": "FIX: UNETLoader weight_dtype: 'fp16'→'default' (fp16 n'est pas une option valide, default charge nativement en FP16)",
       "v2.0.0": "BREAKING: Migration vers architecture MoE avec WanMoeKSampler (fix artefacts neige - cause réelle: utilisation d'un seul expert)",
       "v1.8.0": "Retrait paramètres obsolètes spatial_compress_level et temporal_compress_level",
       "v1.7.0": "FIX CRITIQUE: spatial_compress_level 1→0 (non applicable - architecture différente)",
