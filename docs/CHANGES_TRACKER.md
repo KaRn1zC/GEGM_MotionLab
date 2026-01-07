@@ -10,93 +10,16 @@
 
 ## Modifications récentes
 
-### [2026-01-06] - FEATURE: Implémentation paramètres frontend → ComfyUI
+### [2026-01-07] - VALIDATION: Tests Production Réussis (5B + 14B)
 
-**Problème** : Les paramètres du frontend (denoise, motion_intensity, consistency, etc.) n'étaient PAS transmis au workflow
+**Containers testés** :
+- `5B_container17.txt` : GPU RTX 6000 Ada (47.5GB) - SUCCESS
+- `14B_container27.txt` : GPU RTX PRO 6000 Blackwell (95GB) - SUCCESS
 
-**Solution** : Ajout de `_transform_frontend_params()` dans workflow_manager.py
-
-**Mapping implémenté** :
-| Frontend | ComfyUI | Description |
-|----------|---------|-------------|
-| motion_intensity + noise_level + denoise | shift (3.0-10.0) | Force changement temporel |
-| consistency (0-100%) | riflex_freq_index (0-2) | Cohérence temporelle |
-| loop_smooth (none/basic/advanced) | pingpong (bool) | Boucle aller-retour |
-| color_preservation (0-100%) | cfg_scale ajusté | Préservation couleurs |
-| motion_area (full/center/edges) | prompt modifié | Zone de mouvement |
-
-**Fichiers modifiés** :
-- `workflows/workflow_manager.py` : Ajout `_transform_frontend_params()`
-- `wan22_5b_i2v.json` v4.4.0 → v4.5.0
-- `wan22_5b_with_upscale.json` v3.4.0 → v3.5.0
-
----
-
-### [2026-01-06] - FIX CRITIQUE: WanImageToVideo paramètre 'image' invalide
-
-**Erreur identifiée** (logs container26, ligne 3162) :
-```
-TypeError: WanImageToVideo.execute() got an unexpected keyword argument 'image'
-```
-
-**Cause** : Le node `WanImageToVideo` natif de ComfyUI attend `start_image` et non `image`
-
-**Solution** : `"image": ["1", 0]` → `"start_image": ["1", 0]`
-
-**Fichiers modifiés** :
-- `wan22_14b_i2v.json` v2.0.1 → v2.0.2
-- `wan22_14b_with_upscale.json` v2.0.1 → v2.0.2
-
----
-
-### [2025-12-31] - FIX: UNETLoader weight_dtype invalide
-
-**Erreur identifiée** (logs container25, ligne 3142) :
-```
-weight_dtype: 'fp16' not in ['default', 'fp8_e4m3fn', 'fp8_e4m3fn_fast', 'fp8_e5m2']
-```
-
-**Cause** : Le node `UNETLoader` natif de ComfyUI n'accepte pas `"fp16"` comme valeur
-
-**Solution** : `weight_dtype: "fp16"` → `"default"` (charge le modèle dans sa précision native, donc FP16)
-
-**Fichiers modifiés** :
-- `wan22_14b_i2v.json` v2.0.0 → v2.0.1
-- `wan22_14b_with_upscale.json` v2.0.0 → v2.0.1
-
----
-
-### [2025-12-31] - FIX CRITIQUE: Architecture MoE 14B (2 experts high/low noise)
-
-**Cause racine des artefacts "neige" identifiée** :
-- Le modèle WAN 2.2 14B utilise une architecture **Mixture of Experts (MoE)** avec DEUX modèles distincts
-- Nos templates n'utilisaient qu'UN SEUL modèle (high_noise) → artefacts catastrophiques
-
-**Architecture MoE officielle** :
-- `wan2.2_i2v_high_noise_14B_fp16.safetensors` : Expert early denoising (layout, structure)
-- `wan2.2_i2v_low_noise_14B_fp16.safetensors` : Expert late denoising (détails, raffinement)
-- **Switching I2V** : boundary=0.9 (10% high_noise, 90% low_noise)
-- **Paramètres totaux** : 27B (2×14B), mais seulement 14B actifs par step
-
-**Modifications apportées** :
-
-1. **install-comfyui.sh** : Ajout installation `ComfyUI-WanMoeKSampler` (stduhpf)
-2. **workflow_manager.py** :
-   - `_get_model_checkpoint_path()` retourne tuple (high_path, low_path) pour 14B
-   - `apply_parameters()` injecte `checkpoint_path_high` et `checkpoint_path_low`
-3. **Templates 14B v2.0.0** (BREAKING CHANGE) :
-   - Migration de Kijai WanVideoWrapper vers nodes natifs ComfyUI
-   - 2× UNETLoader (high_noise + low_noise)
-   - CLIPLoader (T5) + CLIPTextEncode (positive/negative)
-   - ModelSamplingSD3 (sigma_shift=5.0 pour I2V)
-   - WanImageToVideo (I2V conditioning)
-   - WanMoeKSampler (boundary=0.9, cfg=3.5)
-   - VAEDecode (au lieu de WanVideoDecode)
-
-**Sources** :
-- [ComfyUI-WanMoeKSampler](https://github.com/stduhpf/ComfyUI-WanMoeKSampler)
-- [HuggingFace Wan2.2-I2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B)
-- [ComfyUI Official Docs WAN 2.2](https://docs.comfy.org/tutorials/video/wan/wan2_2)
+**Validation complète** :
+- Transformation paramètres frontend → ComfyUI opérationnelle
+- Architecture MoE 14B (2 experts high/low noise) fonctionnelle
+- Templates 5B v4.5.0 et 14B v2.0.2 validés en production
 
 ---
 
@@ -105,7 +28,5 @@ weight_dtype: 'fp16' not in ['default', 'fp8_e4m3fn', 'fp8_e4m3fn_fast', 'fp8_e5
 **Après chaque correction** :
 1. Ajouter entrée `CHANGES_TRACKER.md`
 2. MàJ `CLAUDE.md` avec infos essentielles
-3. MàJ `ARCHITECTURE.md` si changement architectural
-4. **NETTOYER** fichiers documentation (max lignes définies)
-5. Attendre demande utilisateur pour README
-6. **JAMAIS git add/commit/push auto** (uniquement sur demande explicite)
+3. **NETTOYER** fichiers documentation après MàJ
+4. **JAMAIS git add/commit/push auto** (uniquement sur demande explicite)
