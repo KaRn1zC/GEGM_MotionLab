@@ -1,0 +1,280 @@
+{
+  "name": "WAN 2.2 14B + UltraSharp Upscale (MoE)",
+  "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling 4x UltraSharp",
+  "version": "2.0.2",
+  "author": "Comfy_Img_to_Loop",
+  "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
+
+  "parameters": {
+    "input_image": {
+      "type": "string",
+      "required": true,
+      "description": "Image d'entrée"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Prompt de génération"
+    },
+    "negative_prompt": {
+      "type": "string",
+      "default": "static, frozen, blurry, distorted",
+      "description": "Éléments à éviter"
+    },
+    "steps_generation": {
+      "type": "integer",
+      "default": 20,
+      "min": 10,
+      "max": 50,
+      "description": "Steps pour la génération"
+    },
+    "cfg_scale": {
+      "type": "float",
+      "default": 3.5,
+      "min": 1.0,
+      "max": 20.0,
+      "description": "CFG scale (3.5 recommandé pour MoE)"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 16,
+      "min": 8,
+      "max": 240,
+      "description": "Nombre de frames (240 = 10s @ 24fps)"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 60,
+      "description": "FPS de sortie (60 pour slow-motion)"
+    },
+    "seed": {
+      "type": "integer",
+      "default": -1,
+      "min": -1,
+      "description": "Seed pour reproductibilité (-1 = aléatoire)"
+    },
+    "width": {
+      "type": "integer",
+      "default": 832,
+      "min": 64,
+      "max": 3840,
+      "description": "Largeur de la vidéo"
+    },
+    "height": {
+      "type": "integer",
+      "default": 480,
+      "min": 64,
+      "max": 2160,
+      "description": "Hauteur de génération WAN 2.2"
+    },
+    "target_width": {
+      "type": "integer",
+      "default": 1920,
+      "min": 64,
+      "max": 7680,
+      "description": "Largeur finale après upscale"
+    },
+    "target_height": {
+      "type": "integer",
+      "default": 1080,
+      "min": 64,
+      "max": 4320,
+      "description": "Hauteur finale après upscale"
+    }
+  },
+
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "{input_image}"
+      }
+    },
+    "2": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "{checkpoint_path_high}",
+        "weight_dtype": "default"
+      },
+      "_comment": "High-noise expert (early denoising - layout) - default loads FP16 safetensors natively"
+    },
+    "2b": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "{checkpoint_path_low}",
+        "weight_dtype": "default"
+      },
+      "_comment": "Low-noise expert (late denoising - detail refinement) - default loads FP16 safetensors natively"
+    },
+    "3": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "{vae_name}"
+      }
+    },
+    "4": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "t5/umt5_xxl_fp16.safetensors",
+        "type": "wan"
+      }
+    },
+    "5": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["4", 0],
+        "text": "{prompt}"
+      }
+    },
+    "5b": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "clip": ["4", 0],
+        "text": "{negative_prompt}"
+      }
+    },
+    "6": {
+      "class_type": "ModelSamplingSD3",
+      "inputs": {
+        "model": ["2", 0],
+        "shift": 5.0
+      },
+      "_comment": "Apply sigma shift to high-noise model (5.0 for I2V)"
+    },
+    "6b": {
+      "class_type": "ModelSamplingSD3",
+      "inputs": {
+        "model": ["2b", 0],
+        "shift": 5.0
+      },
+      "_comment": "Apply sigma shift to low-noise model (5.0 for I2V)"
+    },
+    "7": {
+      "class_type": "WanImageToVideo",
+      "inputs": {
+        "positive": ["5", 0],
+        "negative": ["5b", 0],
+        "vae": ["3", 0],
+        "width": "{width}",
+        "height": "{height}",
+        "length": "{frames}",
+        "batch_size": 1,
+        "start_image": ["1", 0]
+      },
+      "_comment": "I2V conditioning - start_image is required (not 'image')"
+    },
+    "8": {
+      "class_type": "WanMoeKSampler",
+      "inputs": {
+        "model_high_noise": ["6", 0],
+        "model_low_noise": ["6b", 0],
+        "boundary": 0.9,
+        "seed": "{seed}",
+        "steps": "{steps_generation}",
+        "cfg_high_noise": "{cfg_scale}",
+        "cfg_low_noise": "{cfg_scale}",
+        "sampler_name": "uni_pc",
+        "scheduler": "simple",
+        "sigma_shift": 5.0,
+        "positive": ["7", 0],
+        "negative": ["7", 1],
+        "latent_image": ["7", 2],
+        "denoise": 1.0
+      },
+      "_comment": "MoE sampler: boundary=0.9 means 10% high_noise, 90% low_noise for I2V"
+    },
+    "9": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "vae": ["3", 0],
+        "samples": ["8", 0]
+      }
+    },
+    "10": {
+      "class_type": "UpscaleModelLoader",
+      "inputs": {
+        "model_name": "4x-UltraSharp.pth"
+      }
+    },
+    "11": {
+      "class_type": "ImageUpscaleWithModel",
+      "inputs": {
+        "upscale_model": ["10", 0],
+        "image": ["9", 0]
+      }
+    },
+    "11b": {
+      "class_type": "ImageScale",
+      "inputs": {
+        "image": ["11", 0],
+        "width": "{target_width}",
+        "height": "{target_height}",
+        "upscale_method": "lanczos",
+        "crop": "disabled"
+      }
+    },
+    "12": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": "{fps}",
+        "loop_count": 0,
+        "filename_prefix": "wan22_14b_moe_upscaled",
+        "format": "video/h264-mp4",
+        "crf": 18,
+        "pingpong": false,
+        "save_output": true,
+        "images": ["11b", 0]
+      }
+    }
+  },
+
+  "outputs": {
+    "video": {
+      "node": "12",
+      "output": 0,
+      "description": "Cinemagraph 14B MoE upscalé"
+    }
+  },
+
+  "metadata": {
+    "comfyui_version": ">=0.3.0",
+    "required_custom_nodes": [
+      "ComfyUI-WanMoeKSampler",
+      "ComfyUI-VideoHelperSuite"
+    ],
+    "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
+    "required_nodes": [
+      "LoadImage",
+      "UNETLoader",
+      "VAELoader",
+      "CLIPLoader",
+      "CLIPTextEncode",
+      "ModelSamplingSD3",
+      "WanImageToVideo",
+      "WanMoeKSampler",
+      "VAEDecode",
+      "UpscaleModelLoader",
+      "ImageUpscaleWithModel",
+      "ImageScale",
+      "VHS_VideoCombine"
+    ],
+    "moe_architecture": {
+      "description": "Mixture of Experts with 2 specialized experts",
+      "high_noise_expert": "wan2.2_i2v_high_noise_14B_fp16.safetensors (early denoising, layout)",
+      "low_noise_expert": "wan2.2_i2v_low_noise_14B_fp16.safetensors (late denoising, detail)",
+      "i2v_boundary": 0.9,
+      "sigma_shift": 5.0,
+      "total_params": "27B (2x14B experts, only 14B active per step)"
+    },
+    "changelog": {
+      "v2.0.2": "FIX CRITIQUE: WanImageToVideo 'image'→'start_image' (paramètre invalide causait TypeError)",
+      "v2.0.1": "FIX: UNETLoader weight_dtype: 'fp16'→'default' (fp16 n'est pas une option valide, default charge nativement en FP16)",
+      "v2.0.0": "BREAKING: Migration vers architecture MoE avec WanMoeKSampler (fix artefacts neige - cause réelle: utilisation d'un seul expert)",
+      "v1.8.0": "Retrait paramètres obsolètes spatial_compress_level et temporal_compress_level",
+      "v1.7.0": "FIX CRITIQUE: spatial_compress_level 1→0 (non applicable - architecture différente)",
+      "v1.6.0": "Fix base_precision: bf16→fp16 (matching fichiers safetensors FP16)"
+    }
+  }
+}
