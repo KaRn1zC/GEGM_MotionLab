@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 + UltraSharp Upscale",
   "description": "Pipeline complet : génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
 
@@ -115,11 +115,6 @@
       "min": 0,
       "max": 2,
       "description": "Cohérence temporelle: 0=créatif, 1=équilibré, 2=stable (depuis consistency)"
-    },
-    "pingpong": {
-      "type": "boolean",
-      "default": false,
-      "description": "Boucle aller-retour pour transition fluide (depuis loop_smooth)"
     }
   },
 
@@ -246,11 +241,11 @@
         "filename_prefix": "wan22_upscaled",
         "format": "video/h264-mp4",
         "crf": 18,
-        "pingpong": "{pingpong}",
+        "pingpong": false,
         "save_output": true,
         "images": ["11b", 0]
       },
-      "_comment": "pingpong=true pour boucle fluide (depuis loop_smooth)"
+      "_comment": "pingpong=false pour vraie boucle seamless (recommence au début, pas d'effet miroir)"
     }
   },
 
@@ -281,6 +276,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v3.5.1": "FIX: pingpong désactivé (false) pour vraie boucle seamless - suppression paramètre dynamique",
       "v3.5.0": "FEATURE: Implémentation paramètres frontend (shift, riflex_freq_index, pingpong) - contrôle motion_intensity/denoise/consistency/loop_smooth",
       "v3.2.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v3.1.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",

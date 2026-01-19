@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 14B + UltraSharp Upscale (MoE)",
   "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling 4x UltraSharp",
-  "version": "2.0.2",
+  "version": "2.0.5",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
 
@@ -82,6 +82,13 @@
       "min": 64,
       "max": 4320,
       "description": "Hauteur finale après upscale"
+    },
+    "shift": {
+      "type": "float",
+      "default": 5.0,
+      "min": 3.0,
+      "max": 10.0,
+      "description": "Sigma shift pour contrôle du mouvement (depuis motion_intensity/noise_level/denoise)"
     }
   },
 
@@ -139,17 +146,17 @@
       "class_type": "ModelSamplingSD3",
       "inputs": {
         "model": ["2", 0],
-        "shift": 5.0
+        "shift": "{shift}"
       },
-      "_comment": "Apply sigma shift to high-noise model (5.0 for I2V)"
+      "_comment": "Apply sigma shift to high-noise model (dynamique depuis motion_intensity/noise_level/denoise)"
     },
     "6b": {
       "class_type": "ModelSamplingSD3",
       "inputs": {
         "model": ["2b", 0],
-        "shift": 5.0
+        "shift": "{shift}"
       },
-      "_comment": "Apply sigma shift to low-noise model (5.0 for I2V)"
+      "_comment": "Apply sigma shift to low-noise model (dynamique depuis motion_intensity/noise_level/denoise)"
     },
     "7": {
       "class_type": "WanImageToVideo",
@@ -177,13 +184,13 @@
         "cfg_low_noise": "{cfg_scale}",
         "sampler_name": "uni_pc",
         "scheduler": "simple",
-        "sigma_shift": 5.0,
+        "sigma_shift": "{shift}",
         "positive": ["7", 0],
         "negative": ["7", 1],
         "latent_image": ["7", 2],
         "denoise": 1.0
       },
-      "_comment": "MoE sampler: boundary=0.9 means 10% high_noise, 90% low_noise for I2V"
+      "_comment": "MoE sampler: boundary=0.9 means 10% high_noise, 90% low_noise for I2V. sigma_shift dynamique."
     },
     "9": {
       "class_type": "VAEDecode",
@@ -226,7 +233,8 @@
         "pingpong": false,
         "save_output": true,
         "images": ["11b", 0]
-      }
+      },
+      "_comment": "pingpong=false pour vraie boucle seamless (recommence au début, pas d'effet miroir)"
     }
   },
 
@@ -269,6 +277,9 @@
       "total_params": "27B (2x14B experts, only 14B active per step)"
     },
     "changelog": {
+      "v2.0.5": "FEATURE: Paramètre shift dynamique (harmonisation avec 5B) - contrôle motion_intensity/noise_level/denoise",
+      "v2.0.4": "FIX: pingpong désactivé (false) pour vraie boucle seamless - suppression paramètre dynamique",
+      "v2.0.3": "FEATURE: Ajout paramètre pingpong dynamique depuis loop_smooth (harmonisation avec 5B)",
       "v2.0.2": "FIX CRITIQUE: WanImageToVideo 'image'→'start_image' (paramètre invalide causait TypeError)",
       "v2.0.1": "FIX: UNETLoader weight_dtype: 'fp16'→'default' (fp16 n'est pas une option valide, default charge nativement en FP16)",
       "v2.0.0": "BREAKING: Migration vers architecture MoE avec WanMoeKSampler (fix artefacts neige - cause réelle: utilisation d'un seul expert)",

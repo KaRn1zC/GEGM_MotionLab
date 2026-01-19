@@ -268,9 +268,11 @@ class WorkflowTemplate:
         else:
             transformed["riflex_freq_index"] = 0  # Plus créatif
 
-        # === PINGPONG (boucle fluide) ===
+        # === PINGPONG désactivé ===
+        # pingpong=false pour vraie boucle seamless (recommence au début)
+        # pingpong=true ferait un effet miroir (aller-retour) non souhaité pour cinemagraphs
         loop_smooth = params.get("loop_smooth", "basic")
-        transformed["pingpong"] = loop_smooth in ["basic", "advanced"]
+        transformed["pingpong"] = False  # Toujours false - boucle normale
 
         # === CFG_SCALE ajusté selon color_preservation ===
         base_cfg = params.get("cfg_scale", 7.5)
