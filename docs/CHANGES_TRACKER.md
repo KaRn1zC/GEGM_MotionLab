@@ -10,16 +10,12 @@
 
 ## Modifications récentes
 
-### [2026-01-07] - VALIDATION: Tests Production Réussis (5B + 14B)
+### [2026-01-19] - Synchronisation Documentation
 
-**Containers testés** :
-- `5B_container17.txt` : GPU RTX 6000 Ada (47.5GB) - SUCCESS
-- `14B_container27.txt` : GPU RTX PRO 6000 Blackwell (95GB) - SUCCESS
-
-**Validation complète** :
-- Transformation paramètres frontend → ComfyUI opérationnelle
-- Architecture MoE 14B (2 experts high/low noise) fonctionnelle
-- Templates 5B v4.5.0 et 14B v2.0.2 validés en production
+**Intégré dans CLAUDE.md v4.2.0 :**
+- Section "Presets & Prompts Optimisés" ajoutée
+- Preset Cinemagraph recommandé documenté
+- Negative prompt par défaut et structure prompt
 
 ---
 
