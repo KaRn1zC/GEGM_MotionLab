@@ -1,7 +1,7 @@
 {
   "name": "WAN 2.2 Image-to-Video",
   "description": "Génération de cinemagraphs avec WAN 2.2 5B - Version corrigée compatible wrapper récent",
-  "version": "4.5.0",
+  "version": "4.5.1",
   "author": "Comfy_Img_to_Loop",
   "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
 
@@ -18,7 +18,7 @@
     },
     "negative_prompt": {
       "type": "string",
-      "default": "static, frozen, still, no movement, blurry, distorted",
+      "default": "camera shake, shaky footage, jitter, flickering, morphing shapes, warping artifacts, blurry, noise grain, choppy motion, inconsistent lighting, rapid changes, distortion",
       "description": "Éléments à éviter dans l'animation"
     },
     "steps": {
@@ -82,11 +82,6 @@
       "min": 0,
       "max": 2,
       "description": "Cohérence temporelle: 0=créatif, 1=équilibré, 2=stable (depuis consistency)"
-    },
-    "pingpong": {
-      "type": "boolean",
-      "default": false,
-      "description": "Boucle aller-retour pour transition fluide (depuis loop_smooth)"
     }
   },
 
@@ -190,11 +185,11 @@
         "filename_prefix": "wan22_cinemagraph",
         "format": "video/h264-mp4",
         "crf": 18,
-        "pingpong": "{pingpong}",
+        "pingpong": false,
         "save_output": true,
         "images": ["9", 0]
       },
-      "_comment": "pingpong=true pour boucle fluide (depuis loop_smooth)"
+      "_comment": "pingpong=false pour vraie boucle seamless (recommence au début, pas d'effet miroir)"
     }
   },
 
@@ -222,6 +217,7 @@
       "VHS_VideoCombine"
     ],
     "changelog": {
+      "v4.5.1": "FIX: pingpong désactivé (false) pour vraie boucle seamless - suppression paramètre dynamique",
       "v4.5.0": "FEATURE: Implémentation paramètres frontend (shift, riflex_freq_index, pingpong) - contrôle motion_intensity/denoise/consistency/loop_smooth",
       "v4.2.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v4.1.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
