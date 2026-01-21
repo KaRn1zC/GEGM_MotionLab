@@ -575,12 +575,12 @@
                             <div class="mt-3 bg-white rounded-lg p-3 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-5 gap-2">
                                 <div>
                                     <p class="font-semibold text-cyan-700">🎬 Cinemagraph</p>
-                                    <p>Éléments statiques + mouvement subtil</p>
+                                    <p>Éléments statiques + mouvements subtils</p>
                                     <p class="text-cyan-600">⏱️ ~6 min</p>
                                 </div>
                                 <div>
                                     <p class="font-semibold text-purple-700">💎 Qualité Max</p>
-                                    <p>30 steps, détails fins</p>
+                                    <p>Détails fins</p>
                                     <p class="text-purple-600">⏱️ ~8 min</p>
                                 </div>
                                 <div>
@@ -590,12 +590,12 @@
                                 </div>
                                 <div>
                                     <p class="font-semibold text-gray-700">⚡ Rapide</p>
-                                    <p>15 steps, test rapide</p>
+                                    <p>Test rapide</p>
                                     <p class="text-gray-600">⏱️ ~3 min</p>
                                 </div>
                                 <div>
                                     <p class="font-semibold text-green-700">🍃 Naturel</p>
-                                    <p>Mouvement subtil, couleurs fidèles</p>
+                                    <p>Mouvements plus subtils</p>
                                     <p class="text-green-600">⏱️ ~5 min</p>
                                 </div>
                             </div>
@@ -1116,7 +1116,7 @@
         function applyPreset(preset) {
             const presets = {
                 cinemagraph: {
-                    steps: 25,
+                    steps: 35,
                     cfgScale: 5.5,
                     denoise: 60,
                     motionIntensity: 'subtle',
@@ -1125,11 +1125,11 @@
                     consistency: 92,
                     seed: -1,
                     motionArea: 'full',
-                    colorPreservation: 85,
-                    frameBlending: 2
+                    colorPreservation: 90,
+                    frameBlending: 3
                 },
                 quality: {
-                    steps: 30,
+                    steps: 40,
                     cfgScale: 7,
                     denoise: 75,
                     motionIntensity: 'moderate',
@@ -1168,7 +1168,7 @@
                     frameBlending: 2
                 },
                 natural: {
-                    steps: 25,
+                    steps: 30,
                     cfgScale: 5.5,
                     denoise: 55,
                     motionIntensity: 'subtle',
@@ -1177,8 +1177,8 @@
                     consistency: 90,
                     seed: -1,
                     motionArea: 'full',
-                    colorPreservation: 90,
-                    frameBlending: 3
+                    colorPreservation: 85,
+                    frameBlending: 2
                 }
             };
             
