@@ -23,16 +23,18 @@ from PIL import Image
 
 def adjust_dimension(value: int, multiple: int = 32) -> int:
     """
-    Ajuste une valeur au multiple le plus proche
+    Ajuste une valeur au multiple inférieur (floor)
+
+    Préfère le crop à l'upscale pour conserver la qualité native.
 
     Args:
         value: Valeur à ajuster
         multiple: Multiple cible (défaut: 32)
 
     Returns:
-        Valeur ajustée
+        Valeur ajustée (arrondie vers le bas)
     """
-    return int(round(value / multiple) * multiple)
+    return int(value // multiple) * multiple
 
 
 def calculate_optimal_resolution(
@@ -51,19 +53,20 @@ def calculate_optimal_resolution(
     # Ratio de l'image source
     source_ratio = source_width / source_height
 
-    # Arrondir à un multiple de 32 (requis par le VAE WAN 2.2 avec spatial_compress_level=1)
-    def round_to_multiple(value, multiple=32):
-        return int(round(value / multiple) * multiple)
+    # Arrondir au multiple de 32 inférieur (floor) pour préférer crop à upscale
+    # Requis par le VAE WAN 2.2 avec spatial_compress_level=1
+    def floor_to_multiple(value, multiple=32):
+        return int(value // multiple) * multiple
 
     # Calculer selon le ratio source
     if target_width / target_height > source_ratio:
         # Limité par la hauteur
-        final_height = round_to_multiple(target_height)
-        final_width = round_to_multiple(final_height * source_ratio)
+        final_height = floor_to_multiple(target_height)
+        final_width = floor_to_multiple(final_height * source_ratio)
     else:
         # Limité par la largeur
-        final_width = round_to_multiple(target_width)
-        final_height = round_to_multiple(final_width / source_ratio)
+        final_width = floor_to_multiple(target_width)
+        final_height = floor_to_multiple(final_width / source_ratio)
 
     return final_width, final_height
 
@@ -109,20 +112,22 @@ def calculate_optimal_generation_strategy(
     WAN22_MAX_HEIGHT = 720
     WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
 
-    def adjust_to_32(value, prefer_lower=False):
+    def adjust_to_32(value, prefer_round=False):
         """
-        Ajuste une valeur au multiple de 32 le plus proche.
+        Ajuste une valeur au multiple de 32 inférieur (floor par défaut).
+
+        Préfère le crop à l'upscale pour conserver la qualité native.
 
         Args:
             value: Valeur à ajuster
-            prefer_lower: Si True, arrondit vers le bas (floor) plutôt que round
+            prefer_round: Si True, arrondit au plus proche plutôt que floor
         """
-        if prefer_lower:
-            # Floor: arrondit vers le bas (ex: 529 → 512)
-            return int(value // 32) * 32
-        else:
+        if prefer_round:
             # Round: arrondit au plus proche (ex: 529 → 544)
             return int(round(value / 32) * 32)
+        else:
+            # Floor: arrondit vers le bas (ex: 529 → 512)
+            return int(value // 32) * 32
 
     # Calculer ratios et dimensions
     source_pixels = source_width * source_height
