@@ -10,38 +10,25 @@
 
 ## Modifications récentes
 
-### [2026-01-19] - FIX: Désactivation pingpong pour vraie boucle seamless
-
-**Problème identifié :**
-- `pingpong=true` créait un effet miroir (5s avant + 5s arrière = 10s)
-- Comportement souhaité : vraie boucle qui recommence au début (5s en boucle infinie)
+### [2026-01-22] - Timeout unifié 90 minutes + Mise à jour documentation
 
 **Corrections apportées :**
 
-1. **workflow_manager.py** :
-   - `transformed["pingpong"] = False` (toujours false, plus de calcul dynamique)
+1. **web_interface/routes.py:490** :
+   - Timeout unifié à 5400s (90min) pour tous les workflows (5B et 14B)
+   - Permet générations haute résolution + upscale sans timeout
 
-2. **Tous les templates** (pingpong hardcodé à false) :
-   - `wan22_5b_i2v.json` : v4.5.0 → v4.5.1
-   - `wan22_5b_with_upscale.json` : v3.5.0 → v3.5.1
-   - `wan22_14b_i2v.json` : v2.0.3 → v2.0.4
-   - `wan22_14b_with_upscale.json` : v2.0.3 → v2.0.4
+2. **Documentation synchronisée** :
+   - CLAUDE.md → v4.3.0
+   - README.md, README_DOCKER.md, README_RUNPOD.md → v4.3.0
+   - docs/ARCHITECTURE.md → v4.3.0
+   - Toutes les versions de templates mises à jour
 
-**Paramètres shift corrigés dans 14B :**
-- `wan22_14b_i2v.json` : v2.0.4 → v2.0.5
-- `wan22_14b_with_upscale.json` : v2.0.4 → v2.0.5
-- Nodes 6, 6b (ModelSamplingSD3): `shift: 5.0` → `shift: "{shift}"`
-- Node 8 (WanMoeKSampler): `sigma_shift: 5.0` → `sigma_shift: "{shift}"`
-- Ajout définition paramètre `shift` dans section parameters
-
----
-
-### [2026-01-19] - Synchronisation Documentation
-
-**Intégré dans CLAUDE.md v4.2.0 :**
-- Section "Presets & Prompts Optimisés" ajoutée
-- Preset Cinemagraph recommandé documenté
-- Negative prompt par défaut et structure prompt
+**Versions actuelles templates :**
+- `wan22_5b_i2v.json` : v4.5.1
+- `wan22_5b_with_upscale.json` : v3.5.1
+- `wan22_14b_i2v.json` : v2.0.5
+- `wan22_14b_with_upscale.json` : v2.0.5
 
 ---
 

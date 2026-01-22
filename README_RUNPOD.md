@@ -4,7 +4,7 @@
 
 [![RunPod](https://img.shields.io/badge/runpod-cloud-blueviolet.svg)](https://runpod.io)
 [![GPU](https://img.shields.io/badge/GPU-RTX%206000%20%2F%20H100-success.svg)](https://runpod.io)
-[![Version](https://img.shields.io/badge/version-4.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.3.0-blue.svg)](CHANGELOG.md)
 
 ---
 
@@ -237,4 +237,4 @@ curl https://<pod-id>-5000.proxy.runpod.net/api/jobs/<job_id>
 
 ---
 
-**Version:** 4.1.0 | **Image:** `arnaudboy/comfy_img_to_loop:latest` | **Date:** 2026-01-07
+**Version:** 4.3.0 | **Image:** `arnaudboy/comfy_img_to_loop:latest` | **Date:** 2026-01-22

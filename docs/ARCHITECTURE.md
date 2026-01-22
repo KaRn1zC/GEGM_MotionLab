@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2025-12-31 (v4.0.0 - Architecture MoE 14B)
+**Dernière mise à jour** : 2026-01-22 (v4.3.0 - Timeout unifié 90min)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -44,7 +44,7 @@
 - **Fichier** : `wan2.2_ti2v_5B_fp16.safetensors` (9.31 GB)
 - **VAE** : wan2.2_vae.safetensors (1.41GB, 48ch)
 - **Workflow** : WanVideoEncode → WanVideoEmptyEmbeds → WanVideoSampler → WanVideoDecode
-- **Template** : `wan22_5b_i2v.json` (v4.x)
+- **Template** : `wan22_5b_i2v.json` (v4.5.1)
 
 ### Modèle 14B MoE (Architecture Native ComfyUI)
 - **Fichiers** (2 experts) :
@@ -53,7 +53,7 @@
 - **VAE** : wan_2.1_vae.safetensors (254MB, 16ch)
 - **Workflow v2.0.0** : UNETLoader×2 → ModelSamplingSD3×2 → WanMoeKSampler → VAEDecode
 - **MoE Params** : boundary=0.9 (I2V), sigma_shift=5.0, cfg=3.5
-- **Template** : `wan22_14b_i2v.json` (v2.0.0)
+- **Template** : `wan22_14b_i2v.json` (v2.0.5)
 
 ### T5 Encoder (partagé)
 - **Fichier** : `umt5_xxl_fp16.safetensors` (11.4 GB, 412 clés)
@@ -111,5 +111,5 @@ Node 9: VAEDecode
 2. **MoE OBLIGATOIRE 14B** : Les 2 fichiers (high/low noise) sont REQUIS, sinon artefacts "neige"
 3. **VAE spécifiques** : 5B=wan2.2_vae (48ch), 14B=wan_2.1_vae (16ch) - NON INTERCHANGEABLES
 4. **workflow_manager.py** : Retourne tuple pour 14B, injecte checkpoint_path_high/low
-5. **Timeout adaptatif** : 5B=1200s, 14B=3600s
+5. **Timeout unifié** : 5400s (90min) pour tous les workflows
 6. **VRAM** : 5B=48GB+, 14B=80GB+
