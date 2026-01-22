@@ -6,7 +6,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://docker.com)
 [![ComfyUI](https://img.shields.io/badge/comfyui-latest-blueviolet.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![WAN 2.2](https://img.shields.io/badge/WAN%202.2-5B%20%2F%2014B%20MoE-success.svg)](https://huggingface.co/Wan-AI)
-[![Version](https://img.shields.io/badge/version-4.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.3.0-blue.svg)](CHANGELOG.md)
 
 ---
 
@@ -172,4 +172,4 @@ make runpod-deploy      # Build multi-arch + push
 
 ---
 
-**Version:** 4.1.0 | **Status:** Production Ready | **Date:** 2026-01-07
+**Version:** 4.3.0 | **Status:** Production Ready | **Date:** 2026-01-22
