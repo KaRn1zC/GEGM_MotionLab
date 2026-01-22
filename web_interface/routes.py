@@ -485,9 +485,9 @@ async def process_cinemagraph_generation(job_id: str):
                 job_id, current_step="Génération en cours...", progress=0.5
             )
 
-            # Timeout adapté au modèle : 20 min (5B) ou 60 min (14B avec upscale)
-            # 14B nécessite plus de temps en raison de l'architecture MoE (2 experts)
-            workflow_timeout = 3600 if model_type == "14b" else 1200
+            # Timeout unifié à 90 min pour tous les workflows (5B et 14B)
+            # Permet les générations haute résolution + upscale
+            workflow_timeout = 5400
             logger.info(
                 f"⏱️  Timeout workflow {model_type.upper()}: {workflow_timeout}s ({workflow_timeout // 60} min)"
             )
