@@ -10,6 +10,28 @@
 
 ## Modifications récentes
 
+### [2026-01-23] - Floor pour calcul multiples de 32 + Actualisation documentation
+
+**Corrections apportées :**
+
+1. **web_interface/routes.py** :
+   - `adjust_dimension()` : round → floor (préfère crop à upscale)
+   - `floor_to_multiple()` : round → floor
+   - `adjust_to_32()` : défaut `prefer_lower=False` → `prefer_round=False` (floor par défaut)
+   - Impact : image 1920x1080 → 1920x1056 (crop -24px) au lieu de 1920x1088 (upscale +8px)
+
+2. **Documentation synchronisée** :
+   - CLAUDE.md → v4.3.1 : correction loop_smooth=False, alignement multiples 32
+   - docs/ARCHITECTURE.md → v4.3.1 : ajout points critiques alignement et pingpong
+
+**Versions templates inchangées :**
+- `wan22_5b_i2v.json` : v4.5.1
+- `wan22_5b_with_upscale.json` : v3.5.1
+- `wan22_14b_i2v.json` : v2.0.5
+- `wan22_14b_with_upscale.json` : v2.0.5
+
+---
+
 ### [2026-01-22] - Timeout unifié 90 minutes + Mise à jour documentation
 
 **Corrections apportées :**

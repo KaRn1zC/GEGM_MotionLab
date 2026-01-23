@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2026-01-22 (v4.3.0 - Timeout unifié 90min)
+**Dernière mise à jour** : 2026-01-23 (v4.3.1 - Floor pour multiples 32)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -113,3 +113,5 @@ Node 9: VAEDecode
 4. **workflow_manager.py** : Retourne tuple pour 14B, injecte checkpoint_path_high/low
 5. **Timeout unifié** : 5400s (90min) pour tous les workflows
 6. **VRAM** : 5B=48GB+, 14B=80GB+
+7. **Alignement résolutions** : Multiples de 32 avec floor (préfère crop à upscale)
+8. **pingpong** : Toujours False (vraie boucle seamless, pas d'effet miroir)
