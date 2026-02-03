@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, current_app, send_file, render_template
 from werkzeug.utils import secure_filename
+import subprocess
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -21,20 +22,40 @@ from web_interface.jobs import JobStatus
 from PIL import Image
 
 
-def adjust_dimension(value: int, multiple: int = 32) -> int:
+def find_best_generation_dims(
+    width: int, height: int, multiple: int = 32
+) -> tuple[int, int]:
     """
-    Ajuste une valeur au multiple inférieur (floor)
+    Trouve les dimensions multiples de `multiple` les plus proches du ratio original.
 
-    Préfère le crop à l'upscale pour conserver la qualité native.
+    Teste les 4 combinaisons (floor/ceil) x (width/height) et retourne celle
+    qui préserve le mieux le ratio d'aspect, évitant le drift systématique du floor.
 
     Args:
-        value: Valeur à ajuster
+        width: Largeur à ajuster
+        height: Hauteur à ajuster
         multiple: Multiple cible (défaut: 32)
 
     Returns:
-        Valeur ajustée (arrondie vers le bas)
+        (width, height) ajustés aux multiples de `multiple` avec ratio optimal
     """
-    return int(value // multiple) * multiple
+    original_ratio = width / height
+
+    w_floor = (width // multiple) * multiple
+    w_ceil = w_floor + (multiple if w_floor != width else 0)
+    h_floor = (height // multiple) * multiple
+    h_ceil = h_floor + (multiple if h_floor != height else 0)
+
+    candidates = [
+        (w_floor, h_floor),
+        (w_floor, h_ceil),
+        (w_ceil, h_floor),
+        (w_ceil, h_ceil),
+    ]
+    # Filtrer les candidats à 0
+    candidates = [(w, h) for w, h in candidates if w > 0 and h > 0]
+
+    return min(candidates, key=lambda c: abs(c[0] / c[1] - original_ratio))
 
 
 def calculate_optimal_resolution(
@@ -53,22 +74,19 @@ def calculate_optimal_resolution(
     # Ratio de l'image source
     source_ratio = source_width / source_height
 
-    # Arrondir au multiple de 32 inférieur (floor) pour préférer crop à upscale
-    # Requis par le VAE WAN 2.2 avec spatial_compress_level=1
-    def floor_to_multiple(value, multiple=32):
-        return int(value // multiple) * multiple
-
     # Calculer selon le ratio source
     if target_width / target_height > source_ratio:
         # Limité par la hauteur
-        final_height = floor_to_multiple(target_height)
-        final_width = floor_to_multiple(final_height * source_ratio)
+        raw_height = target_height
+        raw_width = int(raw_height * source_ratio)
     else:
         # Limité par la largeur
-        final_width = floor_to_multiple(target_width)
-        final_height = floor_to_multiple(final_width / source_ratio)
+        raw_width = target_width
+        raw_height = int(raw_width / source_ratio)
 
-    return final_width, final_height
+    # Arrondi intelligent : teste les 4 combinaisons floor/ceil pour le meilleur ratio
+    # Requis par le VAE WAN 2.2 (multiples de 32)
+    return find_best_generation_dims(raw_width, raw_height)
 
 
 def calculate_optimal_generation_strategy(
@@ -112,23 +130,6 @@ def calculate_optimal_generation_strategy(
     WAN22_MAX_HEIGHT = 720
     WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
 
-    def adjust_to_32(value, prefer_round=False):
-        """
-        Ajuste une valeur au multiple de 32 inférieur (floor par défaut).
-
-        Préfère le crop à l'upscale pour conserver la qualité native.
-
-        Args:
-            value: Valeur à ajuster
-            prefer_round: Si True, arrondit au plus proche plutôt que floor
-        """
-        if prefer_round:
-            # Round: arrondit au plus proche (ex: 529 → 544)
-            return int(round(value / 32) * 32)
-        else:
-            # Floor: arrondit vers le bas (ex: 529 → 512)
-            return int(value // 32) * 32
-
     # Calculer ratios et dimensions
     source_pixels = source_width * source_height
     target_pixels = target_width * target_height
@@ -159,19 +160,19 @@ def calculate_optimal_generation_strategy(
             gen_h = WAN22_MAX_HEIGHT
             gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
 
-        # Ajuster aux multiples de 32
-        gen_w = adjust_to_32(gen_w)
-        gen_h = adjust_to_32(gen_h)
+        # Ajuster aux multiples de 32 (arrondi ratio-aware)
+        gen_w, gen_h = find_best_generation_dims(gen_w, gen_h)
 
         # Vérifier si on dépasse encore 720p après ajustement
         if gen_w * gen_h > WAN22_MAX_PIXELS:
             # Réduire légèrement pour rester sous la limite
             if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-                gen_w = adjust_to_32(WAN22_MAX_WIDTH - 32)
-                gen_h = adjust_to_32(gen_w / aspect_ratio)
+                raw_w = WAN22_MAX_WIDTH - 32
+                raw_h = int(raw_w / aspect_ratio)
             else:
-                gen_h = adjust_to_32(WAN22_MAX_HEIGHT - 32)
-                gen_w = adjust_to_32(gen_h * aspect_ratio)
+                raw_h = WAN22_MAX_HEIGHT - 32
+                raw_w = int(raw_h * aspect_ratio)
+            gen_w, gen_h = find_best_generation_dims(raw_w, raw_h)
 
     # Déterminer si redimensionnement pré-génération nécessaire
     needs_pregen_resize = gen_w != source_width or gen_h != source_height
@@ -263,20 +264,26 @@ async def process_cinemagraph_generation(job_id: str):
         with Image.open(job.input_image) as img:
             source_width, source_height = img.size
 
-        # Résolution demandée dans les paramètres
+        # Résolution demandée dans les paramètres (déjà ajustée multiples 32 par generate_cinemagraph)
         target_width = job.parameters.get("width", source_width)
         target_height = job.parameters.get("height", source_height)
 
+        # Dimensions exactes demandées par l'utilisateur (avant ajustement multiples de 32)
+        user_target_width = job.parameters.get("user_target_width", target_width)
+        user_target_height = job.parameters.get("user_target_height", target_height)
+
         # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
-        # Note: Avec spatial_compress_level=1, le VAE nécessite des multiples de 32
+        # Arrondi ratio-aware : teste floor/ceil pour préserver le ratio d'aspect
 
         # Ajuster dimensions source
-        adjusted_source_width = adjust_dimension(source_width)
-        adjusted_source_height = adjust_dimension(source_height)
+        adjusted_source_width, adjusted_source_height = find_best_generation_dims(
+            source_width, source_height
+        )
 
         # Ajuster dimensions cibles
-        adjusted_target_width = adjust_dimension(target_width)
-        adjusted_target_height = adjust_dimension(target_height)
+        adjusted_target_width, adjusted_target_height = find_best_generation_dims(
+            target_width, target_height
+        )
 
         # Détecter le modèle disponible (5B ou 14B) AVANT le calcul de stratégie
         # CRITIQUE: Le 14B nécessite une stratégie différente (génération à résolution source)
@@ -375,8 +382,15 @@ async def process_cinemagraph_generation(job_id: str):
         )
         logger.info(f"   Génération WAN 2.2: {generation_width}x{generation_height}")
         logger.info(
-            f"   Résolution finale: {adjusted_target_width}x{adjusted_target_height}"
+            f"   Résolution génération cible: {adjusted_target_width}x{adjusted_target_height}"
         )
+        if (
+            user_target_width != adjusted_target_width
+            or user_target_height != adjusted_target_height
+        ):
+            logger.info(
+                f"   Résolution finale (post-ffmpeg): {user_target_width}x{user_target_height}"
+            )
 
         # Messages sur l'upscale post-génération
         if upscale_ratio > 1.5:
@@ -432,6 +446,10 @@ async def process_cinemagraph_generation(job_id: str):
                 "enable_vae_tiling": enable_vae_tiling,
             }
 
+            # Sortie attendue du workflow upscale : résolution cible ajustée
+            expected_output_width = adjusted_target_width
+            expected_output_height = adjusted_target_height
+
             if enable_vae_tiling:
                 logger.info(
                     f"🔧 VAE tiling activé (résolution finale: {adjusted_target_width}x{adjusted_target_height}, upscale: {upscale_ratio:.2f}x)"
@@ -460,6 +478,10 @@ async def process_cinemagraph_generation(job_id: str):
                 "height": generation_height,
                 "enable_vae_tiling": enable_vae_tiling,
             }
+
+            # Sortie attendue du workflow standard : résolution de génération
+            expected_output_width = generation_width
+            expected_output_height = generation_height
 
             if enable_vae_tiling:
                 logger.info(
@@ -490,9 +512,8 @@ async def process_cinemagraph_generation(job_id: str):
                 job_id, current_step="Génération en cours...", progress=0.5
             )
 
-            # Timeout unifié à 90 min pour tous les workflows (5B et 14B)
-            # Permet les générations haute résolution + upscale
-            workflow_timeout = 5400
+            # Timeout adapté par modèle : 14B nécessite plus de temps (3h) que le 5B (90 min)
+            workflow_timeout = 10800 if model_type == "14b" else 5400
             logger.info(
                 f"⏱️  Timeout workflow {model_type.upper()}: {workflow_timeout}s ({workflow_timeout // 60} min)"
             )
@@ -520,6 +541,63 @@ async def process_cinemagraph_generation(job_id: str):
             )
             with open(output_path, "wb") as f:
                 f.write(output_images[0]["data"])
+
+            # Post-processing : redimensionner vers les dimensions exactes demandées
+            # Le VAE WAN 2.2 impose des multiples de 32, ffmpeg ajuste la sortie finale
+            output_needs_resize = (
+                user_target_width != expected_output_width
+                or user_target_height != expected_output_height
+            )
+
+            if output_needs_resize:
+                logger.info(
+                    f"📐 Post-processing ffmpeg: {expected_output_width}x{expected_output_height} → "
+                    f"{user_target_width}x{user_target_height}"
+                )
+                job_manager.update_job(
+                    job_id, current_step="Ajustement dimensions finales", progress=0.85
+                )
+
+                temp_output = output_path + ".tmp.mp4"
+                os.rename(output_path, temp_output)
+
+                try:
+                    subprocess.run(
+                        [
+                            "ffmpeg",
+                            "-y",
+                            "-i",
+                            temp_output,
+                            "-vf",
+                            f"scale={user_target_width}:{user_target_height}:flags=lanczos",
+                            "-c:v",
+                            "libx264",
+                            "-preset",
+                            "ultrafast",
+                            "-crf",
+                            "1",
+                            "-pix_fmt",
+                            "yuv420p",
+                            "-c:a",
+                            "copy",
+                            output_path,
+                        ],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    logger.success(
+                        f"   ✅ Dimensions finales: {user_target_width}x{user_target_height}"
+                    )
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"   ❌ Erreur ffmpeg: {e.stderr}")
+                    # Restaurer le fichier original en cas d'erreur
+                    os.rename(temp_output, output_path)
+                    logger.warning("   ⚠️ Sortie conservée aux dimensions de génération")
+                finally:
+                    # Nettoyer le fichier temporaire s'il existe encore
+                    if os.path.exists(temp_output):
+                        os.remove(temp_output)
 
             job_manager.update_job(job_id, output_video=output_path)
 
@@ -631,9 +709,10 @@ def calc_resolution():
             source_w, source_h, target_w, target_h
         )
 
-        # Ajuster source et target aux multiples de 32
-        adjusted_source_w = adjust_dimension(source_w)
-        adjusted_source_h = adjust_dimension(source_h)
+        # Ajuster source aux multiples de 32 (arrondi ratio-aware)
+        adjusted_source_w, adjusted_source_h = find_best_generation_dims(
+            source_w, source_h
+        )
 
         # Détecter le modèle disponible (5B ou 14B) pour calcul stratégie
         from workflows.workflow_manager import WorkflowTemplate
@@ -781,6 +860,8 @@ def generate_cinemagraph():
         {
             "width": final_width,
             "height": final_height,
+            "user_target_width": target_width,
+            "user_target_height": target_height,
             "frames": frames,
             "fps": fps,
             "duration": duration,
