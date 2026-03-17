@@ -3,9 +3,7 @@ Script de test et validation des workflows ComfyUI
 """
 
 import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from workflows.workflow_manager import workflow_manager

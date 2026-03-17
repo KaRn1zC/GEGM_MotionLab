@@ -1,0 +1,226 @@
+{
+  "name": "LTX 2.3 Image-to-Video Looping",
+  "description": "Génération de cinemagraphs avec LTX 2.3 22B - Boucle seamless native via LTXVLoopingSampler",
+  "version": "1.0.0",
+  "author": "Comfy_Img_to_Loop",
+  "tags": ["cinemagraph", "i2v", "ltx2.3", "loop", "animation"],
+  "model_family": "ltx23",
+
+  "parameters": {
+    "input_image": {
+      "type": "string",
+      "required": true,
+      "description": "Nom du fichier image d'entrée (doit être dans ComfyUI/input/)"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Description textuelle de l'animation souhaitée"
+    },
+    "negative_prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Éléments à éviter (vide pour distilled avec CFG=1)"
+    },
+    "steps": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 50,
+      "description": "Nombre de steps (8 distilled, 40 dev)"
+    },
+    "cfg_scale": {
+      "type": "float",
+      "default": 1.0,
+      "min": 1.0,
+      "max": 15.0,
+      "description": "STG guidance scale (1.0 pour distilled, 3-7 pour dev)"
+    },
+    "seed": {
+      "type": "integer",
+      "default": -1,
+      "min": -1,
+      "description": "Seed pour reproductibilité (-1 = aléatoire)"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 81,
+      "min": 9,
+      "max": 241,
+      "description": "Nombre de frames (doit être N×8+1 : 9, 17, 25, ..., 241)"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 24,
+      "min": 4,
+      "max": 50,
+      "description": "Frames par seconde"
+    },
+    "width": {
+      "type": "integer",
+      "default": 768,
+      "min": 64,
+      "max": 1920,
+      "description": "Largeur de génération (multiple de 32)"
+    },
+    "height": {
+      "type": "integer",
+      "default": 512,
+      "min": 64,
+      "max": 1088,
+      "description": "Hauteur de génération (multiple de 32)"
+    },
+    "stg_block_idx": {
+      "type": "integer",
+      "default": 35,
+      "min": 0,
+      "max": 50,
+      "description": "Index bloc STG guidance (35 recommandé pour LTX 2.3)"
+    },
+    "stg_scale": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 3.0,
+      "description": "Échelle STG guidance (contrôle qualité spatiale)"
+    },
+    "temporal_tile_size": {
+      "type": "integer",
+      "default": 80,
+      "min": 16,
+      "max": 160,
+      "description": "Taille des tuiles temporelles pour le looping"
+    },
+    "temporal_overlap": {
+      "type": "integer",
+      "default": 24,
+      "min": 4,
+      "max": 64,
+      "description": "Chevauchement entre tuiles temporelles"
+    },
+    "cond_image_indices": {
+      "type": "string",
+      "default": "0",
+      "description": "Indices des frames conditionnées (ex: '0, 80' pour boucle seamless)"
+    }
+  },
+
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "{input_image}"
+      }
+    },
+    "2": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "{checkpoint_path}"
+      },
+      "_comment": "Charge le modèle LTX 2.3 + VAE intégré depuis un seul fichier"
+    },
+    "3": {
+      "class_type": "LTXVGemmaCLIPModelLoader",
+      "inputs": {
+        "gemma_model": "{text_encoder_path}"
+      },
+      "_comment": "Text encoder Gemma 3 12B (FP8 ou BF16 selon variante)"
+    },
+    "4": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{prompt}",
+        "clip": ["3", 0]
+      }
+    },
+    "5": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{negative_prompt}",
+        "clip": ["3", 0]
+      },
+      "_comment": "Negative prompt — vide pour distilled (CFG=1)"
+    },
+    "6": {
+      "class_type": "STGGuiderAdvancedNode",
+      "inputs": {
+        "model": ["2", 0],
+        "positive": ["4", 0],
+        "negative": ["5", 0],
+        "stg_block_idx": "{stg_block_idx}",
+        "stg_scale": "{stg_scale}"
+      },
+      "_comment": "Spatio-Temporal Guidance — requis pour LTXVLoopingSampler"
+    },
+    "7": {
+      "class_type": "LTXVLoopingSampler",
+      "inputs": {
+        "guider": ["6", 0],
+        "steps": "{steps}",
+        "seed": "{seed}",
+        "width": "{width}",
+        "height": "{height}",
+        "num_frames": "{frames}",
+        "optional_cond_images": ["1", 0],
+        "optional_cond_image_indices": "{cond_image_indices}",
+        "temporal_tile_size": "{temporal_tile_size}",
+        "temporal_overlap": "{temporal_overlap}",
+        "temporal_overlap_cond_strength": 0.5,
+        "adain_factor": 0.4,
+        "horizontal_tiles": 1,
+        "vertical_tiles": 1,
+        "spatial_overlap": 64
+      },
+      "_comment": "Boucle seamless native — image conditionnée au premier et dernier frame"
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["7", 0],
+        "vae": ["2", 2]
+      },
+      "_comment": "VAE intégré au checkpoint (output index 2 de CheckpointLoaderSimple)"
+    },
+    "9": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": "{fps}",
+        "loop_count": 0,
+        "filename_prefix": "ltx23_cinemagraph",
+        "format": "video/h264-mp4",
+        "crf": 18,
+        "pingpong": false,
+        "save_output": true,
+        "images": ["8", 0]
+      },
+      "_comment": "pingpong=false — la boucle seamless est gérée par LTXVLoopingSampler"
+    }
+  },
+
+  "outputs": {
+    "video": {
+      "node": "9",
+      "output": 0,
+      "description": "Cinemagraph en boucle seamless"
+    }
+  },
+
+  "metadata": {
+    "comfyui_version": ">=0.16.1",
+    "ltxvideo_version": "lightricks_mar2026",
+    "tags": ["cinemagraph", "i2v", "ltx2.3", "loop", "animation"],
+    "required_nodes": [
+      "LoadImage",
+      "CheckpointLoaderSimple",
+      "LTXVGemmaCLIPModelLoader",
+      "CLIPTextEncode",
+      "STGGuiderAdvancedNode",
+      "LTXVLoopingSampler",
+      "VAEDecode",
+      "VHS_VideoCombine"
+    ],
+    "changelog": {
+      "v1.0.0": "FEATURE: Template LTX 2.3 I2V avec boucle seamless native (LTXVLoopingSampler + STGGuider)"
+    }
+  }
+}

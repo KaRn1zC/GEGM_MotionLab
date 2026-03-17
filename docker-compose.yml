@@ -35,19 +35,19 @@ services:
     # Volumes
     volumes:
       # Logs persistants
-      - ./logs:/app/logs
+      - ./logs:/workspace/logs
 
       # Uploads persistants
-      - ./web_interface/uploads:/app/web_interface/uploads
+      - ./web_interface/uploads:/workspace/web_interface/uploads
 
       # Configuration (optionnel, si vous voulez modifier sans rebuild)
-      - ./config:/app/config:ro
+      - ./config:/workspace/config:ro
 
       # Workflows (optionnel, si vous voulez modifier sans rebuild)
-      - ./workflows/templates:/app/workflows/templates:ro
+      - ./workflows/templates:/workspace/workflows/templates:ro
 
       # Monter .env si besoin (alternative aux env vars ci-dessus)
-      # - ./.env:/app/.env:ro
+      # - ./.env:/workspace/.env:ro
 
     # Réseau
     networks:
@@ -75,9 +75,9 @@ services:
   #   ports:
   #     - "8188:8188"
   #   volumes:
-  #     - ./comfyui_models:/app/models
-  #     - ./comfyui_output:/app/output
-  #     - ./comfyui_input:/app/input
+  #     - ./comfyui_models:/workspace/models
+  #     - ./comfyui_output:/workspace/output
+  #     - ./comfyui_input:/workspace/input
   #   networks:
   #     - comfy-network
   #   restart: unless-stopped

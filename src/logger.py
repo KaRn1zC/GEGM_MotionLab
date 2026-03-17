@@ -7,7 +7,7 @@ import sys
 import os
 from pathlib import Path
 from loguru import logger
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class ComfyLogger:
@@ -88,7 +88,7 @@ class ComfyLogger:
             )
 
     def configure_module_logger(
-        self, module_name: str, log_file: Optional[str] = None, level: str = "INFO"
+        self, module_name: str, log_file: str | None = None, level: str = "INFO"
     ):
         """
         Configure un logger spécifique pour un module
@@ -157,7 +157,7 @@ def get_logger(name: str = "comfy") -> Any:
 
 
 def setup_logger(
-    config: Optional[Dict[str, Any]] = None, level: str = "INFO"
+    config: dict[str, Any | None] = None, level: str = "INFO"
 ) -> ComfyLogger:
     """
     Configure le système de logging pour l'application

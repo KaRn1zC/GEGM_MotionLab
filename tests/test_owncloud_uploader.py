@@ -3,15 +3,12 @@ Tests pour le module OwnCloud Uploader
 Tests unitaires avec mocks (pas de dépendance au .env)
 """
 
-import sys
 import os
 import pytest
 from pathlib import Path
 from datetime import datetime, timedelta
 from unittest.mock import Mock, AsyncMock, patch
 
-# Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.owncloud_uploader import (
     OwnCloudConfig,

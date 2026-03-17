@@ -11,7 +11,6 @@ from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from src.comfyui_client import ComfyUIConfig

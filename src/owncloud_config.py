@@ -7,10 +7,9 @@ import os
 import yaml
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 from dotenv import load_dotenv
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger
 from src.models.owncloud_models import OwnCloudConfig
@@ -26,7 +25,7 @@ class OwnCloudConfigManager:
     ):
         self.config_file = Path(config_file)
         self.env_file = Path(env_file)
-        self.configs: Dict[str, Any] = {}
+        self.configs: dict[str, Any] = {}
 
         # 1. Charger .env
         self._load_env()
@@ -107,7 +106,7 @@ class OwnCloudConfigManager:
             logger.error(f"❌ Erreur création config: {e}")
             raise ValueError(f"Configuration OwnCloud invalide: {e}")
 
-    def get_sharing_config(self) -> Dict[str, Any]:
+    def get_sharing_config(self) -> dict[str, Any]:
         """Retourne la config de partage depuis YAML"""
         return self.configs.get(
             "sharing",
@@ -118,7 +117,7 @@ class OwnCloudConfigManager:
             },
         )
 
-    def get_metadata_config(self) -> Dict[str, Any]:
+    def get_metadata_config(self) -> dict[str, Any]:
         """Retourne la config des métadonnées depuis YAML"""
         return self.configs.get(
             "metadata",
@@ -130,7 +129,7 @@ class OwnCloudConfigManager:
             },
         )
 
-    def check_configuration(self) -> Dict[str, Any]:
+    def check_configuration(self) -> dict[str, Any]:
         """Vérifie que tout est bien configuré"""
         report = {
             "env_file_exists": self.env_file.exists(),

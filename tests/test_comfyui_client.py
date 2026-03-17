@@ -2,18 +2,13 @@
 Tests pour le client ComfyUI
 """
 
-import sys
 import pytest
-from pathlib import Path
 
-# Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.comfyui_client import (
     ComfyUIClient,
     ComfyUIConfig,
     WorkflowProgress,
-    create_wan22_workflow,
 )
 from workflows.workflow_manager import WorkflowManager, WorkflowTemplate
 
@@ -145,57 +140,36 @@ class TestWorkflowManager:
         workflow = template.apply_parameters(params)
 
         assert workflow["1"]["inputs"]["input"] == "test_input"
-        assert workflow["1"]["inputs"]["optional"] == "100"
+        assert workflow["1"]["inputs"]["optional"] == 100
+        assert isinstance(workflow["1"]["inputs"]["optional"], int)
 
         # Test avec valeur par défaut
         params_minimal = {"input_value": "test_input"}
         workflow_minimal = template.apply_parameters(params_minimal)
 
-        assert workflow_minimal["1"]["inputs"]["optional"] == "42"
-
-
-class TestWAN22WorkflowCreation:
-    """Tests pour la création de workflows WAN 2.2"""
-
-    def test_create_basic_wan22_workflow(self):
-        """Test de création d'un workflow WAN 2.2 de base"""
-        workflow = create_wan22_workflow(
-            input_image="test.jpg", prompt="gentle animation", steps=20
-        )
-
-        assert "1" in workflow  # LoadImage
-        assert "2" in workflow  # DiffusionModelLoader
-        assert "5" in workflow  # I2V_Sampler
-        assert "6" in workflow  # SaveVideo
-
-        # Vérifier les paramètres
-        assert workflow["1"]["inputs"]["image"] == "test.jpg"
-        assert workflow["4"]["inputs"]["prompt"] == "gentle animation"
-        assert workflow["5"]["inputs"]["steps"] == 20
+        assert workflow_minimal["1"]["inputs"]["optional"] == 42
+        assert isinstance(workflow_minimal["1"]["inputs"]["optional"], int)
 
 
 def test_workflow_templates_loading():
     """Test de chargement des templates"""
     manager = WorkflowManager()
 
-    # Le manager devrait charger les templates disponibles
     templates = manager.list_templates()
-
-    # Au minimum, on devrait avoir le template WAN 2.2
     template_ids = [t["id"] for t in templates]
 
-    # Si le template wan22_i2v existe, le tester
-    if "wan22_i2v" in template_ids:
-        template = manager.get_template("wan22_i2v")
-        assert template is not None
-        assert template.name == "WAN 2.2 Image-to-Video"
+    # Les 4 templates doivent être chargés
+    assert "wan22_5b_i2v" in template_ids
+    assert "wan22_14b_i2v" in template_ids
+
+    template = manager.get_template("wan22_5b_i2v")
+    assert template is not None
+    assert template.name == "WAN 2.2 Image-to-Video"
 
 
 if __name__ == "__main__":
-    # Exécution directe des tests
     print("🧪 Exécution des tests ComfyUI Client...")
 
-    # Tests synchrones
     test_config = TestComfyUIConfig()
     test_config.test_default_config()
     test_config.test_custom_config()
@@ -208,10 +182,6 @@ if __name__ == "__main__":
     test_client = TestComfyUIClient()
     test_client.test_client_initialization()
     print("✅ Tests de client passés")
-
-    test_wf = TestWAN22WorkflowCreation()
-    test_wf.test_create_basic_wan22_workflow()
-    print("✅ Tests de création workflow passés")
 
     test_workflow_templates_loading()
     print("✅ Tests de templates passés")

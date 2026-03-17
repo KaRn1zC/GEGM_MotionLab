@@ -3,9 +3,7 @@ Vérification rapide de la configuration OwnCloud
 """
 
 import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from src.owncloud_config import check_owncloud_setup, get_owncloud_config

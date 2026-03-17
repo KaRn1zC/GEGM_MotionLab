@@ -4,12 +4,8 @@ Script de démonstration du client ComfyUI
 Montre comment utiliser le client pour générer des cinemagraphs
 """
 
-import sys
 import asyncio
-from pathlib import Path
 
-# Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from src.comfyui_client import ComfyUISession, ComfyUIConfig, test_comfyui_connection

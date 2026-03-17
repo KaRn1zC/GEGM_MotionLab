@@ -258,75 +258,6 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
         exit 1
     fi
 
-elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
-    echo ""
-    echo "📥 Téléchargement WAN 2.2 TI2V 5B depuis $REPO..."
-    echo ""
-
-    # Dossier temporaire pour téléchargement
-    TEMP_DL="./models/.temp_download"
-    mkdir -p "$TEMP_DL"
-
-    # 1. Diffusion model (~9.3 GB)
-    echo "  1/3: Diffusion model (~9.3 GB)..."
-    hf download "$REPO" \
-        split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors \
-        --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors" ./models/diffusion_models/
-
-    # 2. Text encoder FP16 (~11.4 GB)
-    echo "  2/3: Text encoder FP16 (~11.4 GB)..."
-    hf download "$REPO" \
-        split_files/text_encoders/umt5_xxl_fp16.safetensors \
-        --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp16.safetensors" ./models/text_encoders/
-
-    # 3. VAE 5B (~600 MB)
-    echo "  3/3: VAE 5B (~600 MB)..."
-    hf download "$REPO" \
-        split_files/vae/wan2.2_vae.safetensors \
-        --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/vae/wan2.2_vae.safetensors" ./models/vae/
-
-    # Nettoyer le dossier temporaire
-    rm -rf "$TEMP_DL"
-
-    echo "✅ WAN 2.2 5B téléchargé"
-
-    # Créer dossier wan2.2-ti2v-5b avec symlinks
-    echo ""
-    echo "🔗 Création de symlinks pour compatibilité..."
-    mkdir -p models/wan2.2-ti2v-5b
-    ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors models/wan2.2-ti2v-5b/
-    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-ti2v-5b/
-    ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-ti2v-5b/
-    echo "✅ Symlinks créés"
-
-    # Vérifications
-    echo ""
-    echo "🔍 Vérification intégrité modèle de diffusion..."
-    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-ti2v-5b
-    if [ $? -ne 0 ]; then
-        echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
-        exit 1
-    fi
-
-    echo ""
-    echo "🔍 Vérification intégrité Text Encoder..."
-    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-ti2v-5b
-    if [ $? -ne 0 ]; then
-        echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
-        exit 1
-    fi
-
-    echo ""
-    echo "🔍 Vérification intégrité VAE..."
-    python "$SCRIPT_DIR/verify_vae.py" wan2.2-ti2v-5b
-    if [ $? -ne 0 ]; then
-        echo "❌ ÉCHEC: VAE corrompu ou incomplet"
-        exit 1
-    fi
-
 elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 I2V 14B depuis $REPO..."
@@ -405,9 +336,83 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     fi
 
 else
-    echo "❌ Modèle invalide: $MODEL"
-    echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"
-    exit 1
+    # Modèle inconnu du code legacy — essayer le registre
+    echo ""
+    echo "📥 Modèle $MODEL : consultation du registre..."
+
+    MANIFEST=$(python -m src.model_registry get-hf-downloads "$MODEL" 2>/dev/null)
+    if [ $? -eq 0 ] && [ -n "$MANIFEST" ]; then
+        REPO=$(echo "$MANIFEST" | python3 -c "import sys,json; print(json.load(sys.stdin)['repo'])")
+        TEMP_DL="./models/.temp_download"
+        mkdir -p "$TEMP_DL"
+
+        FILE_COUNT=$(echo "$MANIFEST" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['files']))")
+        FILE_IDX=0
+
+        echo "$MANIFEST" | python3 -c "
+import sys, json
+for f in json.load(sys.stdin)['files']:
+    print(f['hf_path'] + '|' + f['dest_subdir'] + '|' + f['filename'])
+" | while IFS='|' read -r hf_path dest_subdir filename; do
+            FILE_IDX=$((FILE_IDX + 1))
+            echo "  $FILE_IDX/$FILE_COUNT: $filename..."
+
+            mkdir -p "./models/$dest_subdir"
+            hf download "$REPO" "$hf_path" --local-dir "$TEMP_DL"
+            mv "$TEMP_DL/$hf_path" "./models/$dest_subdir/"
+        done
+
+        rm -rf "$TEMP_DL"
+        echo "✅ $MODEL téléchargé"
+
+        # Créer symlinks via registre
+        echo ""
+        echo "🔗 Création de symlinks pour $MODEL..."
+        SYMLINKS=$(python -m src.model_registry get-symlinks "$MODEL" 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$SYMLINKS" ]; then
+            mkdir -p "models/$MODEL"
+            echo "$SYMLINKS" | python3 -c "
+import sys, json
+for s in json.load(sys.stdin):
+    print(s['source'] + '|' + s['target'])
+" | while IFS='|' read -r source target; do
+                ln -sf "$source" "models/$MODEL/$target"
+            done
+            echo "✅ Symlinks créés"
+        fi
+
+        # Vérifications intégrité
+        echo ""
+        echo "🔍 Vérification intégrité modèle de diffusion ($MODEL)..."
+        python "$SCRIPT_DIR/verify_diffusion_model.py" "$MODEL"
+        if [ $? -ne 0 ]; then
+            echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
+            exit 1
+        fi
+
+        echo ""
+        echo "🔍 Vérification intégrité Text Encoder ($MODEL)..."
+        python "$SCRIPT_DIR/verify_t5_integrity.py" "$MODEL"
+        if [ $? -ne 0 ]; then
+            echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
+            exit 1
+        fi
+
+        echo ""
+        echo "🔍 Vérification intégrité VAE ($MODEL)..."
+        python "$SCRIPT_DIR/verify_vae.py" "$MODEL"
+        if [ $? -ne 0 ]; then
+            echo "❌ ÉCHEC: VAE corrompu ou incomplet"
+            exit 1
+        fi
+    else
+        echo "❌ Modèle invalide: $MODEL"
+        echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"
+        echo ""
+        echo "Modèles disponibles dans le registre:"
+        python -m src.model_registry list-models 2>/dev/null || true
+        exit 1
+    fi
 fi
 
 # === COMPOSANTS PARTAGÉS (CLIP + UPSCALERS) ===

@@ -10,7 +10,10 @@ __version__ = "1.0.0"
 __author__ = "Comfy_Img_to_Loop Team"
 __description__ = "Générateur de cinemagraphs professionnel avec ComfyUI et WAN 2.2"
 
-# Configuration automatique du logger au import
-logger = auto_configure()
+# Pas d'auto-configuration à l'import pour éviter les effets de bord
+# (psutil, torch, etc.). La configuration se fait explicitement via
+# setup_logger() dans app.py ou les scripts qui en ont besoin.
+# get_logger() initialise le logger paresseusement au premier appel.
+logger = None
 
 __all__ = ["get_logger", "setup_logger", "auto_configure", "logger"]
