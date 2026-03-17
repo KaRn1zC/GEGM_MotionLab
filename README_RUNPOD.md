@@ -4,33 +4,27 @@
 
 [![RunPod](https://img.shields.io/badge/runpod-cloud-blueviolet.svg)](https://runpod.io)
 [![GPU](https://img.shields.io/badge/GPU-RTX%206000%20%2F%20H100-success.svg)](https://runpod.io)
-[![Version](https://img.shields.io/badge/version-4.3.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-5.1.0-blue.svg)](CHANGELOG.md)
 
 ---
 
 ## Choix GPU
 
-### WAN 2.2 5B (Standard)
+### GPU 48GB+ (WAN 5B / LTX Distilled)
 
-| Priorité | GPU | VRAM | Temps |
-|----------|-----|------|-------|
-| 1 | **RTX 6000 Ada** | 48GB | ~5 min |
-| 2 | **L40** | 48GB | ~5 min |
-| 3 | **L40S** | 48GB | ~5 min |
-| - | Autre GPU | 48GB+ | Variable |
+| Priorité | GPU | VRAM | WAN 5B | LTX Distilled |
+|----------|-----|------|--------|----------------|
+| 1 | **RTX 6000 Ada** | 48GB | ~5 min | ~2 min |
+| 2 | **L40** | 48GB | ~5 min | ~2 min |
+| 3 | **L40S** | 48GB | ~5 min | ~2 min |
 
-**Minimum requis :** 48GB VRAM
+### GPU 80GB+ (WAN 14B / LTX Dev)
 
-### WAN 2.2 14B MoE (Premium)
-
-| Priorité | GPU | VRAM | Temps |
-|----------|-----|------|-------|
-| 1 | **RTX Pro 6000** | 96GB | ~8 min |
-| 2 | **RTX Pro 6000 WK** | 96GB | ~8 min |
-| 3 | **H100 SXM** | 80GB | ~8 min |
-| - | Autre GPU | 80GB+ | Variable |
-
-**Minimum requis :** 80GB VRAM
+| Priorité | GPU | VRAM | WAN 14B | LTX Dev |
+|----------|-----|------|---------|---------|
+| 1 | **RTX Pro 6000** | 96GB | ~8 min | ~8 min |
+| 2 | **RTX Pro 6000 WK** | 96GB | ~8 min | ~8 min |
+| 3 | **H100 SXM** | 80GB | ~8 min | ~8 min |
 
 ---
 
@@ -38,7 +32,7 @@
 
 ### Services
 - **RunPod** : Compte avec crédit
-- **OwnCloud** : Serveur avec 35+ GB
+- **OwnCloud** : Serveur avec 50+ GB
 
 ### Local
 - **rclone** : Installé et configuré
@@ -74,26 +68,32 @@ password> your-password
 rclone ls owncloud:/GEGM_ComfyUI/Models/
 ```
 
-### Workflow Complet
+### Workflow Complet (un seul modèle)
 
 ```bash
-# 1. Download + Fusion + Vérification
-./scripts/setup_wan22_native.sh wan2.2-ti2v-5b
+# WAN 2.2
+make workflow MODEL=wan2.2-ti2v-5b     # ou wan2.2-i2v-a14b
 
-# 2. Upload OwnCloud
-make full-workflow-5b
+# LTX 2.3
+make workflow MODEL=ltx-2.3-i2v-distilled   # ou ltx-2.3-i2v-dev
+```
 
-# Pour 14B
-./scripts/setup_wan22_native.sh wan2.2-i2v-a14b
-make full-workflow-14b
+Chaque workflow : Download HF → Vérification intégrité → Upload OwnCloud → Deep clean local.
+
+### Workflows séquentiels (plusieurs modèles)
+
+```bash
+make workflow-wan-all      # WAN 14B puis 5B
+make workflow-ltx-all      # LTX Dev puis Distilled
+make workflow-all          # Tous les modèles (4)
 ```
 
 ### Vérification Upload
 
 ```bash
-make rclone-list
-rclone ls owncloud:/GEGM_ComfyUI/Models/wan2.2-ti2v-5b/ | wc -l
-# 5B: ~35 fichiers | 14B: ~45 fichiers
+make rclone-verify MODEL=wan2.2-ti2v-5b
+make rclone-verify MODEL=ltx-2.3-i2v-distilled
+rclone ls owncloud:/GEGM_ComfyUI/Models/
 ```
 
 ---
@@ -160,8 +160,8 @@ Environment Variables:
 
 ### GPU Recommandé
 
-- **5B :** RTX 6000 Ada, L40, L40S (ou 48GB+ VRAM)
-- **14B MoE :** RTX Pro 6000, RTX Pro 6000 WK, H100 SXM (ou 80GB+ VRAM)
+- **WAN 5B / LTX Distilled :** RTX 6000 Ada, L40, L40S (48GB+)
+- **WAN 14B / LTX Dev :** RTX Pro 6000, RTX Pro 6000 WK, H100 SXM (80GB+)
 
 ### Temps Démarrage
 
@@ -189,7 +189,7 @@ https://<pod-id>-5000.proxy.runpod.net
 1. Ouvrir URL Pod
 2. Uploader image (JPG/PNG)
 3. Configurer paramètres
-4. Générer (~5-8 min)
+4. Générer (~2-8 min selon modèle)
 5. Télécharger MP4
 
 ### API
@@ -208,23 +208,23 @@ curl https://<pod-id>-5000.proxy.runpod.net/api/jobs/<job_id>
 
 ### Optimisation
 - Arrêter Pod après utilisation
-- RTX 6000 Ada pour 5B (pas H100)
+- RTX 6000 Ada pour 5B/LTX Distilled (pas H100)
 - Batch processing
 - Auto-stop inactivité
 
 ### Calcul
 
 **RTX 6000 Ada ($0.77/h) :**
-| Durée | Coût | Vidéos |
-|-------|------|--------|
-| 1h | $0.77 | 12 |
-| 6h | $4.62 | 72 |
+| Durée | Coût | Vidéos (LTX) | Vidéos (WAN 5B) |
+|-------|------|--------------|-----------------|
+| 1h | $0.77 | 30 | 12 |
+| 6h | $4.62 | 180 | 72 |
 
 **H100 SXM ($2.69/h) :**
-| Durée | Coût | Vidéos |
-|-------|------|--------|
-| 1h | $2.69 | 7 |
-| 6h | $16.14 | 42 |
+| Durée | Coût | Vidéos (LTX) | Vidéos (WAN 14B) |
+|-------|------|--------------|------------------|
+| 1h | $2.69 | 30 | 7 |
+| 6h | $16.14 | 180 | 42 |
 
 ---
 
@@ -248,10 +248,15 @@ curl https://<pod-id>-5000.proxy.runpod.net/api/jobs/<job_id>
 
 ## Notes Importantes
 
-### Architecture 14B MoE
+### Architecture WAN 14B MoE
 - 2 fichiers requis : high_noise + low_noise
 - Switching boundary=0.9 (10% high, 90% low)
 - GPU 80GB+ obligatoire
+
+### Architecture LTX 2.3
+- Checkpoint unique avec VAE intégré
+- Text encoder Gemma 3 12B (pas T5)
+- Boucle seamless native (LTXVLoopingSampler)
 
 ### Sécurité
 - Ne pas commit credentials dans Git
@@ -267,4 +272,4 @@ curl https://<pod-id>-5000.proxy.runpod.net/api/jobs/<job_id>
 
 ---
 
-**Version:** 4.4.0 | **Images:** `arnaudboy/comfy_img_to_loop:latest` (prod) / `:test` (debug) | **Date:** 2026-03-16
+**Version:** 5.1.0 | **Images:** `arnaudboy/comfy_img_to_loop:latest` (prod) / `:test` (debug) | **Date:** 2026-03-17

@@ -41,14 +41,12 @@ docs/
 **Objectif** : Documentation technique détaillée de l'architecture du système.
 
 **Contenu** :
-- Vue d'ensemble des composants
-- Flux de génération complet
-- Modèles et encodeurs
-- Patch ComfyUI
-- Scripts critiques
-- Communication WebSocket
-- Déploiement
-- Variables d'environnement
+- Vue d'ensemble des composants (Flask, ComfyUI, registre, workflow manager)
+- Modèles WAN 2.2 + LTX 2.3 (architecture, fichiers, templates)
+- Architecture workflows (5B, 14B MoE, LTX 2.3)
+- Pipeline de téléchargement local (Makefile, setup script, registre)
+- Custom nodes requis
+- Points critiques
 
 **Public** : Développeurs, DevOps, contributeurs techniques
 
@@ -85,8 +83,8 @@ Claude ajoute une entrée dans `CHANGES_TRACKER.md` :
 **Mise à jour documentation nécessaire** :
 - [ ] CLAUDE.md - Section X
 - [ ] README.md - Section Y
-- [ ] README-DOCKER.md - Section Z
-- [ ] README-RUNPOD.md - Section W
+- [ ] README_DOCKER.md - Section Z
+- [ ] README_RUNPOD.md - Section W
 ```
 
 ### 2. Demande de mise à jour
@@ -142,7 +140,7 @@ Fichiers de corrections/analyses temporaires → `docs/sessions/`
 
 **Mise à jour** : Sur demande explicite de l'utilisateur
 
-### `README-DOCKER.md`
+### `README_DOCKER.md`
 
 **Objectif** : Guide de déploiement Docker.
 
@@ -157,7 +155,7 @@ Fichiers de corrections/analyses temporaires → `docs/sessions/`
 
 **Mise à jour** : Sur demande explicite de l'utilisateur
 
-### `README-RUNPOD.md`
+### `README_RUNPOD.md`
 
 **Objectif** : Guide de déploiement RunPod.
 
@@ -227,8 +225,8 @@ Fichiers de corrections/analyses temporaires → `docs/sessions/`
 **Mise à jour documentation nécessaire** :
 - [ ] CLAUDE.md - Section X
 - [ ] README.md - Section Y
-- [ ] README-DOCKER.md - Section Z
-- [ ] README-RUNPOD.md - Section W
+- [ ] README_DOCKER.md - Section Z
+- [ ] README_RUNPOD.md - Section W
 
 **Notes additionnelles** :
 - Informations contextuelles
@@ -263,5 +261,5 @@ Fichiers de corrections/analyses temporaires → `docs/sessions/`
 - **Projet** : `/Users/aboy/Documents/GEGM/Comfy_Img_to_Loop/`
 - **CLAUDE.md** : `../CLAUDE.md`
 - **README.md** : `../README.md`
-- **README-DOCKER.md** : `../README-DOCKER.md`
-- **README-RUNPOD.md** : `../README-RUNPOD.md`
+- **README_DOCKER.md** : `../README_DOCKER.md`
+- **README_RUNPOD.md** : `../README_RUNPOD.md`

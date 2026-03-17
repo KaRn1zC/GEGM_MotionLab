@@ -43,13 +43,13 @@
                         🎬 GEGM MotionLab 🔬
                     </h1>
                     <p class="text-purple-100 text-lg">
-                        Transformez vos images en cinemagraphs avec l'IA WAN 2.2
+                        Transformez vos images en cinemagraphs avec <span id="subtitleModelName">l'IA</span>
                     </p>
                 </div>
                 <div class="hidden md:block">
                     <div class="bg-white bg-opacity-20 backdrop-blur rounded-lg px-6 py-3">
                         <p class="text-sm font-semibold">Modèle</p>
-                        <p id="headerModelName" class="text-2xl font-bold">WAN 2.2</p>
+                        <p id="headerModelName" class="text-2xl font-bold">…</p>
                     </div>
                 </div>
             </div>
@@ -455,7 +455,7 @@
                                         
                                         <div class="mt-2 bg-yellow-900 bg-opacity-30 border border-yellow-600 rounded p-2">
                                             <p class="text-yellow-200 text-xs">
-                                                <strong>⚠️ Important :</strong> Le seed ne garantit pas un résultat identique si vous changez le modèle IA (WAN 2.2 5B vs 14B) ou la résolution.
+                                                <strong>⚠️ Important :</strong> Le seed ne garantit pas un résultat identique si vous changez le modèle IA ou la résolution.
                                             </p>
                                         </div>
                                     </div>
@@ -740,7 +740,7 @@
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-600">Modèle actif</span>
-                            <span id="statsModelName" class="font-bold text-purple-600">WAN 2.2 5B</span>
+                            <span id="statsModelName" class="font-bold text-purple-600">…</span>
                         </div>
                     </div>
                 </div>
@@ -1082,6 +1082,12 @@
                 const headerModelName = document.getElementById('headerModelName');
                 if (headerModelName) {
                     headerModelName.textContent = data.display_name;
+                }
+
+                // Mettre à jour le sous-titre
+                const subtitle = document.getElementById('subtitleModelName');
+                if (subtitle) {
+                    subtitle.textContent = data.display_name;
                 }
 
                 // Mettre à jour les statistiques

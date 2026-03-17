@@ -9,7 +9,7 @@
 
 models:
   wan2.2-ti2v-5b:
-    display_name: "WAN 2.2 TI2V 5B"
+    display_name: "WAN 2.2 5B"
     model_type: "5b"
     architecture: "dense"
     hf_repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
@@ -80,7 +80,7 @@ models:
         target: "wan2.2_vae.safetensors"
 
   wan2.2-i2v-a14b:
-    display_name: "WAN 2.2 I2V 14B MoE"
+    display_name: "WAN 2.2 14B"
     model_type: "14b"
     architecture: "moe"
     hf_repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
@@ -165,7 +165,7 @@ models:
   # =========================================================================
 
   ltx-2.3-i2v-distilled:
-    display_name: "LTX 2.3 I2V Distilled (FP8)"
+    display_name: "LTX 2.3 22B Fast"
     model_type: "distilled"
     architecture: "dit"
     hf_repo: "Lightricks/LTX-2.3-fp8"
@@ -226,7 +226,7 @@ models:
     symlinks: []
 
   ltx-2.3-i2v-dev:
-    display_name: "LTX 2.3 I2V Dev (BF16)"
+    display_name: "LTX 2.3 22B Pro"
     model_type: "dev"
     architecture: "dit"
     hf_repo: "Lightricks/LTX-2.3"

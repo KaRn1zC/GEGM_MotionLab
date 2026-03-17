@@ -4,7 +4,7 @@
 
 [![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://docker.com)
 [![Multi-arch](https://img.shields.io/badge/platform-AMD64%20%2F%20ARM64-success.svg)](https://docs.docker.com/build/building/multi-platform/)
-[![Version](https://img.shields.io/badge/version-4.3.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-5.1.0-blue.svg)](CHANGELOG.md)
 
 ---
 
@@ -167,11 +167,13 @@ make runpod-deploy-quick
 
 **Fichier :** `/workspace/docker-entrypoint.sh`
 
+L'entrypoint est **registry-aware** : il consulte `config/model_registry.yaml` pour déterminer les fichiers à télécharger, les symlinks à créer et les vérifications à effectuer. Supporte WAN 2.2 et LTX 2.3 sans modification.
+
 ```
 1. Configuration rclone (si OwnCloud)
-2. Download modèles (si absents)
+2. Download modèles via registre (multi-repo, chunks si OwnCloud)
 3. Reconstitution chunks
-4. Création symlinks T5
+4. Création symlinks (T5 pour WAN, Gemma pour LTX)
 5. Démarrage ComfyUI (background)
 6. Health check (180s timeout)
 7. Démarrage Flask (foreground)
@@ -245,4 +247,4 @@ docker compose exec comfy_img_to_loop tail -f /workspace/logs/comfyui.log
 
 ---
 
-**Version:** 4.3.1 | **Image:** `arnaudboy/comfy_img_to_loop:latest` | **Date:** 2026-01-23
+**Version:** 5.1.0 | **Image:** `arnaudboy/comfy_img_to_loop:latest` | **Date:** 2026-03-17

@@ -10,6 +10,31 @@
 
 ## Modifications récentes
 
+### [2026-03-17] - Pipeline model-agnostic Makefile + setup script (v5.1.0)
+
+**Objectif :** Le pipeline local (download → split → upload → clean) était hardcodé WAN 2.2. Désormais entièrement piloté par le registre modèles, compatible LTX 2.3 sans modification.
+
+**Fichiers modifiés :**
+- `src/model_registry.py` — `DownloadManifest` multi-repo : chaque fichier porte son propre `repo` (corrige le bug Gemma/Lightricks)
+- `scripts/setup_wan22_native.sh` — Fallback registre fonctionnel : download multi-repo, vérification T5 conditionnelle, symlinks et vérification finale généralisés
+- `Makefile` — Toutes les cibles modèle-agnostic (download-models, models-clean, rclone-verify exigent MODEL=), alias LTX (workflow-ltx-fast/pro/all), workflow-all (4 modèles), workflow-wan-all remplace workflow-both
+- `config/model_registry.yaml` — Display names raccourcis (WAN 2.2 5B, LTX 2.3 22B Fast/Pro)
+
+**Bugs corrigés :**
+- `DownloadManifest.repo` unique → multi-repo (LTX Gemma serait téléchargé depuis le mauvais repo)
+- `verify_t5_integrity.py` appelé pour tous les modèles → conditionnel (skip pour LTX qui utilise Gemma)
+- `_models-deep-clean-auto` hardcodé `wan2.2-*` → boucle dynamique `models/*/`
+
+**Documentation synchronisée :**
+- [x] CLAUDE.md → v5.1.0
+- [x] README.md → v5.1.0
+- [x] README_DOCKER.md → v5.1.0
+- [x] README_RUNPOD.md → v5.1.0
+- [x] docs/ARCHITECTURE.md → v5.1.0
+- [x] GUIDE_DOCUMENTATION.md → v5.1.0
+
+---
+
 ### [2026-03-16] - Intégration LTX 2.3 (v5.0.0)
 
 **Objectif :** Ajouter LTX 2.3 (DiT 22B, Lightricks) comme modèle disponible dans le pipeline. Deux variantes : Distilled FP8 (48GB+, 8 steps) et Dev BF16 (80GB+, 40 steps).

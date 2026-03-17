@@ -1213,64 +1213,55 @@ def check_owncloud():
 @api_bp.route("/model-info", methods=["GET"])
 def get_model_info():
     """
-    Retourne les informations sur le modèle WAN 2.2 déployé
+    Retourne les informations sur le modèle actif déployé.
+
+    Détection par filesystem (registre) → fallback env var → 503 si rien.
 
     Returns:
-        JSON avec:
-        - model_type: "5b" ou "14b"
-        - model_name: Nom complet du modèle
-        - display_name: Nom d'affichage pour l'UI
-        - estimated_time: Temps estimé pour preset "Naturel" (30 steps)
+        JSON avec model_type, model_name, display_name, estimated_time, gpu_recommendation
     """
-    import os
-    from pathlib import Path
-
     try:
-        # Détection directe du modèle disponible (sans dépendre d'un template)
-        # Priorité : 14B > 5B (14B est le modèle plus puissant)
-        comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/diffusion_models")
+        # Répertoires de recherche des modèles
+        search_dirs = [
+            Path("/workspace/comfyui/ComfyUI/models/diffusion_models"),
+            Path("/workspace/comfyui/ComfyUI/models/checkpoints"),
+        ]
 
-        # Fallback si diffusion_models n'existe pas
-        if not comfyui_models_dir.exists():
-            comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
-
-        # Recherche des modèles disponibles — registre d'abord, fallback hardcodé
+        # Détection via registre uniquement — plus de fallback hardcodé
         try:
             _reg = get_registry()
             model_priority = _reg.get_detection_priority()
         except Exception:
-            model_priority = [
-                ("wan2.2-i2v-a14b", "14b"),
-                ("wan2.2-ti2v-5b", "5b"),
-            ]
+            model_priority = []
 
-        detected_model = None
-        model_type = None
+        detected_model: str | None = None
+        model_type: str | None = None
 
         for model_name, m_type in model_priority:
-            model_path = comfyui_models_dir / model_name
-            if model_path.exists() and any(model_path.glob("*.safetensors")):
-                detected_model = model_name
-                model_type = m_type
-                logger.info(
-                    f"✅ API model-info: Modèle détecté: {model_name} (type: {m_type})"
-                )
+            for models_dir in search_dirs:
+                model_path = models_dir / model_name
+                if model_path.exists() and any(model_path.glob("*.safetensors")):
+                    detected_model = model_name
+                    model_type = m_type
+                    logger.info(
+                        f"✅ API model-info: Modèle détecté: {model_name} (type: {m_type})"
+                    )
+                    break
+            if detected_model:
                 break
 
-        # Si aucun modèle trouvé dans les dossiers, utiliser variable d'environnement
+        # Fallback env var — sans défaut hardcodé
         if not detected_model:
-            env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
+            env_model = os.getenv("OWNCLOUD_MODEL_NAME", "")
+            if not env_model:
+                logger.error("❌ API model-info: Aucun modèle détecté et OWNCLOUD_MODEL_NAME non défini")
+                return jsonify({"error": "Aucun modèle détecté"}), 503
             detected_model = env_model
-            model_type = (
-                "14b"
-                if "14b" in env_model.lower() or "a14b" in env_model.lower()
-                else "5b"
-            )
             logger.warning(
-                f"⚠️ API model-info: Utilisation env var: {env_model} (type: {model_type})"
+                f"⚠️ API model-info: Utilisation env var: {env_model}"
             )
 
-        # Informations enrichies depuis le registre
+        # Enrichissement via registre
         try:
             _reg = get_registry()
             model_cfg = _reg.get_model(detected_model)
@@ -1280,7 +1271,7 @@ def get_model_info():
         if model_cfg:
             return jsonify(
                 {
-                    "model_type": model_type,
+                    "model_type": model_cfg.model_type,
                     "model_name": detected_model,
                     "display_name": model_cfg.display_name,
                     "estimated_time": model_cfg.estimated_time,
@@ -1288,36 +1279,47 @@ def get_model_info():
                 }
             )
 
-        # Fallback legacy
-        estimated_times = {"5b": "~8 min", "14b": "~15 min"}
+        # Registre KO → réponse minimale avec le nom brut
         return jsonify(
             {
-                "model_type": model_type,
+                "model_type": model_type or "unknown",
                 "model_name": detected_model,
-                "display_name": f"WAN 2.2 {model_type.upper()}",
-                "estimated_time": estimated_times.get(model_type, "~10 min"),
-                "gpu_recommendation": "48GB+ VRAM"
-                if model_type == "5b"
-                else "80GB+ VRAM",
+                "display_name": detected_model,
+                "estimated_time": "~10 min",
+                "gpu_recommendation": "N/A",
             }
         )
 
     except Exception as e:
         logger.warning(f"Impossible de détecter le modèle: {e}")
-        # Fallback par défaut - utiliser variable d'environnement
-        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
-        model_type = (
-            "14b" if "14b" in env_model.lower() or "a14b" in env_model.lower() else "5b"
-        )
+        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "")
+        if not env_model:
+            return jsonify({"error": "Aucun modèle détecté"}), 503
+
+        # Tentative registre sur env var
+        try:
+            _reg = get_registry()
+            model_cfg = _reg.get_model(env_model)
+            if model_cfg:
+                return jsonify(
+                    {
+                        "model_type": model_cfg.model_type,
+                        "model_name": env_model,
+                        "display_name": model_cfg.display_name,
+                        "estimated_time": model_cfg.estimated_time,
+                        "gpu_recommendation": model_cfg.vram_requirement,
+                    }
+                )
+        except Exception:
+            pass
+
         return jsonify(
             {
-                "model_type": model_type,
+                "model_type": "unknown",
                 "model_name": env_model,
-                "display_name": f"WAN 2.2 {model_type.upper()}",
-                "estimated_time": "~15 min" if model_type == "14b" else "~8 min",
-                "gpu_recommendation": "80GB+ VRAM"
-                if model_type == "14b"
-                else "48GB+ VRAM",
+                "display_name": env_model,
+                "estimated_time": "~10 min",
+                "gpu_recommendation": "N/A",
             }
         )
 

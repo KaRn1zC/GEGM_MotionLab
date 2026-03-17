@@ -1,6 +1,6 @@
 # Guide du système de documentation - GEGM MotionLab
 
-**Créé le** : 2025-11-26 | **Mis à jour** : 2026-03-16
+**Créé le** : 2025-11-26 | **Mis à jour** : 2026-03-17
 **Objectif** : Maintenir une documentation toujours à jour et optimisée
 
 ---
@@ -69,7 +69,7 @@ Pour chaque modification, j'enregistre :
 
 **Mise à jour documentation nécessaire** :
 - [ ] CLAUDE.md - Section "Patch ComfyUI"
-- [ ] README-RUNPOD.md - Logs de vérification
+- [ ] README_RUNPOD.md - Logs de vérification
 ```
 
 ### Pourquoi c'est important ?
@@ -118,7 +118,7 @@ Quand tu me demanderas "Actualise la documentation", je lirai ce fichier pour sa
 
 ou plus spécifique :
 ```
-"Mets à jour CLAUDE.md et README-RUNPOD.md avec les modifications depuis container51"
+"Mets à jour CLAUDE.md et README_RUNPOD.md avec les modifications depuis container51"
 ```
 
 **Ce que je fais** :
@@ -139,8 +139,8 @@ ou plus spécifique :
 │    actuels pour comprendre le style │
 │    - CLAUDE.md                      │
 │    - README.md                      │
-│    - README-DOCKER.md               │
-│    - README-RUNPOD.md               │
+│    - README_DOCKER.md               │
+│    - README_RUNPOD.md               │
 └─────────────┬───────────────────────┘
               ↓
 ┌─────────────────────────────────────┐
@@ -174,13 +174,13 @@ ou plus spécifique :
 - ✅ Sections : Présentation, Installation, Configuration, Utilisation, API
 - ✅ Format : Markdown avec badges, emojis, exemples clairs
 
-**README-DOCKER.md** :
+**README_DOCKER.md** :
 - ✅ Style : Orienté DevOps
 - ✅ Niveau de détail : Focus Docker uniquement
 - ✅ Sections : Build, Configuration, docker-compose, Variables, Troubleshooting
 - ✅ Format : Markdown avec commandes Docker, docker-compose
 
-**README-RUNPOD.md** :
+**README_RUNPOD.md** :
 - ✅ Style : Guide pas-à-pas de déploiement
 - ✅ Niveau de détail : Focus RunPod uniquement
 - ✅ Sections : Préparation, Déploiement, Configuration, Logs, Troubleshooting
@@ -204,22 +204,22 @@ ou plus spécifique :
 
 ### Exemple 2 : Modification importante
 
-**Situation** : On passe du modèle WAN 2.2 5B au modèle 14B par défaut
+**Situation** : On ajoute un nouveau modèle IA (ex: LTX 2.3) au pipeline
 
-**Ce que je fais** :
-1. ✅ J'ajoute une entrée détaillée dans `docs/CHANGES_TRACKER.md` :
-   - Fichiers modifiés (workflow_manager.py, docker-entrypoint.sh, etc.)
-   - Impact global (nouvelles dépendances GPU, changement de résolution max, etc.)
+**Ce qui se passe** :
+1. ✅ Entrée détaillée dans `docs/CHANGES_TRACKER.md` :
+   - Fichiers modifiés (registre YAML, workflow_manager.py, templates, etc.)
+   - Impact global (nouveau GPU requis, text encoder différent, etc.)
    - Checkboxes pour toutes les sections de doc à mettre à jour
 
-**Quand tu dis "Actualise la documentation"** :
-1. ✅ Je lis l'entrée du tracker
-2. ✅ Je mets à jour :
-   - `CLAUDE.md` : Section "Modèles WAN 2.2" (détails techniques 14B)
-   - `README.md` : Section "Configuration" (nouveau modèle par défaut)
-   - `README-DOCKER.md` : Variables d'environnement (OWNCLOUD_MODEL_NAME)
-   - `README-RUNPOD.md` : GPU requis (H100 au lieu de RTX 6000)
-3. ✅ Je coche toutes les checkboxes [x]
+**Lors de la mise à jour documentation** :
+1. ✅ Lecture de l'entrée du tracker
+2. ✅ Mise à jour :
+   - `CLAUDE.md` : Sections modèles, registre, Makefile
+   - `README.md` : Stack technique, tableaux modèles, commandes Makefile
+   - `README_DOCKER.md` : Entrypoint, modèles supportés
+   - `README_RUNPOD.md` : GPU recommandés, workflows, coûts
+3. ✅ Checkboxes cochées [x]
 
 ---
 
@@ -274,7 +274,7 @@ ou plus spécifique :
 
 ```
 "Mets à jour CLAUDE.md uniquement"
-"Mets à jour README-RUNPOD.md avec les changements de patch v3"
+"Mets à jour README_RUNPOD.md avec les changements de patch v3"
 ```
 → Je mets à jour seulement les fichiers demandés
 
@@ -332,8 +332,8 @@ Tu pourras me dire :
 Et je mettrai à jour :
 - `CLAUDE.md` (version 3.2.0 avec patch v3, système de tracking, etc.)
 - `README.md` (si nécessaire)
-- `README-DOCKER.md` (patch automatique, etc.)
-- `README-RUNPOD.md` (logs patch v3, vérifications, etc.)
+- `README_DOCKER.md` (entrypoint, modèles supportés)
+- `README_RUNPOD.md` (GPU, workflows, coûts)
 
 ---
 
