@@ -30,12 +30,56 @@ fi
 # TÉLÉCHARGEMENT DES MODÈLES (UPSTREAM + FALLBACK OWNCLOUD)
 # ============================================
 
-# Utiliser OWNCLOUD_MODEL_NAME ou par défaut wan2.2-ti2v-5b
-MODEL_NAME="${OWNCLOUD_MODEL_NAME:-wan2.2-ti2v-5b}"
+# Modèle à charger (obligatoire)
+MODEL_NAME="${OWNCLOUD_MODEL_NAME:-}"
+if [ -z "$MODEL_NAME" ]; then
+    echo "❌ OWNCLOUD_MODEL_NAME non défini"
+    echo "   Modèles disponibles:"
+    python -m src.model_registry list-models 2>/dev/null || echo "   (registre indisponible)"
+    exit 1
+fi
 MODEL_DIR="/workspace/comfyui/ComfyUI/models/checkpoints/${MODEL_NAME}"
 
 echo ""
 echo "📦 Modèle configuré: $MODEL_NAME"
+
+# Bootstrap: propriétés du modèle depuis le registre (un seul appel Python)
+set +e
+BOOTSTRAP_OUTPUT=$(python3 -c "
+import sys
+sys.path.insert(0, '/workspace')
+from src.model_registry import get_registry
+registry = get_registry()
+m = registry.get_model('$MODEL_NAME')
+if not m:
+    sys.exit(1)
+shared = registry.get_shared_components()
+vae_int = 'true' if m.vae.filename == 'integrated' else 'false'
+vae_fn = '' if m.vae.filename == 'integrated' else m.vae.filename
+has_te = 'true' if m.text_encoder else 'false'
+te_fn = m.text_encoder.filename if m.text_encoder else ''
+has_sym = 'true' if m.symlinks else 'false'
+print(f'MODEL_ARCH={m.architecture}')
+print(f'DISPLAY_NAME=\"{m.display_name}\"')
+print(f'VAE_INTEGRATED={vae_int}')
+print(f'VAE_FILENAME={vae_fn}')
+print(f'HAS_MODEL_TE={has_te}')
+print(f'MODEL_TE_FILENAME={te_fn}')
+print(f'HAS_SYMLINKS={has_sym}')
+print(f'SHARED_TE_FILENAME={shared.text_encoder.filename}')
+" 2>/dev/null)
+BOOTSTRAP_EXIT=$?
+set -e
+
+if [ $BOOTSTRAP_EXIT -ne 0 ]; then
+    echo "❌ Modèle '$MODEL_NAME' inconnu du registre"
+    echo "   Modèles disponibles:"
+    python -m src.model_registry list-models 2>/dev/null || echo "   (registre indisponible)"
+    exit 1
+fi
+eval "$BOOTSTRAP_OUTPUT"
+
+echo "   Modèle: $DISPLAY_NAME (arch=$MODEL_ARCH)"
 
 # ========================================
 # NETTOYAGE: Supprimer d'éventuels anciens modèles T2V ou formats obsolètes
@@ -72,11 +116,10 @@ done
 echo "✅ Nettoyage terminé"
 echo ""
 
-# Vérifier la présence des fichiers — registre d'abord, fallback hardcodé
+# Vérifier la présence des fichiers via registre
 NEED_DOWNLOAD=false
 EXPECTED_JSON=$(python -m src.model_registry get-expected-files "$MODEL_NAME" 2>/dev/null)
 if [ $? -eq 0 ] && [ -n "$EXPECTED_JSON" ]; then
-    # Vérification dynamique via registre
     NEED_DOWNLOAD=$(echo "$EXPECTED_JSON" | python3 -c "
 import sys, json, os
 files = json.load(sys.stdin)
@@ -88,12 +131,8 @@ for f in files:
 print('false')
 ")
 else
-    # Fallback: check hardcodé (5B/14B)
-    if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
-       { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp16.safetensors" ] || \
-                                                      [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp16.safetensors" ]; }; }; then
-        NEED_DOWNLOAD=true
-    fi
+    echo "❌ Impossible de vérifier les fichiers (registre indisponible)"
+    exit 1
 fi
 
 if [ "$NEED_DOWNLOAD" = "true" ]; then
@@ -132,52 +171,69 @@ if [ "$NEED_DOWNLOAD" = "true" ]; then
 
                 # Déplacer les fichiers vers le répertoire ComfyUI
                 echo "📦 Déplacement des fichiers vers ComfyUI..."
-                mkdir -p /workspace/comfyui/ComfyUI/models/checkpoints
+                COMFYUI_MODELS="/workspace/comfyui/ComfyUI/models"
+                mkdir -p "$COMFYUI_MODELS/checkpoints"
 
-                # Déplacer le dossier du modèle
+                # Déplacer le dossier modèle si existant (WAN: contient les symlinks)
                 if [ -d "/workspace/models/$MODEL_NAME" ]; then
-                    mv /workspace/models/$MODEL_NAME /workspace/comfyui/ComfyUI/models/checkpoints/
+                    mv "/workspace/models/$MODEL_NAME" "$COMFYUI_MODELS/checkpoints/"
                     echo "   ✅ Modèle déplacé: $MODEL_NAME"
                 fi
 
-                # Déplacer diffusion_models, text_encoders, vae si présents
-                for dir in diffusion_models text_encoders vae; do
+                # Déplacer diffusion_models/ et vae/ dans checkpoints/ (WAN uniquement, n'existe pas pour LTX)
+                for dir in diffusion_models vae; do
                     if [ -d "/workspace/models/$dir" ]; then
-                        mv /workspace/models/$dir /workspace/comfyui/ComfyUI/models/checkpoints/
+                        mv "/workspace/models/$dir" "$COMFYUI_MODELS/checkpoints/"
                         echo "   ✅ Dossier déplacé: $dir"
                     fi
                 done
 
-                # Recréer les symlinks dans le dossier du modèle (fix: symlinks cassés après déplacement)
-                echo "🔗 Recréation des symlinks dans $MODEL_NAME..."
-                cd /workspace/comfyui/ComfyUI/models/checkpoints
-                if [ -d "$MODEL_NAME" ]; then
-                    cd "$MODEL_NAME"
-                    # Supprimer les symlinks cassés
-                    find . -maxdepth 1 -type l -delete
+                # Text encoders — destination selon le type
+                if [ -d "/workspace/models/text_encoders" ]; then
+                    if [ "$HAS_MODEL_TE" = "true" ]; then
+                        # Text encoder propre au modèle (Gemma) → directement dans text_encoders/
+                        mkdir -p "$COMFYUI_MODELS/text_encoders"
+                        for f in /workspace/models/text_encoders/*.safetensors; do
+                            [ -f "$f" ] && mv "$f" "$COMFYUI_MODELS/text_encoders/"
+                        done
+                        echo "   ✅ Text encoder déplacé dans text_encoders/"
+                    else
+                        # T5 partagé → checkpoints/text_encoders/ (pour les symlinks WAN)
+                        mv "/workspace/models/text_encoders" "$COMFYUI_MODELS/checkpoints/"
+                        echo "   ✅ Dossier déplacé: text_encoders"
+                    fi
+                fi
 
-                    # Recréer les symlinks — registre d'abord, fallback hardcodé
-                    SYMLINKS_JSON=$(python -m src.model_registry get-symlinks "$MODEL_NAME" 2>/dev/null)
-                    if [ $? -eq 0 ] && [ -n "$SYMLINKS_JSON" ]; then
-                        echo "$SYMLINKS_JSON" | python3 -c "
+                # Déplacer les checkpoints loose dans le dossier modèle (LTX: fichiers dans models/checkpoints/)
+                if [ -d "/workspace/models/checkpoints" ]; then
+                    mkdir -p "$COMFYUI_MODELS/checkpoints/$MODEL_NAME"
+                    for f in /workspace/models/checkpoints/*.safetensors; do
+                        [ -f "$f" ] && mv "$f" "$COMFYUI_MODELS/checkpoints/$MODEL_NAME/"
+                    done
+                    echo "   ✅ Checkpoints déplacés dans $MODEL_NAME/"
+                fi
+
+                # Recréer les symlinks si nécessaire
+                if [ "$HAS_SYMLINKS" = "true" ]; then
+                    echo "🔗 Recréation des symlinks dans $MODEL_NAME..."
+                    cd "$COMFYUI_MODELS/checkpoints"
+                    if [ -d "$MODEL_NAME" ]; then
+                        cd "$MODEL_NAME"
+                        find . -maxdepth 1 -type l -delete
+
+                        SYMLINKS_JSON=$(python -m src.model_registry get-symlinks "$MODEL_NAME" 2>/dev/null)
+                        if [ $? -eq 0 ] && [ -n "$SYMLINKS_JSON" ]; then
+                            echo "$SYMLINKS_JSON" | python3 -c "
 import sys, json, os
 for s in json.load(sys.stdin):
     os.symlink(s['source'], s['target'])
 "
-                        echo "   ✅ Symlinks $MODEL_NAME recréés (via registre)"
-                    elif [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
-                        ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors .
-                        ln -sf ../text_encoders/umt5_xxl_fp16.safetensors .
-                        ln -sf ../vae/wan2.2_vae.safetensors .
-                        echo "   ✅ Symlinks 5B recréés"
-                    elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-                        ln -sf ../diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors .
-                        ln -sf ../diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors .
-                        ln -sf ../text_encoders/umt5_xxl_fp16.safetensors .
-                        ln -sf ../vae/wan_2.1_vae.safetensors .
-                        echo "   ✅ Symlinks 14B recréés"
+                            echo "   ✅ Symlinks $MODEL_NAME recréés"
+                        else
+                            echo "   ⚠️ Impossible de recréer les symlinks (registre indisponible)"
+                        fi
+                        cd /workspace
                     fi
-                    cd /workspace
                 fi
 
                 # Nettoyer le dossier models temporaire
@@ -247,49 +303,40 @@ for s in json.load(sys.stdin):
         CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
         DIFFUSION_DIR="$CHECKPOINTS_BASE/diffusion_models"
 
-        # Vérifier selon le modèle (ComfyUI Native format from Comfy-Org)
-        if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
-            # 5B: vérifier wan2.2_ti2v_5B_fp16.safetensors (~9.3GB)
-            DIFFUSION_FILE="$DIFFUSION_DIR/wan2.2_ti2v_5B_fp16.safetensors"
-
-            if [ ! -f "$DIFFUSION_FILE" ]; then
-                echo "❌ Fichier manquant: wan2.2_ti2v_5B_fp16.safetensors"
-                exit 1
-            fi
-
-            size=$(stat -f%z "$DIFFUSION_FILE" 2>/dev/null || stat -c%s "$DIFFUSION_FILE" 2>/dev/null)
-            size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
-
-            if [ $size -lt 8000000000 ]; then
-                echo "❌ Modèle diffusion 5B incomplet: $size_gb GB (minimum 8GB)"
-                exit 1
-            fi
-
-            echo "✅ wan2.2_ti2v_5B_fp16.safetensors: $size_gb GB"
-
-        elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-            # 14B: vérifier les deux fichiers high/low noise FP16 (~28GB chacun)
-            for file in "wan2.2_i2v_high_noise_14B_fp16.safetensors" "wan2.2_i2v_low_noise_14B_fp16.safetensors"; do
-                DIFFUSION_FILE="$DIFFUSION_DIR/$file"
-
-                if [ ! -f "$DIFFUSION_FILE" ]; then
-                    echo "❌ Fichier manquant: $file"
-                    exit 1
-                fi
-
-                size=$(stat -f%z "$DIFFUSION_FILE" 2>/dev/null || stat -c%s "$DIFFUSION_FILE" 2>/dev/null)
-                size_gb=$(echo "scale=2; $size / 1024 / 1024 / 1024" | bc)
-
-                if [ $size -lt 25000000000 ]; then
-                    echo "❌ $file incomplet: $size_gb GB (minimum 25GB)"
-                    exit 1
-                fi
-
-                echo "✅ $file: $size_gb GB"
-            done
+        # Vérification générique via registre (tous modèles)
+        set +e
+        python3 -c "
+import os, sys
+sys.path.insert(0, '/workspace')
+from src.model_registry import get_registry
+registry = get_registry()
+files = registry.get_diffusion_files('$MODEL_NAME')
+if not files:
+    print('❌ Modèle inconnu du registre')
+    sys.exit(1)
+for f in files:
+    # Chercher dans MODEL_DIR d'abord, puis dans checkpoints/<comfyui_subdir>/
+    path = os.path.join('$MODEL_DIR', f.filename)
+    if not os.path.isfile(path):
+        alt = os.path.join('$CHECKPOINTS_BASE', f.comfyui_subdir, f.filename)
+        if os.path.isfile(alt):
+            path = alt
+        else:
+            print(f'❌ Fichier manquant: {f.filename}')
+            sys.exit(1)
+    size_gb = os.path.getsize(path) / (1024**3)
+    if size_gb < f.min_size_gb:
+        print(f'❌ {f.filename} incomplet: {size_gb:.2f} GB (min: {f.min_size_gb} GB)')
+        sys.exit(1)
+    print(f'✅ {f.filename}: {size_gb:.2f} GB')
+"
+        VERIFY_EXIT=$?
+        set -e
+        if [ $VERIFY_EXIT -ne 0 ]; then
+            exit 1
         fi
 
-        echo "✅ Tous les fichiers diffusion sont complets (ComfyUI Native)"
+        echo "✅ Tous les fichiers sont complets"
 
         # ============================================
         # RECONSTITUTION DES FICHIERS DÉCOUPÉS (si OwnCloud fallback)
@@ -329,123 +376,136 @@ else
 fi
 
 # ============================================
-# SETUP DIFFUSION MODELS
+# SETUP DIFFUSION MODELS (modèles avec symlinks uniquement)
 # ============================================
-# Configuration des symlinks pour diffusion_models et T5 Encoder
-# Note: Le T5 Encoder est inclus dans le dossier du modèle WAN
-# et sera symlinké par setup_diffusion_models.sh
 
-echo ""
-echo "🔗 Configuration des modèles et encodeurs..."
+if [ "$HAS_SYMLINKS" = "true" ]; then
+    echo ""
+    echo "🔗 Configuration des modèles et encodeurs ($DISPLAY_NAME)..."
 
-if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
-    bash /workspace/scripts/setup_diffusion_models.sh
+    if [ -f "/workspace/scripts/setup_diffusion_models.sh" ]; then
+        bash /workspace/scripts/setup_diffusion_models.sh
+    fi
 fi
 
 # ============================================
-# VAE COMFYUI (ComfyUI Native - déjà compatible 48 canaux)
+# VAE COMFYUI
 # ============================================
 
-echo ""
-echo "✅ VAE ComfyUI Native inclus dans le modèle (déjà compatible 48 canaux)"
+if [ "$VAE_INTEGRATED" = "true" ]; then
+    # VAE intégré dans le checkpoint, rien à configurer
+    echo ""
+    echo "✅ VAE intégré dans le checkpoint ($DISPLAY_NAME)"
+else
+    # VAE séparé à copier vers /models/vae/
+    echo ""
+    echo "🔧 Configuration VAE ($DISPLAY_NAME)..."
 
-# Créer symlinks vers /models/vae/ pour WanVideoVAELoader
-VAE_DIR="/workspace/comfyui/ComfyUI/models/vae"
-mkdir -p "$VAE_DIR"
+    VAE_DIR="/workspace/comfyui/ComfyUI/models/vae"
+    mkdir -p "$VAE_DIR"
 
-# Utiliser le chemin réel après déplacement (dans vae/ au lieu du symlink dans $MODEL_DIR)
-CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
-VAE_BASE="$CHECKPOINTS_BASE/vae"
-
-# Déterminer le nom du fichier VAE — registre d'abord, fallback hardcodé
-VAE_FILENAME=$(python -m src.model_registry get-vae "$MODEL_NAME" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['filename'])" 2>/dev/null)
-if [ $? -eq 0 ] && [ -n "$VAE_FILENAME" ]; then
+    CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
+    VAE_BASE="$CHECKPOINTS_BASE/vae"
     VAE_SOURCE="$VAE_BASE/$VAE_FILENAME"
-    echo "   Chemin source (registre): $VAE_SOURCE"
-elif [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
-    VAE_SOURCE="$VAE_BASE/wan2.2_vae.safetensors"
-    echo "   Chemin source 5B: $VAE_SOURCE (1.41 GB)"
-elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
-    VAE_SOURCE="$VAE_BASE/wan_2.1_vae.safetensors"
-    echo "   Chemin source 14B: $VAE_SOURCE (254 MB - VAE 2.1 spécifique au 14B)"
-fi
+    echo "   Chemin source: $VAE_SOURCE"
 
-if [ -f "$VAE_SOURCE" ]; then
-    # Copier le VAE au lieu de créer un symlink (fix: WanVideoVAELoader ne suit pas toujours les symlinks)
-    cp "$VAE_SOURCE" "$VAE_DIR/$(basename $VAE_SOURCE)"
-    echo "   ✅ VAE copié: $VAE_DIR/$(basename $VAE_SOURCE)"
-else
-    echo "   ⚠️ VAE non trouvé: $VAE_SOURCE"
+    if [ -f "$VAE_SOURCE" ]; then
+        cp "$VAE_SOURCE" "$VAE_DIR/$VAE_FILENAME"
+        echo "   ✅ VAE copié: $VAE_DIR/$VAE_FILENAME"
+    else
+        echo "   ⚠️ VAE non trouvé: $VAE_SOURCE"
+    fi
 fi
 
 # ============================================
-# T5 ENCODER (ComfyUI Native - FP16)
+# TEXT ENCODER
+# ============================================
+
+if [ "$HAS_MODEL_TE" = "true" ]; then
+    # Text encoder propre au modèle (ex: Gemma)
+    echo ""
+    echo "🔧 Configuration Text Encoder ($MODEL_TE_FILENAME)..."
+
+    TE_DIR="/workspace/comfyui/ComfyUI/models/text_encoders"
+    mkdir -p "$TE_DIR"
+
+    if [ -f "$TE_DIR/$MODEL_TE_FILENAME" ]; then
+        echo "   ✅ $MODEL_TE_FILENAME déjà en place"
+    elif [ -f "$MODEL_DIR/$MODEL_TE_FILENAME" ]; then
+        cp "$MODEL_DIR/$MODEL_TE_FILENAME" "$TE_DIR/"
+        echo "   ✅ $MODEL_TE_FILENAME copié depuis model dir"
+    else
+        echo "   ⚠️ Text encoder non trouvé: $MODEL_TE_FILENAME"
+    fi
+
+else
+    # Text encoder partagé (T5)
+    echo ""
+    echo "🔧 Configuration T5 Encoder ($SHARED_TE_FILENAME)..."
+
+    T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
+    mkdir -p "$T5_DIR"
+
+    CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
+    T5_BASE="$CHECKPOINTS_BASE/text_encoders"
+    T5_SOURCE="$T5_BASE/$SHARED_TE_FILENAME"
+    echo "   Chemin source: $T5_SOURCE"
+
+    if [ -f "$T5_SOURCE" ]; then
+        ln -sf "$T5_SOURCE" "$T5_DIR/$SHARED_TE_FILENAME"
+        echo "   ✅ Symlink créé: $T5_DIR/$SHARED_TE_FILENAME"
+    else
+        echo "   ⚠️ T5 Encoder non trouvé: $T5_SOURCE"
+    fi
+fi
+
+# ============================================
+# CLIP VISION + UPSCALERS
 # ============================================
 
 echo ""
-echo "✅ T5 Encoder ComfyUI Native (FP16)"
+echo "🔧 Configuration composants partagés..."
 
-# Créer symlinks pour T5 Encoder
-T5_DIR="/workspace/comfyui/ComfyUI/models/text_encoders/t5"
-mkdir -p "$T5_DIR"
-
-# Utiliser le chemin réel après déplacement (dans text_encoders/ au lieu du symlink dans $MODEL_DIR)
-CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
-T5_BASE="$CHECKPOINTS_BASE/text_encoders"
-
-# Le T5 est le même pour 5B et 14B (partagé)
-T5_SOURCE="$T5_BASE/umt5_xxl_fp16.safetensors"
-echo "   Chemin source: $T5_SOURCE"
-
-if [ -f "$T5_SOURCE" ]; then
-    # Créer symlink
-    ln -sf "$T5_SOURCE" "$T5_DIR/umt5_xxl_fp16.safetensors"
-    echo "   ✅ Symlink créé: $T5_DIR/umt5_xxl_fp16.safetensors"
-else
-    echo "   ⚠️ T5 Encoder non trouvé: $T5_SOURCE"
-fi
-
-# ============================================
-# CLIP VISION + UPSCALERS (depuis OwnCloud ou fallback upstream)
-# ============================================
-
-echo ""
-echo "🔧 Configuration CLIP Vision + Upscalers..."
-
-CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
-CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
 UPSCALE_DIR="/workspace/comfyui/ComfyUI/models/upscale_models"
 ULTRASHARP_FILE="$UPSCALE_DIR/4x-UltraSharp.pth"
 REALESRGAN_FILE="$UPSCALE_DIR/RealESRGAN_x4plus.pth"
 
-mkdir -p "$CLIP_VISION_DIR"
 mkdir -p "$UPSCALE_DIR"
 
-# Chemins possibles des composants depuis OwnCloud (uploadés avec le modèle)
-OWNCLOUD_CLIP="$MODEL_DIR/clip_vision/clip-vit-large-patch14-336.safetensors"
+# Chemins possibles depuis OwnCloud
 OWNCLOUD_ULTRASHARP="$MODEL_DIR/upscale_models/4x-UltraSharp.pth"
 OWNCLOUD_REALESRGAN="$MODEL_DIR/upscale_models/RealESRGAN_x4plus.pth"
 
-# CLIP Vision
-if [ -f "$OWNCLOUD_CLIP" ]; then
-    echo "  ✅ CLIP Vision trouvé dans OwnCloud, copie..."
-    cp "$OWNCLOUD_CLIP" "$CLIP_VISION_FILE"
-    echo "  ✅ CLIP Vision copié depuis OwnCloud ($(du -h $CLIP_VISION_FILE | cut -f1))"
-elif [ ! -f "$CLIP_VISION_FILE" ] || [ ! -s "$CLIP_VISION_FILE" ]; then
-    echo "  📥 CLIP Vision absent, téléchargement upstream (~2.4GB)..."
-    wget --progress=bar:force \
-        "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
-        -O "$CLIP_VISION_FILE"
+# CLIP Vision (modèles sans text encoder propre — ceux avec Gemma n'en ont pas besoin)
+if [ "$HAS_MODEL_TE" != "true" ]; then
+    CLIP_VISION_DIR="/workspace/comfyui/ComfyUI/models/clip_vision"
+    CLIP_VISION_FILE="$CLIP_VISION_DIR/clip-vit-large-patch14-336.safetensors"
+    mkdir -p "$CLIP_VISION_DIR"
 
-    if [ $? -eq 0 ] && [ -s "$CLIP_VISION_FILE" ]; then
-        echo "  ✅ CLIP Vision téléchargé upstream ($(du -h $CLIP_VISION_FILE | cut -f1))"
+    OWNCLOUD_CLIP="$MODEL_DIR/clip_vision/clip-vit-large-patch14-336.safetensors"
+
+    if [ -f "$OWNCLOUD_CLIP" ]; then
+        echo "  ✅ CLIP Vision trouvé dans OwnCloud, copie..."
+        cp "$OWNCLOUD_CLIP" "$CLIP_VISION_FILE"
+        echo "  ✅ CLIP Vision copié depuis OwnCloud ($(du -h $CLIP_VISION_FILE | cut -f1))"
+    elif [ ! -f "$CLIP_VISION_FILE" ] || [ ! -s "$CLIP_VISION_FILE" ]; then
+        echo "  📥 CLIP Vision absent, téléchargement upstream (~2.4GB)..."
+        wget --progress=bar:force \
+            "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
+            -O "$CLIP_VISION_FILE"
+
+        if [ $? -eq 0 ] && [ -s "$CLIP_VISION_FILE" ]; then
+            echo "  ✅ CLIP Vision téléchargé upstream ($(du -h $CLIP_VISION_FILE | cut -f1))"
+        else
+            echo "  ❌ Échec téléchargement CLIP Vision"
+            rm -f "$CLIP_VISION_FILE"
+            exit 1
+        fi
     else
-        echo "  ❌ Échec téléchargement CLIP Vision"
-        rm -f "$CLIP_VISION_FILE"
-        exit 1
+        echo "  ✅ CLIP Vision déjà présent: $(du -h $CLIP_VISION_FILE | cut -f1)"
     fi
 else
-    echo "  ✅ CLIP Vision déjà présent: $(du -h $CLIP_VISION_FILE | cut -f1)"
+    echo "  ℹ️  CLIP Vision non requis ($DISPLAY_NAME utilise un text encoder propre)"
 fi
 
 # 4x-UltraSharp

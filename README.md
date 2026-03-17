@@ -1,24 +1,26 @@
 # GEGM MotionLab
 
-**Studio professionnel de cinemagraphs propulsé par WAN 2.2**
+**Studio professionnel de cinemagraphs propulsé par WAN 2.2 & LTX 2.3**
 
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://docker.com)
 [![ComfyUI](https://img.shields.io/badge/comfyui-latest-blueviolet.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![WAN 2.2](https://img.shields.io/badge/WAN%202.2-5B%20%2F%2014B%20MoE-success.svg)](https://huggingface.co/Wan-AI)
-[![Version](https://img.shields.io/badge/version-4.4.0-blue.svg)](CHANGELOG.md)
+[![LTX 2.3](https://img.shields.io/badge/LTX%202.3-22B%20DiT-orange.svg)](https://huggingface.co/Lightricks)
+[![Version](https://img.shields.io/badge/version-5.1.0-blue.svg)](CHANGELOG.md)
 
 ---
 
 ## Vue d'ensemble
 
-GEGM MotionLab transforme vos images statiques en **cinemagraphs professionnels** grâce aux modèles IA WAN 2.2.
+GEGM MotionLab transforme vos images statiques en **cinemagraphs professionnels** grâce à 4 modèles IA.
 
 **Fonctionnalités :**
 - Interface web Flask moderne
-- 2 modèles IA : 5B (standard) et 14B MoE (premium)
+- 4 modèles IA : WAN 2.2 (5B, 14B MoE) et LTX 2.3 (Distilled, Dev)
 - Paramètres avancés : motion, consistance, boucles fluides
 - Qualité 720p à 4K avec upscaling adaptatif
+- Pipeline résolution model-agnostic piloté par registre YAML
 - Déploiement Docker local ou cloud (RunPod)
 
 ---
@@ -41,11 +43,10 @@ open http://localhost:5000
 
 ```bash
 # Préparer modèles
-./scripts/setup_wan22_native.sh wan2.2-ti2v-5b
-make full-workflow-5b
+make workflow MODEL=wan2.2-ti2v-5b
 
 # Déployer
-make runpod-deploy
+make runpod-deploy-quick
 ```
 
 Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
@@ -57,21 +58,29 @@ Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
 | Composant | Technologie |
 |-----------|-------------|
 | Backend | Python 3.11 + Flask 3.0 |
-| IA Engine | ComfyUI + WAN 2.2 (5B/14B MoE) |
+| IA Engine | ComfyUI + WAN 2.2 (5B/14B MoE) + LTX 2.3 (22B DiT) |
 | Deep Learning | PyTorch 2.6 + CUDA 12.8 |
 | Container | Docker multi-arch |
 | Storage | OwnCloud + rclone |
+| Config | Registre modèles YAML (model-agnostic) |
 
 ---
 
-## Modèles WAN 2.2
+## Modèles
+
+### WAN 2.2
 
 | Modèle | Taille | GPU Recommandés | Temps |
 |--------|--------|-----------------|-------|
-| **5B** | 9.3 GB | RTX 6000 Ada, L40, L40S (ou 48GB+ VRAM) | ~5 min |
-| **14B MoE** | 2×28.6 GB | RTX Pro 6000, RTX Pro 6000 WK, H100 SXM (ou 80GB+ VRAM) | ~8 min |
+| **5B** | 9.3 GB | RTX 6000 Ada, L40, L40S (48GB+) | ~5 min |
+| **14B MoE** | 2×28.6 GB | RTX Pro 6000, H100 SXM (80GB+) | ~8 min |
 
-**Architecture 14B MoE :** 2 experts (high_noise + low_noise) avec switching boundary=0.9
+### LTX 2.3
+
+| Modèle | Taille | GPU Recommandés | Temps |
+|--------|--------|-----------------|-------|
+| **22B Distilled (FP8)** | 29.5 GB | RTX 6000 Ada, L40, L40S (48GB+) | ~2 min |
+| **22B Dev (BF16)** | 46.1 GB | RTX Pro 6000, H100 SXM (80GB+) | ~8 min |
 
 ---
 
@@ -82,10 +91,10 @@ GEGM_MotionLab/
 ├── web_interface/          # Flask app (routes.py, app.py, jobs.py, templates/)
 ├── workflows/              # ComfyUI workflows + templates
 │   ├── workflow_manager.py
-│   └── templates/          # wan22_{5b|14b}_{i2v|with_upscale}.json
-├── src/                    # Core modules (comfyui_client, owncloud, logger)
+│   └── templates/          # 6 JSON (wan22 5b/14b + ltx23, chacun normal + upscale)
+├── src/                    # Core modules (comfyui_client, model_registry, owncloud, logger)
 ├── scripts/                # Utilitaires (setup, download, verify)
-├── config/                 # Configuration OwnCloud, logging, modèles
+├── config/                 # model_registry.yaml, owncloud.yaml, logging.yaml (ref)
 ├── Dockerfile              # Single-stage CUDA 12.8 (PYTHONPATH=/workspace)
 ├── requirements.txt        # Dépendances AVEC PyTorch (local)
 └── requirements-base.txt   # Dépendances SANS PyTorch (Docker)
@@ -131,16 +140,25 @@ OWNCLOUD_MODEL_FOLDER=/GEGM_ComfyUI/Models
 
 ```bash
 # Développement
-make up              # Démarrer services
-make down            # Arrêter services
-make logs            # Voir logs
+make up                    # Démarrer services
+make down                  # Arrêter services
+make logs                  # Voir logs
 
-# Modèles
-make full-workflow-5b   # Workflow complet 5B
-make full-workflow-14b  # Workflow complet 14B
+# Workflow modèle (download → upload OwnCloud → clean)
+make workflow MODEL=<nom>  # Workflow complet générique
+make workflow-5b           # Alias WAN 5B
+make workflow-14b          # Alias WAN 14B
+make workflow-ltx-fast     # Alias LTX Distilled
+make workflow-ltx-pro      # Alias LTX Dev
+
+# Workflows séquentiels
+make workflow-wan-all      # WAN 14B puis 5B
+make workflow-ltx-all      # LTX Dev puis Distilled
+make workflow-all          # Tous les modèles (4)
 
 # Déploiement
-make runpod-deploy      # Build multi-arch + push
+make runpod-deploy-quick        # Build AMD64 + push → :latest
+make runpod-deploy-quick-test   # Build AMD64 + push → :test
 ```
 
 ---
@@ -150,7 +168,7 @@ make runpod-deploy      # Build multi-arch + push
 | Erreur | Solution |
 |--------|----------|
 | CUDA out of memory | Réduire résolution ou steps |
-| VAE 48/96 channels | Vérifier VAE correct pour modèle |
+| VAE 48/96/128 channels | Vérifier VAE correct pour modèle |
 | ComfyUI timeout | Vérifier modèles présents |
 
 ---
@@ -159,18 +177,19 @@ make runpod-deploy      # Build multi-arch + push
 
 - [README_DOCKER.md](README_DOCKER.md) - Guide Docker
 - [README_RUNPOD.md](README_RUNPOD.md) - Guide RunPod
-- [.md](.md) - Guide développeur
 
 ---
 
 ## Ressources
 
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
-- [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)
-- [ComfyUI-WanMoeKSampler](https://github.com/stduhpf/ComfyUI-WanMoeKSampler)
+- [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper) (WAN 5B)
+- [ComfyUI-WanMoeKSampler](https://github.com/stduhpf/ComfyUI-WanMoeKSampler) (WAN 14B)
+- [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) (LTX 2.3)
 - [WAN 2.2 HuggingFace](https://huggingface.co/Wan-AI)
+- [LTX 2.3 HuggingFace](https://huggingface.co/Lightricks)
 - [RunPod](https://runpod.io)
 
 ---
 
-**Version:** 4.4.0 | **Status:** Production Ready | **Date:** 2026-03-16
+**Version:** 5.1.0 | **Status:** Production Ready | **Date:** 2026-03-17

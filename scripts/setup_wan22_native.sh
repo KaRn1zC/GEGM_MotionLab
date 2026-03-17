@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Argument: nom du modèle spécifique ou "all" (défaut)
 MODEL="${1:-all}"
 
-echo "🎬 Setup WAN 2.2 - Version ComfyUI Native (Comfy-Org)"
-echo "====================================================="
+echo "🎬 Setup modèles - Version ComfyUI Native"
+echo "============================================"
 
 # Vérifier l'environnement virtuel (sauf sur Docker/RunPod)
 # Docker/RunPod : Python installé globalement, pas de venv nécessaire
@@ -31,7 +31,7 @@ pip install -q "huggingface_hub"
 
 # Étape 2: Créer les dossiers modèles (structure ComfyUI native)
 echo "📁 Création des dossiers de modèles (structure ComfyUI)..."
-mkdir -p models/{diffusion_models,text_encoders,vae}
+mkdir -p models/{diffusion_models,text_encoders,vae,checkpoints}
 mkdir -p models/wan2.2-ti2v-5b  # Pour compatibilité avec upload/download existant
 mkdir -p models/wan2.2-i2v-a14b
 
@@ -342,23 +342,26 @@ else
 
     MANIFEST=$(python -m src.model_registry get-hf-downloads "$MODEL" 2>/dev/null)
     if [ $? -eq 0 ] && [ -n "$MANIFEST" ]; then
-        REPO=$(echo "$MANIFEST" | python3 -c "import sys,json; print(json.load(sys.stdin)['repo'])")
         TEMP_DL="./models/.temp_download"
         mkdir -p "$TEMP_DL"
 
         FILE_COUNT=$(echo "$MANIFEST" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['files']))")
         FILE_IDX=0
 
+        # Téléchargement multi-repo : chaque fichier porte son propre repo
         echo "$MANIFEST" | python3 -c "
 import sys, json
-for f in json.load(sys.stdin)['files']:
-    print(f['hf_path'] + '|' + f['dest_subdir'] + '|' + f['filename'])
-" | while IFS='|' read -r hf_path dest_subdir filename; do
+data = json.load(sys.stdin)
+default_repo = data['repo']
+for f in data['files']:
+    repo = f.get('repo', default_repo)
+    print(repo + '|' + f['hf_path'] + '|' + f['dest_subdir'] + '|' + f['filename'])
+" | while IFS='|' read -r file_repo hf_path dest_subdir filename; do
             FILE_IDX=$((FILE_IDX + 1))
             echo "  $FILE_IDX/$FILE_COUNT: $filename..."
 
             mkdir -p "./models/$dest_subdir"
-            hf download "$REPO" "$hf_path" --local-dir "$TEMP_DL"
+            hf download "$file_repo" "$hf_path" --local-dir "$TEMP_DL"
             mv "$TEMP_DL/$hf_path" "./models/$dest_subdir/"
         done
 
@@ -381,7 +384,7 @@ for s in json.load(sys.stdin):
             echo "✅ Symlinks créés"
         fi
 
-        # Vérifications intégrité
+        # Vérification intégrité — modèle de diffusion
         echo ""
         echo "🔍 Vérification intégrité modèle de diffusion ($MODEL)..."
         python "$SCRIPT_DIR/verify_diffusion_model.py" "$MODEL"
@@ -390,14 +393,27 @@ for s in json.load(sys.stdin):
             exit 1
         fi
 
-        echo ""
-        echo "🔍 Vérification intégrité Text Encoder ($MODEL)..."
-        python "$SCRIPT_DIR/verify_t5_integrity.py" "$MODEL"
-        if [ $? -ne 0 ]; then
-            echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
-            exit 1
+        # Vérification text encoder — T5 partagé uniquement (skip si model-spécifique)
+        HAS_SHARED_T5=$(python3 -c "
+from src.model_registry import get_registry
+m = get_registry().get_model('$MODEL')
+print('yes' if m and not m.text_encoder else 'no')
+" 2>/dev/null || echo "yes")
+
+        if [ "$HAS_SHARED_T5" = "yes" ]; then
+            echo ""
+            echo "🔍 Vérification intégrité Text Encoder T5 ($MODEL)..."
+            python "$SCRIPT_DIR/verify_t5_integrity.py" "$MODEL"
+            if [ $? -ne 0 ]; then
+                echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
+                exit 1
+            fi
+        else
+            echo ""
+            echo "ℹ️  Text encoder model-spécifique (skip vérification T5)"
         fi
 
+        # Vérification VAE
         echo ""
         echo "🔍 Vérification intégrité VAE ($MODEL)..."
         python "$SCRIPT_DIR/verify_vae.py" "$MODEL"
@@ -407,7 +423,7 @@ for s in json.load(sys.stdin):
         fi
     else
         echo "❌ Modèle invalide: $MODEL"
-        echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"
+        echo "Usage: $0 [all|<model_name>]"
         echo ""
         echo "Modèles disponibles dans le registre:"
         python -m src.model_registry list-models 2>/dev/null || true
@@ -509,66 +525,53 @@ echo "🔗 Création de symlinks vers composants partagés dans dossiers modèle
 # Pour upload sur OwnCloud : créer symlinks dans models/{model_name}/
 # split_and_upload.py utilise --copy-links donc uploadera le contenu réel
 
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
-    echo "  Modèle 5B: Ajout symlinks CLIP + Upscalers..."
-    mkdir -p models/wan2.2-ti2v-5b/clip_vision
-    mkdir -p models/wan2.2-ti2v-5b/upscale_models
-
-    # Symlinks relatifs (plus robustes)
-    if [ -f "$CLIP_FILE" ]; then
-        ln -sf ../../clip_vision/clip-vit-large-patch14-336.safetensors models/wan2.2-ti2v-5b/clip_vision/
-    fi
-    if [ -f "$ULTRASHARP_FILE" ]; then
-        ln -sf ../../upscale_models/4x-UltraSharp.pth models/wan2.2-ti2v-5b/upscale_models/
-    fi
-    if [ -f "$REALESRGAN_FILE" ]; then
-        ln -sf ../../upscale_models/RealESRGAN_x4plus.pth models/wan2.2-ti2v-5b/upscale_models/
-    fi
-    echo "  ✅ Symlinks 5B créés"
+# Déterminer les modèles à linker
+if [ "$MODEL" = "all" ]; then
+    MODELS_TO_LINK="wan2.2-ti2v-5b wan2.2-i2v-a14b"
+else
+    MODELS_TO_LINK="$MODEL"
 fi
 
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
-    echo "  Modèle 14B: Ajout symlinks CLIP + Upscalers..."
-    mkdir -p models/wan2.2-i2v-a14b/clip_vision
-    mkdir -p models/wan2.2-i2v-a14b/upscale_models
+for m in $MODELS_TO_LINK; do
+    echo "  Modèle $m: Ajout symlinks CLIP + Upscalers..."
+    mkdir -p "models/$m/clip_vision"
+    mkdir -p "models/$m/upscale_models"
 
-    # Symlinks relatifs (plus robustes)
     if [ -f "$CLIP_FILE" ]; then
-        ln -sf ../../clip_vision/clip-vit-large-patch14-336.safetensors models/wan2.2-i2v-a14b/clip_vision/
+        ln -sf "../../clip_vision/$(basename $CLIP_FILE)" "models/$m/clip_vision/"
     fi
     if [ -f "$ULTRASHARP_FILE" ]; then
-        ln -sf ../../upscale_models/4x-UltraSharp.pth models/wan2.2-i2v-a14b/upscale_models/
+        ln -sf "../../upscale_models/$(basename $ULTRASHARP_FILE)" "models/$m/upscale_models/"
     fi
     if [ -f "$REALESRGAN_FILE" ]; then
-        ln -sf ../../upscale_models/RealESRGAN_x4plus.pth models/wan2.2-i2v-a14b/upscale_models/
+        ln -sf "../../upscale_models/$(basename $REALESRGAN_FILE)" "models/$m/upscale_models/"
     fi
-    echo "  ✅ Symlinks 14B créés"
-fi
+    echo "  ✅ Symlinks $m créés"
+done
 
 echo "✅ Symlinks composants partagés créés (seront uploadés avec les modèles)"
 
 # Étape 5: Vérification des téléchargements
 echo ""
 echo "🔍 Vérification des modèles téléchargés..."
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
-    if [ -d "models/wan2.2-i2v-a14b" ]; then
-        size=$(du -sh models/wan2.2-i2v-a14b | cut -f1)
-        echo "✅ wan2.2-i2v-a14b ($size - symlinks)"
-    fi
+if [ "$MODEL" = "all" ]; then
+    MODELS_TO_VERIFY="wan2.2-ti2v-5b wan2.2-i2v-a14b"
+else
+    MODELS_TO_VERIFY="$MODEL"
 fi
 
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
-    if [ -d "models/wan2.2-ti2v-5b" ]; then
-        size=$(du -sh models/wan2.2-ti2v-5b | cut -f1)
-        echo "✅ wan2.2-ti2v-5b ($size - symlinks)"
+for m in $MODELS_TO_VERIFY; do
+    if [ -d "models/$m" ]; then
+        size=$(du -sh "models/$m" | cut -f1)
+        echo "✅ $m ($size - symlinks)"
     fi
-fi
+done
 
 echo ""
 echo "📂 Structure des fichiers (ComfyUI native):"
-echo "   models/diffusion_models/ - Modèles de diffusion"
+echo "   models/diffusion_models/ - Modèles de diffusion (WAN)"
+echo "   models/checkpoints/ - Checkpoints (LTX)"
 echo "   models/text_encoders/ - Text encoders"
 echo "   models/vae/ - VAE"
 echo ""
-echo "✅ Setup WAN 2.2 terminé (Version ComfyUI Native) !"
-echo "ℹ️  Repository: $REPO"
+echo "✅ Setup terminé pour $MODEL !"

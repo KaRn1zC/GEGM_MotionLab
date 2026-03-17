@@ -183,8 +183,8 @@ class SharedComponentsConfig:
 class DownloadManifest:
     """Manifeste de téléchargement HuggingFace pour un modèle."""
 
-    repo: str
-    files: list[dict[str, str]]  # [{hf_path, dest_subdir, filename}]
+    repo: str                     # Repo principal (diffusion + vae)
+    files: list[dict[str, str]]   # [{hf_path, dest_subdir, filename, repo}]
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +427,8 @@ class ModelRegistry:
         """
         Construit le manifeste de téléchargement HuggingFace pour un modèle.
 
-        Inclut les fichiers de diffusion, le VAE et le text encoder partagé.
+        Inclut les fichiers de diffusion, le VAE et le text encoder (partagé ou model-spécifique).
+        Chaque fichier porte son propre champ 'repo' pour gérer les modèles multi-repo (ex: LTX).
         """
         model = self._models.get(name)
         if not model:
@@ -441,6 +442,7 @@ class ModelRegistry:
                 "hf_path": df.hf_path,
                 "dest_subdir": df.comfyui_subdir,
                 "filename": df.filename,
+                "repo": model.hf_repo,
             })
 
         # VAE — skip si intégré dans le checkpoint
@@ -449,6 +451,7 @@ class ModelRegistry:
                 "hf_path": model.vae.hf_path,
                 "dest_subdir": "vae",
                 "filename": model.vae.filename,
+                "repo": model.hf_repo,
             })
 
         # Text encoder — model-spécifique ou T5 partagé
@@ -457,6 +460,7 @@ class ModelRegistry:
                 "hf_path": model.text_encoder.hf_path,
                 "dest_subdir": model.text_encoder.comfyui_subdir,
                 "filename": model.text_encoder.filename,
+                "repo": model.text_encoder.hf_repo,
             })
         else:
             te = self._shared.text_encoder
@@ -464,6 +468,7 @@ class ModelRegistry:
                 "hf_path": te.hf_path,
                 "dest_subdir": te.comfyui_subdir,
                 "filename": te.filename,
+                "repo": te.hf_repo,
             })
 
         return DownloadManifest(repo=model.hf_repo, files=files)

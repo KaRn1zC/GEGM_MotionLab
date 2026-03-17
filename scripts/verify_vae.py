@@ -35,6 +35,12 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
         vae_config = None
 
     if vae_config:
+        # VAE intégré dans le checkpoint (ex: LTX 2.3) → rien à vérifier
+        if vae_config.filename == "integrated":
+            print(f"✅ VAE intégré dans le checkpoint pour {model_name} (rien à vérifier)")
+            logger.info(f"✅ VAE intégré dans le checkpoint pour {model_name}")
+            return True
+
         vae_file = model_dir / vae_config.filename
         expected_size_min = vae_config.min_size_gb
         expected_size_max = vae_config.max_size_gb
