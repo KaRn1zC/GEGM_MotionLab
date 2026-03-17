@@ -9,10 +9,9 @@ import json
 import argparse
 import requests
 from pathlib import Path
-from typing import Dict, Tuple
+
 
 # Ajouter le répertoire parent au path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.logger import get_logger
 
@@ -22,7 +21,7 @@ logger = get_logger("upstream_health")
 SIZE_TOLERANCE = 0.01
 
 
-def load_metadata() -> Dict:
+def load_metadata() -> dict:
     """Charge le fichier models_metadata.json"""
     metadata_path = Path(__file__).parent.parent / "models_metadata.json"
 
@@ -34,7 +33,7 @@ def load_metadata() -> Dict:
         return json.load(f)
 
 
-def check_file_size(url: str, expected_size: int, filename: str) -> Tuple[bool, int]:
+def check_file_size(url: str, expected_size: int, filename: str) -> tuple[bool, int]:
     """
     Vérifie la taille d'un fichier via HEAD request
 
@@ -92,13 +91,13 @@ def check_file_size(url: str, expected_size: int, filename: str) -> Tuple[bool, 
 
 def check_huggingface_repo_file(
     repo: str, path: str, expected_size: int, filename: str
-) -> Tuple[bool, int]:
+) -> tuple[bool, int]:
     """Vérifie un fichier sur HuggingFace"""
     url = f"https://huggingface.co/{repo}/resolve/main/{path}"
     return check_file_size(url, expected_size, filename)
 
 
-def check_model_health(model_name: str, metadata: Dict) -> bool:
+def check_model_health(model_name: str, metadata: dict) -> bool:
     """
     Vérifie la santé d'un modèle upstream
 

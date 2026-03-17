@@ -5,13 +5,10 @@ Gestionnaire de jobs asynchrones pour la génération de cinemagraphs
 import uuid
 import threading
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Any
 from dataclasses import dataclass, asdict
 from enum import Enum
-import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger
 
@@ -38,18 +35,18 @@ class Job:
     status: JobStatus
     input_image: str
     prompt: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     progress: float = 0.0
-    current_step: Optional[str] = None
-    workflow_id: Optional[str] = None
-    output_video: Optional[str] = None
-    owncloud_link: Optional[str] = None
-    error_message: Optional[str] = None
+    current_step: str | None = None
+    workflow_id: str | None = None
+    output_video: str | None = None
+    owncloud_link: str | None = None
+    error_message: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convertit le job en dictionnaire"""
         data = asdict(self)
         data["status"] = self.status.value
@@ -65,16 +62,16 @@ class JobManager:
     """Gestionnaire central des jobs de génération"""
 
     def __init__(self):
-        self.jobs: Dict[str, Job] = {}
-        self.active_jobs: Dict[str, Job] = {}
-        self.completed_jobs: Dict[str, Job] = {}
-        self.failed_jobs: Dict[str, Job] = {}
+        self.jobs: dict[str, Job] = {}
+        self.active_jobs: dict[str, Job] = {}
+        self.completed_jobs: dict[str, Job] = {}
+        self.failed_jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
         logger.info("JobManager initialisé")
 
     def create_job(
-        self, input_image: str, prompt: str, parameters: Dict[str, Any]
+        self, input_image: str, prompt: str, parameters: dict[str, Any]
     ) -> Job:
         """
         Crée un nouveau job
@@ -105,7 +102,7 @@ class JobManager:
         logger.info(f"Job créé: {job_id}")
         return job
 
-    def get_job(self, job_id: str) -> Optional[Job]:
+    def get_job(self, job_id: str) -> Job | None:
         """Récupère un job par son ID"""
         with self._lock:
             return self.jobs.get(job_id)
@@ -113,13 +110,13 @@ class JobManager:
     def update_job(
         self,
         job_id: str,
-        status: Optional[JobStatus] = None,
-        progress: Optional[float] = None,
-        current_step: Optional[str] = None,
-        workflow_id: Optional[str] = None,
-        output_video: Optional[str] = None,
-        owncloud_link: Optional[str] = None,
-        error_message: Optional[str] = None,
+        status: JobStatus | None = None,
+        progress: float | None = None,
+        current_step: str | None = None,
+        workflow_id: str | None = None,
+        output_video: str | None = None,
+        owncloud_link: str | None = None,
+        error_message: str | None = None,
     ):
         """Met à jour un job"""
         with self._lock:
@@ -173,8 +170,8 @@ class JobManager:
                 job.error_message = error_message
 
     def list_jobs(
-        self, status: Optional[JobStatus] = None, limit: int = 50
-    ) -> List[Job]:
+        self, status: JobStatus | None = None, limit: int = 50
+    ) -> list[Job]:
         """
         Liste les jobs avec filtres optionnels
 
@@ -183,7 +180,7 @@ class JobManager:
             limit: Nombre maximum de jobs à retourner
 
         Returns:
-            List[Job]: Liste des jobs
+            list[Job]: Liste des jobs
         """
         with self._lock:
             jobs = list(self.jobs.values())
@@ -235,7 +232,7 @@ class JobManager:
 
         return False
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Retourne des statistiques sur les jobs"""
         with self._lock:
             return {

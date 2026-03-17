@@ -1,6 +1,6 @@
 # Architecture technique - GEGM MotionLab
 
-**Dernière mise à jour** : 2026-01-23 (v4.3.1 - Floor pour multiples 32)
+**Dernière mise à jour** : 2026-03-16 (v4.4.0 - Nettoyage dead code + modernisation)
 **Objectif** : Référence technique compacte pour alimenter la mise à jour de `CLAUDE.md`
 
 ---
@@ -22,9 +22,9 @@
 **Chemins** : `/workspace/comfyui/ComfyUI/`
 
 ### Workflow Manager
-- Sélection template (5B: wan22_i2v, 14B: wan22_14b_i2v)
+- Sélection template (5B: wan22_5b_i2v, 14B: wan22_14b_i2v)
 - Détection modèle auto (5B vs 14B MoE)
-- Injection chemins checkpoint (5B: single, 14B: tuple high/low)
+- Injection chemins checkpoint via `validated_params["model_name"]` (5B: single, 14B: tuple high/low)
 
 **Fichier** : `workflows/workflow_manager.py`
 
@@ -111,7 +111,9 @@ Node 9: VAEDecode
 2. **MoE OBLIGATOIRE 14B** : Les 2 fichiers (high/low noise) sont REQUIS, sinon artefacts "neige"
 3. **VAE spécifiques** : 5B=wan2.2_vae (48ch), 14B=wan_2.1_vae (16ch) - NON INTERCHANGEABLES
 4. **workflow_manager.py** : Retourne tuple pour 14B, injecte checkpoint_path_high/low
-5. **Timeout unifié** : 5400s (90min) pour tous les workflows
+5. **Timeouts** : 5400s (5B), 10800s (14B) - défaut WebSocket 5400s
 6. **VRAM** : 5B=48GB+, 14B=80GB+
 7. **Alignement résolutions** : Multiples de 32 avec floor (préfère crop à upscale)
 8. **pingpong** : Toujours False (vraie boucle seamless, pas d'effet miroir)
+9. **PYTHONPATH** : `/workspace` dans Dockerfile, pas de `sys.path.append` dans le code
+10. **Typing** : Annotations Python 3.11+ (`dict`, `list`, `X | None`) dans tous les modules

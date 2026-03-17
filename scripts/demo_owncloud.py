@@ -2,11 +2,8 @@
 Démonstration du module OwnCloud
 """
 
-import sys
 import asyncio
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from src.owncloud_config import get_owncloud_config, check_owncloud_setup

@@ -2,11 +2,8 @@
 Tests pour l'application Flask
 """
 
-import sys
 import pytest
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from web_interface.app import create_app
 from web_interface.jobs import JobManager, JobStatus

@@ -8,12 +8,9 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
-
-# Ajouter le répertoire parent au path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
+from src.model_registry import get_registry
 
 # Configuration du logger
 setup_logger(level="INFO")
@@ -25,57 +22,41 @@ def verify_model_files(model_target: Path) -> bool:
     """Vérifie que tous les fichiers du modèle sont présents et corrects"""
     logger.info("🔍 Vérification des fichiers téléchargés...")
 
-    # PRIORITÉ 1 : Format ComfyUI Native (OwnCloud) - fichiers séparés
-    native_5b_file = model_target / "wan2.2_ti2v_5B_fp16.safetensors"
-    native_14b_high = model_target / "wan2.2_i2v_high_noise_14B_fp16.safetensors"
-    native_14b_low = model_target / "wan2.2_i2v_low_noise_14B_fp16.safetensors"
+    # PRIORITÉ 1 : Vérification via registre (extensible)
+    model_name = model_target.name
+    try:
+        registry = get_registry()
+        registry_files = registry.get_diffusion_files(model_name)
+    except Exception:
+        registry_files = None
 
-    # Vérification modèle 5B (fichier unique)
-    if native_5b_file.exists():
-        actual_size = native_5b_file.stat().st_size
-        min_size = 8 * 1024**3  # 8 GB minimum (9.4 GB attendu pour 5B)
+    if registry_files:
+        all_found = True
+        total_size = 0
 
-        if actual_size < min_size:
-            logger.error(
-                f"❌ wan2.2_ti2v_5B_fp16.safetensors incomplet ou corrompu:"
-                f"\n   Taille: {actual_size / 1024**3:.2f} GB"
-                f"\n   Minimum requis: {min_size / 1024**3:.2f} GB"
-            )
-            return False
-        else:
-            logger.info(
-                f"✅ wan2.2_ti2v_5B_fp16.safetensors: {actual_size / 1024**3:.2f} GB"
-            )
-            logger.success("✅ Format ComfyUI Native détecté (5B - compatible)")
-            return True
+        for df in registry_files:
+            fpath = model_target / df.filename
+            if not fpath.exists():
+                all_found = False
+                break
 
-    # Vérification modèle 14B (2 fichiers high/low noise)
-    if native_14b_high.exists() and native_14b_low.exists():
-        high_size = native_14b_high.stat().st_size
-        low_size = native_14b_low.stat().st_size
-        total_size = high_size + low_size
-        min_size_each = 10 * 1024**3  # 10 GB minimum par fichier
+            actual_size = fpath.stat().st_size
+            actual_gb = actual_size / 1024**3
+            total_size += actual_size
 
-        issues = []
-        if high_size < min_size_each:
-            issues.append(f"high_noise: {high_size / 1024**3:.2f} GB (min: 10 GB)")
-        if low_size < min_size_each:
-            issues.append(f"low_noise: {low_size / 1024**3:.2f} GB (min: 10 GB)")
+            if actual_gb < df.min_size_gb:
+                logger.error(
+                    f"❌ {df.filename} incomplet ou corrompu:"
+                    f"\n   Taille: {actual_gb:.2f} GB"
+                    f"\n   Minimum requis: {df.min_size_gb:.2f} GB"
+                )
+                return False
 
-        if issues:
-            logger.error(
-                "❌ Modèle 14B incomplet ou corrompu:\n   " + "\n   ".join(issues)
-            )
-            return False
-        else:
-            logger.info(
-                f"✅ wan2.2_i2v_high_noise_14B_fp16.safetensors: {high_size / 1024**3:.2f} GB"
-            )
-            logger.info(
-                f"✅ wan2.2_i2v_low_noise_14B_fp16.safetensors: {low_size / 1024**3:.2f} GB"
-            )
+            logger.info(f"✅ {df.filename}: {actual_gb:.2f} GB")
+
+        if all_found:
             logger.success(
-                f"✅ Format ComfyUI Native détecté (14B FP16 - total: {total_size / 1024**3:.2f} GB)"
+                f"✅ Format ComfyUI Native détecté ({model_name} - total: {total_size / 1024**3:.2f} GB)"
             )
             return True
 
@@ -191,7 +172,7 @@ pass = {obscured_password}
 def download_model_from_owncloud(
     model_name: str = "wan2.2-i2v-a14b",
     target_dir: Path = Path("/workspace/comfyui/ComfyUI/models/diffusion_models"),
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Télécharge un modèle depuis OwnCloud avec rclone
 

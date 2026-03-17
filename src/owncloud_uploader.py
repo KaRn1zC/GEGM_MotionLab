@@ -7,7 +7,8 @@ import io
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union, Callable, AsyncIterator, cast
+from typing import Any, cast
+from collections.abc import Callable, AsyncIterator
 from urllib.parse import urljoin, quote
 
 # Import des modèles depuis le module séparé
@@ -33,7 +34,7 @@ class OwnCloudUploader:
 
     def __init__(self, config: OwnCloudConfig):
         self.config = config
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: aiohttp.ClientSession | None = None
 
         # Valider la configuration
         errors = self.config.validate()
@@ -160,10 +161,10 @@ class OwnCloudUploader:
 
     async def upload_file(
         self,
-        file_data: Union[bytes, Path, io.IOBase],
+        file_data: bytes | Path | io.IOBase,
         remote_path: str,
-        metadata: Optional[VideoMetadata] = None,
-        progress_callback: Optional[Callable[[int, int, float], None]] = None,
+        metadata: VideoMetadata | None = None,
+        progress_callback: Callable[[int, int, float], None] | None = None,
     ) -> UploadResult:
         """
         Upload un fichier vers OwnCloud (version standard, sans chunking)
@@ -324,10 +325,10 @@ class OwnCloudUploader:
 
     async def upload_to_folder(
         self,
-        file_data: Union[Path, str, bytes],
+        file_data: Path | str | bytes,
         remote_path: str,
         folder_type: str = "output",
-        metadata: Optional[VideoMetadata] = None,
+        metadata: VideoMetadata | None = None,
         create_share: bool = False,
     ) -> UploadResult:
         """
@@ -408,10 +409,10 @@ class OwnCloudUploader:
     async def create_share_link(
         self,
         file_path: str,
-        password: Optional[str] = None,
-        expire_days: Optional[int] = None,
+        password: str | None = None,
+        expire_days: int | None = None,
         permissions: int = 1,  # 1=read, 15=all
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Crée un lien de partage pour un fichier
 
@@ -422,7 +423,7 @@ class OwnCloudUploader:
             permissions: Permissions (1=lecture, 15=toutes)
 
         Returns:
-            Optional[str]: URL du lien de partage
+            str | None: URL du lien de partage
         """
         session = self._ensure_session()
 
@@ -453,7 +454,7 @@ class OwnCloudUploader:
 
                     if data.get("ocs", {}).get("meta", {}).get("status") == "ok":
                         share_data = data["ocs"]["data"]
-                        share_url: Optional[str] = share_data.get("url")
+                        share_url: str | None = share_data.get("url")
 
                         logger.success(f"✅ Lien de partage créé: {share_url}")
                         return share_url
@@ -473,7 +474,7 @@ class OwnCloudUploader:
             logger.error(f"Erreur création lien partage: {e}")
             return None
 
-    async def list_files(self, folder_path: str = "/") -> List[Dict[str, Any]]:
+    async def list_files(self, folder_path: str = "/") -> list[dict[str, Any]]:
         """
         Liste les fichiers d'un dossier
 
@@ -481,7 +482,7 @@ class OwnCloudUploader:
             folder_path: Chemin du dossier
 
         Returns:
-            List[Dict]: Liste des fichiers avec métadonnées
+            list[dict]: Liste des fichiers avec métadonnées
         """
         session = self._ensure_session()
 
@@ -494,13 +495,16 @@ class OwnCloudUploader:
                 "PROPFIND", folder_url, headers={"Depth": "1"}
             ) as response:
                 if response.status == 207:  # Multi-Status
-                    # Parser la réponse WebDAV (simplifié)
+                    # TODO: Parser la réponse XML WebDAV PROPFIND pour extraire les fichiers réels
                     content = await response.text()
+                    logger.warning(
+                        f"list_files({folder_path}): retourne des données stub - parsing PROPFIND non implémenté"
+                    )
                     logger.debug(
                         f"Contenu dossier {folder_path}: {len(content)} caractères"
                     )
 
-                    # Retour simplifié pour l'exemple
+                    # Stub : données factices en attendant l'implémentation du parsing XML
                     return [
                         {
                             "name": "example.mp4",
@@ -549,7 +553,7 @@ class OwnCloudUploader:
     def generate_filename(
         self,
         original_name: str,
-        workflow_id: Optional[str] = None,
+        workflow_id: str | None = None,
         add_timestamp: bool = True,
     ) -> str:
         """
@@ -590,7 +594,7 @@ class OwnCloudUploader:
 # Fonctions utilitaires
 
 
-def extract_video_metadata(file_path: Union[Path, str]) -> VideoMetadata:
+def extract_video_metadata(file_path: Path | str) -> VideoMetadata:
     """
     Extrait les métadonnées d'une vidéo (version simple)
 
@@ -671,12 +675,12 @@ def extract_video_metadata(file_path: Union[Path, str]) -> VideoMetadata:
 
 async def upload_cinemagraph(
     uploader: OwnCloudUploader,
-    video_file: Union[Path, bytes],
-    workflow_id: Optional[str] = None,
-    prompt: Optional[str] = None,
-    generation_params: Optional[Dict[str, Any]] = None,
+    video_file: Path | bytes,
+    workflow_id: str | None = None,
+    prompt: str | None = None,
+    generation_params: dict[str, Any | None] = None,
     create_share: bool = True,
-    share_password: Optional[str] = None,
+    share_password: str | None = None,
 ) -> UploadResult:
     """
     Upload un cinemagraph avec métadonnées complètes

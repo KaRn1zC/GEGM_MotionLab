@@ -1,0 +1,272 @@
+{
+  "name": "LTX 2.3 + UltraSharp Upscale",
+  "description": "Pipeline complet LTX 2.3 : génération boucle seamless + upscaling 4x UltraSharp + resize précis",
+  "version": "1.0.0",
+  "author": "Comfy_Img_to_Loop",
+  "tags": ["pipeline", "cinemagraph", "upscale", "ltx2.3", "complete"],
+  "model_family": "ltx23",
+
+  "parameters": {
+    "input_image": {
+      "type": "string",
+      "required": true,
+      "description": "Image d'entrée"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Prompt de génération"
+    },
+    "negative_prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Éléments à éviter"
+    },
+    "steps_generation": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 50,
+      "description": "Steps pour la génération"
+    },
+    "steps_upscale": {
+      "type": "integer",
+      "default": 10,
+      "min": 5,
+      "max": 30,
+      "description": "Steps pour le raffinement post-upscale (non utilisé v1 — UltraSharp pixel-space)"
+    },
+    "cfg_scale": {
+      "type": "float",
+      "default": 1.0,
+      "min": 1.0,
+      "max": 15.0,
+      "description": "STG guidance scale"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 81,
+      "min": 9,
+      "max": 241,
+      "description": "Nombre de frames (N×8+1)"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 24,
+      "min": 4,
+      "max": 50,
+      "description": "FPS de sortie"
+    },
+    "seed": {
+      "type": "integer",
+      "default": -1,
+      "min": -1,
+      "description": "Seed pour reproductibilité (-1 = aléatoire)"
+    },
+    "width": {
+      "type": "integer",
+      "default": 768,
+      "min": 64,
+      "max": 1920,
+      "description": "Largeur de génération LTX 2.3"
+    },
+    "height": {
+      "type": "integer",
+      "default": 512,
+      "min": 64,
+      "max": 1088,
+      "description": "Hauteur de génération LTX 2.3"
+    },
+    "target_width": {
+      "type": "integer",
+      "default": 1920,
+      "min": 64,
+      "max": 7680,
+      "description": "Largeur finale après upscale"
+    },
+    "target_height": {
+      "type": "integer",
+      "default": 1080,
+      "min": 64,
+      "max": 4320,
+      "description": "Hauteur finale après upscale"
+    },
+    "enable_vae_tiling": {
+      "type": "boolean",
+      "default": false,
+      "description": "Activer VAE tiling pour grandes résolutions"
+    },
+    "stg_block_idx": {
+      "type": "integer",
+      "default": 35,
+      "min": 0,
+      "max": 50,
+      "description": "Index bloc STG guidance"
+    },
+    "stg_scale": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 3.0,
+      "description": "Échelle STG guidance"
+    },
+    "temporal_tile_size": {
+      "type": "integer",
+      "default": 80,
+      "min": 16,
+      "max": 160,
+      "description": "Taille des tuiles temporelles"
+    },
+    "temporal_overlap": {
+      "type": "integer",
+      "default": 24,
+      "min": 4,
+      "max": 64,
+      "description": "Chevauchement entre tuiles temporelles"
+    },
+    "cond_image_indices": {
+      "type": "string",
+      "default": "0",
+      "description": "Indices des frames conditionnées"
+    }
+  },
+
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "{input_image}"
+      }
+    },
+    "2": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "{checkpoint_path}"
+      }
+    },
+    "3": {
+      "class_type": "LTXVGemmaCLIPModelLoader",
+      "inputs": {
+        "gemma_model": "{text_encoder_path}"
+      }
+    },
+    "4": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{prompt}",
+        "clip": ["3", 0]
+      }
+    },
+    "5": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{negative_prompt}",
+        "clip": ["3", 0]
+      }
+    },
+    "6": {
+      "class_type": "STGGuiderAdvancedNode",
+      "inputs": {
+        "model": ["2", 0],
+        "positive": ["4", 0],
+        "negative": ["5", 0],
+        "stg_block_idx": "{stg_block_idx}",
+        "stg_scale": "{stg_scale}"
+      }
+    },
+    "7": {
+      "class_type": "LTXVLoopingSampler",
+      "inputs": {
+        "guider": ["6", 0],
+        "steps": "{steps_generation}",
+        "seed": "{seed}",
+        "width": "{width}",
+        "height": "{height}",
+        "num_frames": "{frames}",
+        "optional_cond_images": ["1", 0],
+        "optional_cond_image_indices": "{cond_image_indices}",
+        "temporal_tile_size": "{temporal_tile_size}",
+        "temporal_overlap": "{temporal_overlap}",
+        "temporal_overlap_cond_strength": 0.5,
+        "adain_factor": 0.4,
+        "horizontal_tiles": 1,
+        "vertical_tiles": 1,
+        "spatial_overlap": 64
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["7", 0],
+        "vae": ["2", 2]
+      }
+    },
+    "10": {
+      "class_type": "UpscaleModelLoader",
+      "inputs": {
+        "model_name": "4x-UltraSharp.pth"
+      },
+      "_comment": "v1: UltraSharp pixel-space. v2 future: LTX latent upsampler x2 natif"
+    },
+    "11": {
+      "class_type": "ImageUpscaleWithModel",
+      "inputs": {
+        "upscale_model": ["10", 0],
+        "image": ["8", 0]
+      }
+    },
+    "11b": {
+      "class_type": "ImageScale",
+      "inputs": {
+        "image": ["11", 0],
+        "width": "{target_width}",
+        "height": "{target_height}",
+        "upscale_method": "lanczos",
+        "crop": "disabled"
+      }
+    },
+    "12": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": "{fps}",
+        "loop_count": 0,
+        "filename_prefix": "ltx23_upscaled",
+        "format": "video/h264-mp4",
+        "crf": 18,
+        "pingpong": false,
+        "save_output": true,
+        "images": ["11b", 0]
+      }
+    }
+  },
+
+  "outputs": {
+    "video": {
+      "node": "12",
+      "output": 0,
+      "description": "Cinemagraph upscalé"
+    }
+  },
+
+  "metadata": {
+    "comfyui_version": ">=0.16.1",
+    "ltxvideo_version": "lightricks_mar2026",
+    "tags": ["pipeline", "cinemagraph", "upscale", "ltx2.3", "complete"],
+    "required_nodes": [
+      "LoadImage",
+      "CheckpointLoaderSimple",
+      "LTXVGemmaCLIPModelLoader",
+      "CLIPTextEncode",
+      "STGGuiderAdvancedNode",
+      "LTXVLoopingSampler",
+      "VAEDecode",
+      "UpscaleModelLoader",
+      "ImageUpscaleWithModel",
+      "ImageScale",
+      "VHS_VideoCombine"
+    ],
+    "changelog": {
+      "v1.0.0": "FEATURE: Pipeline LTX 2.3 I2V + UltraSharp 4x upscale (pixel-space)"
+    }
+  }
+}

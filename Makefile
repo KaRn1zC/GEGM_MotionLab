@@ -6,7 +6,7 @@ IMAGE_NAME = comfy_img_to_loop
 CONTAINER_NAME = comfy_img_to_loop
 
 help: ## Afficher cette aide
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-35s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-35s\033[0m %s\n", $$1, $$2}'
 
 build: ## Construire l'image Docker
 	@echo "🔨 Building Docker image..."
@@ -138,17 +138,21 @@ rclone-check: ## Vérifier que rclone est configuré
 	@rclone lsd owncloud:/ > /dev/null 2>&1 || (echo "❌ rclone non configuré"; exit 1)
 	@echo "✅ rclone est configuré et fonctionnel"
 
-rclone-upload-14b: rclone-check ## Upload modèle 14B ComfyUI Native (découpe auto >4GB)
-	@echo "📤 Upload du modèle 14B ComfyUI Native avec découpe automatique..."
+rclone-upload: rclone-check ## Upload générique: make rclone-upload MODEL=<nom>
+	@if [ -z "$(MODEL)" ]; then \
+		echo "Usage: make rclone-upload MODEL=<model_name>"; \
+		echo ""; echo "Modèles disponibles:"; \
+		python -m src.model_registry list-models 2>/dev/null || echo "  (registre indisponible)"; exit 1; fi
+	@echo "📤 Upload du modèle $(MODEL) avec découpe automatique..."
 	@echo "   Fichiers >4GB seront découpés en morceaux de 2GB"
-	python scripts/split_and_upload.py --model wan2.2-i2v-a14b
-	@echo "✅ Modèle 14B uploadé"
+	python scripts/split_and_upload.py --model $(MODEL)
+	@echo "✅ Modèle $(MODEL) uploadé"
 
-rclone-upload-5b: rclone-check ## Upload modèle 5B ComfyUI Native (découpe auto >4GB)
-	@echo "📤 Upload du modèle 5B ComfyUI Native avec découpe automatique..."
-	@echo "   Fichiers >4GB seront découpés en morceaux de 2GB"
-	python scripts/split_and_upload.py --model wan2.2-ti2v-5b
-	@echo "✅ Modèle 5B uploadé"
+rclone-upload-14b: rclone-check ## Alias → make rclone-upload MODEL=wan2.2-i2v-a14b
+	@$(MAKE) rclone-upload MODEL=wan2.2-i2v-a14b
+
+rclone-upload-5b: rclone-check ## Alias → make rclone-upload MODEL=wan2.2-ti2v-5b
+	@$(MAKE) rclone-upload MODEL=wan2.2-ti2v-5b
 
 rclone-upload-all: rclone-upload-14b rclone-upload-5b ## Upload TOUS les modèles
 	@echo "🎉 Tous les modèles sont uploadés sur OwnCloud"
@@ -169,78 +173,47 @@ rclone-list: rclone-check ## Lister les fichiers sur OwnCloud
 # ==================== Workflows Principaux ====================
 #
 # COMMANDES RECOMMANDÉES:
-#   make workflow-5b     - Workflow complet modèle 5B
-#   make workflow-14b    - Workflow complet modèle 14B
-#   make workflow-both   - Workflow séquentiel 14B + 5B (évite surcharge disque)
+#   make workflow MODEL=<nom>  - Workflow complet générique
+#   make workflow-5b           - Alias → make workflow MODEL=wan2.2-ti2v-5b
+#   make workflow-14b          - Alias → make workflow MODEL=wan2.2-i2v-a14b
+#   make workflow-both         - Workflow séquentiel 14B + 5B (évite surcharge disque)
 #
 # Chaque workflow inclut: Download → Vérif → Split → Upload → Vérif → Deep Clean
 # ========================================================================
 
-workflow-14b: rclone-check ## [PRINCIPAL] Workflow complet 14B: Download → Vérif → Split → Upload → Vérif → Deep Clean
+workflow: rclone-check ## Workflow complet générique: make workflow MODEL=<nom>
+	@if [ -z "$(MODEL)" ]; then \
+		echo "Usage: make workflow MODEL=<model_name>"; \
+		echo ""; echo "Modèles disponibles:"; \
+		python -m src.model_registry list-models 2>/dev/null || echo "  (registre indisponible)"; exit 1; fi
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🚀 WORKFLOW COMPLET MODÈLE 14B"
+	@echo "🚀 WORKFLOW COMPLET $(MODEL)"
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
-	@echo "📥 1/6: Téléchargement modèle 14B + composants (ComfyUI Native)..."
-	@echo "      • Diffusion models FP16 (2x28.6 GB)"
-	@echo "      • T5 Encoder FP16 (11.4 GB)"
-	@echo "      • VAE 14B (254 MB)"
-	@echo "      • CLIP Vision (2.4 GB)"
-	@echo "      • Upscalers (UltraSharp + RealESRGAN)"
-	@echo "      • Vérifications intégrité automatiques"
-	./scripts/setup_wan22_native.sh wan2.2-i2v-a14b
+	@echo "📥 1/4: Téléchargement modèle + composants..."
+	./scripts/setup_wan22_native.sh $(MODEL)
 	@echo ""
-	@echo "📦 2/6: Découpe automatique et upload vers OwnCloud..."
-	@echo "      • Fichiers >4GB découpés en chunks 2GB"
-	@echo "      • Suppression automatique des originaux"
-	@echo "      • Upload de tous les fichiers (via symlinks)"
-	python scripts/split_and_upload.py --model wan2.2-i2v-a14b
+	@echo "📦 2/4: Découpe automatique et upload vers OwnCloud..."
+	python scripts/split_and_upload.py --model $(MODEL)
 	@echo ""
-	@echo "🔍 3/6: Vérification de l'upload sur OwnCloud..."
-	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-i2v-a14b/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
+	@echo "🔍 3/4: Vérification de l'upload sur OwnCloud..."
+	@rclone size owncloud:/GEGM_ComfyUI/Models/$(MODEL)/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
 	@echo "✅ Upload vérifié avec succès"
 	@echo ""
-	@echo "🧹 4/6: Nettoyage profond local (deep clean)..."
+	@echo "🧹 4/4: Nettoyage profond local (deep clean)..."
 	@$(MAKE) _models-deep-clean-auto
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "✅ WORKFLOW 14B TERMINÉ AVEC SUCCÈS"
+	@echo "✅ WORKFLOW $(MODEL) TERMINÉ AVEC SUCCÈS"
 	@echo "═══════════════════════════════════════════════════════════"
 	@df -h . | tail -1
 	@echo ""
 
-workflow-5b: rclone-check ## [PRINCIPAL] Workflow complet 5B: Download → Vérif → Split → Upload → Vérif → Deep Clean
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🚀 WORKFLOW COMPLET MODÈLE 5B"
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo ""
-	@echo "📥 1/6: Téléchargement modèle 5B + composants (ComfyUI Native)..."
-	@echo "      • Diffusion model FP16 (9.31 GB)"
-	@echo "      • T5 Encoder FP16 (11.4 GB)"
-	@echo "      • VAE 5B (254 MB)"
-	@echo "      • CLIP Vision (2.4 GB)"
-	@echo "      • Upscalers (UltraSharp + RealESRGAN)"
-	@echo "      • Vérifications intégrité automatiques"
-	./scripts/setup_wan22_native.sh wan2.2-ti2v-5b
-	@echo ""
-	@echo "📦 2/6: Découpe automatique et upload vers OwnCloud..."
-	@echo "      • Fichiers >4GB découpés en chunks 2GB"
-	@echo "      • Suppression automatique des originaux"
-	@echo "      • Upload de tous les fichiers (via symlinks)"
-	python scripts/split_and_upload.py --model wan2.2-ti2v-5b
-	@echo ""
-	@echo "🔍 3/6: Vérification de l'upload sur OwnCloud..."
-	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-ti2v-5b/ || (echo "❌ Upload échoué, modèles locaux CONSERVÉS"; exit 1)
-	@echo "✅ Upload vérifié avec succès"
-	@echo ""
-	@echo "🧹 4/6: Nettoyage profond local (deep clean)..."
-	@$(MAKE) _models-deep-clean-auto
-	@echo ""
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "✅ WORKFLOW 5B TERMINÉ AVEC SUCCÈS"
-	@echo "═══════════════════════════════════════════════════════════"
-	@df -h . | tail -1
-	@echo ""
+workflow-14b: ## Alias → make workflow MODEL=wan2.2-i2v-a14b
+	@$(MAKE) workflow MODEL=wan2.2-i2v-a14b
+
+workflow-5b: ## Alias → make workflow MODEL=wan2.2-ti2v-5b
+	@$(MAKE) workflow MODEL=wan2.2-ti2v-5b
 
 workflow-both: ## [PRINCIPAL] Workflow séquentiel 14B puis 5B (évite surcharge disque)
 	@echo "═══════════════════════════════════════════════════════════"
@@ -350,4 +323,54 @@ runpod-test-down: ## Arrêter le test RunPod
 
 runpod-info: ## Afficher les informations RunPod
 	@echo "📦 Image: arnaudboy/comfy_img_to_loop:runpod"
+	@echo "🔗 Docker Hub: https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
+
+# ==================== RunPod Commands - Image TEST ====================
+# Miroir des commandes RunPod ci-dessus, mais pousse vers :test au lieu de :latest
+# Usage : branche debug → make runpod-deploy-quick-test → arnaudboy/comfy_img_to_loop:test
+
+runpod-build-test: ## Build image multi-arch TEST (AMD64 + ARM64) → :test
+	@echo "🧪 Building multi-arch RunPod TEST image..."
+	@echo "   Plateformes: linux/amd64 (RunPod), linux/arm64 (Mac)"
+	@echo "   Tag: arnaudboy/comfy_img_to_loop:test"
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		-t arnaudboy/comfy_img_to_loop:test \
+		--push \
+		.
+	@echo "✅ Image TEST built and pushed (multi-arch)"
+
+runpod-build-amd64-only-test: ## Build image AMD64 uniquement TEST (plus rapide) → :test
+	@echo "🧪 Building AMD64-only RunPod TEST image..."
+	@echo "   Tag: arnaudboy/comfy_img_to_loop:test"
+	docker buildx build \
+		--platform linux/amd64 \
+		-t arnaudboy/comfy_img_to_loop:test \
+		--push \
+		.
+	@echo "✅ Image TEST built and pushed (AMD64 only)"
+
+runpod-push-test: ## Push image TEST vers Docker Hub
+	@echo "📤 Pushing TEST image to Docker Hub..."
+	docker push arnaudboy/comfy_img_to_loop:test
+	@echo "✅ Image TEST pushed"
+
+runpod-deploy-test: runpod-verify-owncloud runpod-setup-buildx runpod-build-test ## Déploiement complet TEST
+	@echo ""
+	@echo "🧪 Déploiement RunPod TEST complet !"
+	@echo "📍 Image: arnaudboy/comfy_img_to_loop:test"
+	@echo "⚠️  N'oubliez pas de configurer les variables OwnCloud sur RunPod"
+
+runpod-deploy-quick-test: runpod-setup-buildx runpod-build-amd64-only-test ## Build AMD64 + Push TEST (rapide)
+	@echo ""
+	@echo "🧪 Déploiement RunPod TEST rapide terminé !"
+	@echo "📍 Image: arnaudboy/comfy_img_to_loop:test"
+	@echo "⚠️  N'oubliez pas de configurer les variables OwnCloud sur RunPod"
+
+runpod-test-image-test: ## Tester l'image TEST localement avec GPU
+	@echo "🧪 Testing TEST image with GPU..."
+	DOCKER_IMAGE=arnaudboy/comfy_img_to_loop:test docker-compose -f docker-compose.runpod.yml up
+
+runpod-info-test: ## Afficher les informations RunPod TEST
+	@echo "🧪 Image TEST: arnaudboy/comfy_img_to_loop:test"
 	@echo "🔗 Docker Hub: https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"

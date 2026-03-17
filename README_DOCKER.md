@@ -10,25 +10,23 @@
 
 ## Architecture Docker
 
-### Multi-stage Build
+### Single-stage Build
 
 ```dockerfile
-# Stage 1: Base CUDA
+# Base CUDA 12.8.1 + Python 3.11 + PyTorch nightly cu128
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+WORKDIR /workspace
 
-# Stage 2: Builder
-# PyTorch optimisé GPU + wheels Python
-
-# Stage 3: Runtime (~8 GB)
-# ComfyUI + custom nodes + Flask app
+# Dépendances Python + ComfyUI + custom nodes + Flask app
+# Modèles téléchargés au démarrage (pas inclus dans l'image)
 ```
 
 ### Stratégie Modèles
 
 | Approche | Taille Image | Avantage |
 |----------|--------------|----------|
-| **Image légère** | ~8 GB | Push/pull rapide |
-| Modèles au démarrage | +15-20 min | Téléchargement OwnCloud |
+| **Image sans modèles** | ~8 GB | Push/pull rapide |
+| Modèles au démarrage | +15-20 min | Téléchargement upstream ou OwnCloud (fallback) |
 
 ---
 
@@ -78,14 +76,13 @@ services:
   comfy_img_to_loop:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"   # Flask
       - "8188:8188"   # ComfyUI
     volumes:
-      - ./output:/app/output
-      - ./uploads:/app/uploads
-      - ./logs:/app/logs
+      - ./logs:/workspace/logs
+      - ./web_interface/uploads:/workspace/web_interface/uploads
     deploy:
       resources:
         reservations:
@@ -142,7 +139,7 @@ make runpod-deploy
 # Équivalent
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --file docker/Dockerfile \
+  --file Dockerfile \
   --tag arnaudboy/comfy_img_to_loop:latest \
   --push .
 ```
@@ -159,9 +156,10 @@ make runpod-deploy-quick
 
 | Volume | Container | Usage |
 |--------|-----------|-------|
-| `./output` | `/app/output` | Vidéos générées |
-| `./uploads` | `/app/uploads` | Images uploadées |
-| `./logs` | `/app/logs` | Logs application |
+| `./logs` | `/workspace/logs` | Logs application |
+| `./web_interface/uploads` | `/workspace/web_interface/uploads` | Images uploadées |
+| `./config` | `/workspace/config` | Configuration (lecture seule) |
+| `./workflows/templates` | `/workspace/workflows/templates` | Templates workflows (lecture seule) |
 
 ---
 
@@ -233,9 +231,9 @@ docker compose exec comfy_img_to_loop tail -f /workspace/logs/comfyui.log
 - App → rebuild rapide
 
 ### Image finale
-- Builder (~15 GB) → non conservé
-- Runtime (~8 GB) → image finale
+- Image single-stage (~8 GB sans modèles)
 - Nettoyage cache apt/pip automatique
+- Modèles téléchargés au démarrage du container via entrypoint
 
 ---
 

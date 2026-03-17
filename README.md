@@ -6,7 +6,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://docker.com)
 [![ComfyUI](https://img.shields.io/badge/comfyui-latest-blueviolet.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![WAN 2.2](https://img.shields.io/badge/WAN%202.2-5B%20%2F%2014B%20MoE-success.svg)](https://huggingface.co/Wan-AI)
-[![Version](https://img.shields.io/badge/version-4.3.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.4.0-blue.svg)](CHANGELOG.md)
 
 ---
 
@@ -79,13 +79,14 @@ Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
 
 ```
 GEGM_MotionLab/
-├── web_interface/          # Flask app (routes.py, app.py, jobs.py)
+├── web_interface/          # Flask app (routes.py, app.py, jobs.py, templates/)
 ├── workflows/              # ComfyUI workflows + templates
 │   ├── workflow_manager.py
 │   └── templates/          # wan22_{5b|14b}_{i2v|with_upscale}.json
-├── src/                    # Core modules
+├── src/                    # Core modules (comfyui_client, owncloud, logger)
 ├── scripts/                # Utilitaires (setup, download, verify)
-├── docker/                 # Dockerfile, docker-compose.yml
+├── config/                 # Configuration OwnCloud, logging, modèles
+├── Dockerfile              # Single-stage CUDA 12.8 (PYTHONPATH=/workspace)
 ├── requirements.txt        # Dépendances AVEC PyTorch (local)
 └── requirements-base.txt   # Dépendances SANS PyTorch (Docker)
 ```
@@ -172,4 +173,4 @@ make runpod-deploy      # Build multi-arch + push
 
 ---
 
-**Version:** 4.3.1 | **Status:** Production Ready | **Date:** 2026-01-23
+**Version:** 4.4.0 | **Status:** Production Ready | **Date:** 2026-03-16

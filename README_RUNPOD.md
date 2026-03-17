@@ -100,15 +100,45 @@ rclone ls owncloud:/GEGM_ComfyUI/Models/wan2.2-ti2v-5b/ | wc -l
 
 ## Build et Déploiement
 
+### Production (branche main)
+
 ```bash
-# Build multi-arch + push Docker Hub
+# Build multi-arch + push Docker Hub → :latest
 make runpod-deploy
 
-# Build rapide (AMD64 uniquement)
+# Build rapide AMD64 uniquement → :latest
 make runpod-deploy-quick
 ```
 
 **Image :** `arnaudboy/comfy_img_to_loop:latest`
+
+### Test (branche debug)
+
+```bash
+# Build rapide AMD64 uniquement → :test
+make runpod-deploy-quick-test
+
+# Build multi-arch + push → :test
+make runpod-deploy-test
+```
+
+**Image :** `arnaudboy/comfy_img_to_loop:test`
+
+### Workflow deux branches
+
+```bash
+# PRODUCTION — code stable validé
+git checkout main
+make runpod-deploy-quick       # → arnaudboy/comfy_img_to_loop:latest
+
+# TEST — expérimentation
+git checkout debug
+make runpod-deploy-quick-test  # → arnaudboy/comfy_img_to_loop:test
+```
+
+Sur RunPod, créer 2 templates séparés :
+- **Template prod** : image `arnaudboy/comfy_img_to_loop:latest`
+- **Template test** : image `arnaudboy/comfy_img_to_loop:test`
 
 ---
 
@@ -237,4 +267,4 @@ curl https://<pod-id>-5000.proxy.runpod.net/api/jobs/<job_id>
 
 ---
 
-**Version:** 4.3.1 | **Image:** `arnaudboy/comfy_img_to_loop:latest` | **Date:** 2026-01-23
+**Version:** 4.4.0 | **Images:** `arnaudboy/comfy_img_to_loop:latest` (prod) / `:test` (debug) | **Date:** 2026-03-16

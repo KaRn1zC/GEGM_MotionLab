@@ -1,6 +1,6 @@
 # Guide du système de documentation - GEGM MotionLab
 
-**Créé le** : 2025-11-26
+**Créé le** : 2025-11-26 | **Mis à jour** : 2026-03-16
 **Objectif** : Maintenir une documentation toujours à jour et optimisée
 
 ---
@@ -23,21 +23,23 @@ J'ai créé un **système de tracking intelligent** qui me permet de :
 
 ```
 Comfy_Img_to_Loop/
-├── CLAUDE.md                       # Guide pour Claude (technique détaillé)
+├── CLAUDE.md                       # Guide pour Claude Code (technique détaillé)
 ├── README.md                       # Documentation utilisateur (professionnel)
-├── README-DOCKER.md                # Guide Docker (DevOps)
-├── README-RUNPOD.md                # Guide RunPod (déploiement)
-├── GUIDE_DOCUMENTATION.md          # 📖 Ce fichier (guide du système)
+├── README_DOCKER.md                # Guide Docker (DevOps)
+├── README_RUNPOD.md                # Guide RunPod (déploiement)
+├── GUIDE_DOCUMENTATION.md          # Ce fichier (guide du système de documentation)
 │
 └── docs/
     ├── README.md                   # Explication du dossier docs
-    ├── CHANGES_TRACKER.md          # 🎯 FICHIER CLÉ - Journal de bord
+    ├── CHANGES_TRACKER.md          # Journal de bord des modifications
     ├── ARCHITECTURE.md             # Architecture technique détaillée
     │
-    └── sessions/                   # Archivage des sessions
-        ├── 2025-11-26_container51_corrections.md
-        └── ...
+    └── sessions/                   # Archivage des sessions de debugging
+        └── 2025-11-26_container51_corrections.md
 ```
+
+**Frontend** : `web_interface/templates/index.html` (Tailwind standalone, JS inline)
+**Templates erreur** : `404.html` et `500.html` (Tailwind standalone)
 
 ---
 

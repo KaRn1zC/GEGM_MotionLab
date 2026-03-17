@@ -11,10 +11,10 @@ from werkzeug.utils import secure_filename
 import subprocess
 import sys
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger
 from src.comfyui_client import ComfyUISession, test_comfyui_connection
+from src.model_registry import get_registry
 from src.owncloud_uploader import OwnCloudUploader, upload_cinemagraph
 from workflows.workflow_manager import workflow_manager
 from web_interface.jobs import JobStatus
@@ -94,41 +94,52 @@ def calculate_optimal_generation_strategy(
     source_height: int,
     target_width: int,
     target_height: int,
-    model_type: str = "5b",
+    model_name: str | None = None,
 ) -> dict:
     """
-    Calcule la stratégie de génération optimale pour WAN 2.2.
+    Calcule la stratégie de génération optimale, adaptée au modèle actif.
 
-    Principe UNIFIÉ 5B et 14B (résolution native WAN 2.2 : 720p max) :
-    1. Si source < 720p : upscale Lanczos vers ~720p max
-    2. Si source > 720p : downscale Lanczos vers ~720p max
-    3. Si source ~720p : ajuster multiples de 32 uniquement
-    4. Génération WAN 2.2 à résolution optimale (~720p)
-    5. Post-génération : UltraSharp 4x + Lanczos vers target
+    Interroge le registre pour obtenir les capacités de résolution du modèle,
+    avec fallback sur les valeurs WAN 2.2 si le modèle est inconnu ou absent.
 
-    Les deux modèles utilisent désormais la même stratégie d'upscale adaptatif.
-    Référence: Documentation officielle WAN 2.2 supporte 480P et 720P pour 14B.
+    Principe :
+    1. Si source < résolution native → upscale Lanczos pré-génération
+    2. Si source > résolution native → downscale Lanczos pré-génération
+    3. Si source ≈ résolution native → ajuster multiples du stride uniquement
+    4. Génération à résolution native du modèle
+    5. Post-génération : upscale vers target si nécessaire
 
     Args:
-        source_width, source_height: Dimensions image source (déjà ajustées multiples 32)
+        source_width, source_height: Dimensions image source (déjà ajustées au stride)
         target_width, target_height: Dimensions cible finales
-        model_type: Type de modèle ('5b' ou '14b') - même stratégie pour les deux
+        model_name: Nom du modèle dans le registre (fallback WAN 2.2 si None)
 
     Returns:
-        dict: {
-            'generation_width': int,       # Résolution pour WAN 2.2 (~720p max)
-            'generation_height': int,
-            'needs_pregen_resize': bool,   # Si redimensionnement pré-génération requis
-            'upscale_ratio': float,        # Ratio upscale post-génération
-            'total_ratio': float,          # Ratio source→target
-            'use_supersampling': bool,     # True si ratio ≤4x (downscale après UltraSharp)
-            'strategy': str                # Description stratégie
-        }
+        dict avec generation_width, generation_height, needs_pregen_resize,
+        resize_type, upscale_ratio, total_ratio, use_supersampling,
+        dimension_stride, strategy
     """
-    # Constantes officielles WAN 2.2 (identiques pour 5B et 14B)
-    WAN22_MAX_WIDTH = 1280
-    WAN22_MAX_HEIGHT = 720
-    WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
+    from src.model_registry import ResolutionConfig
+
+    # Lookup registre avec fallback WAN 2.2 legacy
+    res: ResolutionConfig | None = None
+    try:
+        registry = get_registry()
+        res = registry.get_resolution_config(model_name) if model_name else None
+    except Exception:
+        pass
+
+    if not res:
+        res = ResolutionConfig(
+            max_width=1280, max_height=720, dimension_stride=32,
+            upscale_trigger_ratio=1.5, supersampling_max_ratio=4.0,
+            vae_tiling_pixel_threshold=2073600, vae_tiling_upscale_threshold=4.0,
+        )
+
+    max_w = res.max_width
+    max_h = res.max_height
+    max_pixels = res.max_pixels
+    stride = res.dimension_stride
 
     # Calculer ratios et dimensions
     source_pixels = source_width * source_height
@@ -136,43 +147,31 @@ def calculate_optimal_generation_strategy(
     total_ratio = target_pixels / source_pixels
     aspect_ratio = source_width / source_height
 
-    # STRATÉGIE UNIFIÉE 5B et 14B
-    # Les deux modèles utilisent la même logique d'upscale adaptatif vers ~720p max
-    # Référence: Documentation officielle WAN 2.2 confirme support 480P/720P pour 14B
-
-    # Note: Le paramètre model_type est conservé pour compatibilité future
-    # mais la stratégie est maintenant identique pour 5B et 14B
-    _ = model_type  # Unused but kept for API compatibility
-
-    # Calculer résolution de génération optimale (~720p max)
-    # EXCEPTION: Si target ≤ source, générer à résolution source (pas d'upscale inutile)
+    # Si target ≤ source, générer à résolution source (pas d'upscale inutile)
     if target_width <= source_width and target_height <= source_height:
         gen_w = source_width
         gen_h = source_height
     else:
-        # Calculer dimensions max possibles en conservant ratio
-        if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-            # Limité par largeur (image wide)
-            gen_w = WAN22_MAX_WIDTH
-            gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
+        # Dimensions max possibles en conservant ratio
+        if aspect_ratio >= (max_w / max_h):
+            gen_w = max_w
+            gen_h = int(max_w / aspect_ratio)
         else:
-            # Limité par hauteur (image tall)
-            gen_h = WAN22_MAX_HEIGHT
-            gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
+            gen_h = max_h
+            gen_w = int(max_h * aspect_ratio)
 
-        # Ajuster aux multiples de 32 (arrondi ratio-aware)
-        gen_w, gen_h = find_best_generation_dims(gen_w, gen_h)
+        # Ajuster aux multiples du stride (arrondi ratio-aware)
+        gen_w, gen_h = find_best_generation_dims(gen_w, gen_h, multiple=stride)
 
-        # Vérifier si on dépasse encore 720p après ajustement
-        if gen_w * gen_h > WAN22_MAX_PIXELS:
-            # Réduire légèrement pour rester sous la limite
-            if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-                raw_w = WAN22_MAX_WIDTH - 32
+        # Vérifier si on dépasse la résolution native après ajustement
+        if gen_w * gen_h > max_pixels:
+            if aspect_ratio >= (max_w / max_h):
+                raw_w = max_w - stride
                 raw_h = int(raw_w / aspect_ratio)
             else:
-                raw_h = WAN22_MAX_HEIGHT - 32
+                raw_h = max_h - stride
                 raw_w = int(raw_h * aspect_ratio)
-            gen_w, gen_h = find_best_generation_dims(raw_w, raw_h)
+            gen_w, gen_h = find_best_generation_dims(raw_w, raw_h, multiple=stride)
 
     # Déterminer si redimensionnement pré-génération nécessaire
     needs_pregen_resize = gen_w != source_width or gen_h != source_height
@@ -190,7 +189,7 @@ def calculate_optimal_generation_strategy(
 
     # Calculer ratio upscale post-génération
     upscale_ratio = (target_width * target_height) / (gen_w * gen_h)
-    use_supersampling = upscale_ratio <= 4.0
+    use_supersampling = upscale_ratio <= res.supersampling_max_ratio
 
     return {
         "generation_width": gen_w,
@@ -200,6 +199,7 @@ def calculate_optimal_generation_strategy(
         "upscale_ratio": upscale_ratio,
         "total_ratio": total_ratio,
         "use_supersampling": use_supersampling,
+        "dimension_stride": stride,
         "strategy": strategy_desc,
     }
 
@@ -272,26 +272,33 @@ async def process_cinemagraph_generation(job_id: str):
         user_target_width = job.parameters.get("user_target_width", target_width)
         user_target_height = job.parameters.get("user_target_height", target_height)
 
-        # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
-        # Arrondi ratio-aware : teste floor/ceil pour préserver le ratio d'aspect
-
-        # Ajuster dimensions source
-        adjusted_source_width, adjusted_source_height = find_best_generation_dims(
-            source_width, source_height
-        )
-
-        # Ajuster dimensions cibles
-        adjusted_target_width, adjusted_target_height = find_best_generation_dims(
-            target_width, target_height
-        )
-
-        # Détecter le modèle disponible (5B ou 14B) AVANT le calcul de stratégie
-        # CRITIQUE: Le 14B nécessite une stratégie différente (génération à résolution source)
+        # Détecter le modèle disponible AVANT le calcul de stratégie
         from workflows.workflow_manager import WorkflowTemplate
 
         temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
         detected_model, model_type = temp_template._detect_available_model()
         logger.info(f"🤖 Modèle détecté: {detected_model} (type: {model_type})")
+
+        # Obtenir la config du modèle depuis le registre (pour stride, seuils, etc.)
+        model_cfg = None
+        try:
+            _registry = get_registry()
+            model_cfg = _registry.get_model(detected_model)
+        except Exception:
+            pass
+
+        # Stride d'alignement depuis le registre (fallback 32)
+        stride = 32
+        if model_cfg and model_cfg.resolution:
+            stride = model_cfg.resolution.dimension_stride
+
+        # Ajuster dimensions source et cible au stride du modèle
+        adjusted_source_width, adjusted_source_height = find_best_generation_dims(
+            source_width, source_height, multiple=stride
+        )
+        adjusted_target_width, adjusted_target_height = find_best_generation_dims(
+            target_width, target_height, multiple=stride
+        )
 
         # Calculer la stratégie de génération optimale selon le modèle
         strategy = calculate_optimal_generation_strategy(
@@ -299,7 +306,7 @@ async def process_cinemagraph_generation(job_id: str):
             adjusted_source_height,
             adjusted_target_width,
             adjusted_target_height,
-            model_type=model_type,
+            model_name=detected_model,
         )
 
         generation_width = strategy["generation_width"]
@@ -411,26 +418,34 @@ async def process_cinemagraph_generation(job_id: str):
                     "   Des artefacts peuvent apparaître au-delà de 4x. Qualité optimale garantie jusqu'à 4x."
                 )
 
-        # Calculer si VAE tiling doit être activé (pour résolutions >1080p ou upscale >4x)
+        # VAE tiling — piloté par le registre
         target_pixels = adjusted_target_width * adjusted_target_height
-        enable_vae_tiling = target_pixels > (1920 * 1080) or upscale_ratio > 4.0
+        if model_cfg and model_cfg.resolution:
+            _res = model_cfg.resolution
+            enable_vae_tiling = (
+                target_pixels > _res.vae_tiling_pixel_threshold
+                or upscale_ratio > _res.vae_tiling_upscale_threshold
+            )
+        else:
+            enable_vae_tiling = target_pixels > 2073600 or upscale_ratio > 4.0
 
-        # Sélectionner le workflow selon modèle ET upscale
-        if upscale_ratio > 1.5:  # Besoin d'upscale intelligent
-            if model_type == "14b":
-                selected_workflow = "wan22_14b_with_upscale"
-            else:
-                selected_workflow = "wan22_5b_with_upscale"
+        # Sélection workflow — piloté par le registre
+        if model_cfg and model_cfg.resolution:
+            trigger = model_cfg.resolution.upscale_trigger_ratio
+            base_wf = model_cfg.workflow_template
+            upscale_wf = model_cfg.workflow_template_upscale or base_wf
+        else:
+            trigger = 1.5
+            base_wf = f"wan22_{model_type}_i2v"
+            upscale_wf = f"wan22_{model_type}_with_upscale"
+
+        if upscale_ratio > trigger:
+            selected_workflow = upscale_wf
 
             logger.info(
                 f"🔍 Workflow {model_type.upper()} avec upscale sélectionné (ratio: {upscale_ratio:.2f}x)"
             )
 
-            # Pour le workflow upscale, utiliser la résolution de génération optimale calculée
-            # L'upscaling sera fait par 4x-UltraSharp (node 11) + resize Lanczos (node 11b)
-            # IMPORTANT: Créer workflow_params SANS utiliser job.parameters pour width/height
-            # car job.parameters contient la résolution cible (final_width/final_height)
-            # mais nous voulons utiliser generation_width/generation_height
             base_params = {
                 k: v for k, v in job.parameters.items() if k not in ["width", "height"]
             }
@@ -438,15 +453,14 @@ async def process_cinemagraph_generation(job_id: str):
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
-                **base_params,  # Tous les params sauf width/height
-                "width": generation_width,  # Résolution génération WAN 2.2
+                **base_params,
+                "width": generation_width,
                 "height": generation_height,
-                "target_width": adjusted_target_width,  # Résolution finale après upscale
+                "target_width": adjusted_target_width,
                 "target_height": adjusted_target_height,
                 "enable_vae_tiling": enable_vae_tiling,
             }
 
-            # Sortie attendue du workflow upscale : résolution cible ajustée
             expected_output_width = adjusted_target_width
             expected_output_height = adjusted_target_height
 
@@ -455,10 +469,7 @@ async def process_cinemagraph_generation(job_id: str):
                     f"🔧 VAE tiling activé (résolution finale: {adjusted_target_width}x{adjusted_target_height}, upscale: {upscale_ratio:.2f}x)"
                 )
         else:
-            if model_type == "14b":
-                selected_workflow = "wan22_14b_i2v"
-            else:
-                selected_workflow = "wan22_5b_i2v"
+            selected_workflow = base_wf
 
             logger.info(
                 f"✅ Workflow {model_type.upper()} standard (ratio: {upscale_ratio:.2f}x)"
@@ -512,8 +523,12 @@ async def process_cinemagraph_generation(job_id: str):
                 job_id, current_step="Génération en cours...", progress=0.5
             )
 
-            # Timeout adapté par modèle : 14B nécessite plus de temps (3h) que le 5B (90 min)
-            workflow_timeout = 10800 if model_type == "14b" else 5400
+            # Timeout adapté par modèle — registre d'abord, fallback hardcodé
+            try:
+                _reg = get_registry()
+                workflow_timeout = _reg.get_timeout(detected_model) or (10800 if model_type == "14b" else 5400)
+            except Exception:
+                workflow_timeout = 10800 if model_type == "14b" else 5400
             logger.info(
                 f"⏱️  Timeout workflow {model_type.upper()}: {workflow_timeout}s ({workflow_timeout // 60} min)"
             )
@@ -714,11 +729,11 @@ def calc_resolution():
             source_w, source_h
         )
 
-        # Détecter le modèle disponible (5B ou 14B) pour calcul stratégie
+        # Détecter le modèle disponible pour calcul stratégie
         from workflows.workflow_manager import WorkflowTemplate
 
         temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
-        detected_model, model_type = temp_template._detect_available_model()
+        detected_model, _model_type = temp_template._detect_available_model()
 
         # Calculer la stratégie de génération complète selon le modèle
         strategy = calculate_optimal_generation_strategy(
@@ -726,7 +741,7 @@ def calc_resolution():
             adjusted_source_h,
             final_w,
             final_h,
-            model_type=model_type,
+            model_name=detected_model,
         )
 
         upscale_ratio = strategy["upscale_ratio"]
@@ -916,16 +931,23 @@ def generate_cinemagraph():
     )
     # Log du workflow qui sera utilisé
     scale_ratio = (final_width * final_height) / (source_width * source_height)
-    # Détecter le modèle pour log informatif
     from workflows.workflow_manager import WorkflowTemplate
 
     temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
-    _, log_model_type = temp_template._detect_available_model()
-    expected_workflow = (
-        f"wan22_{log_model_type}_with_upscale"
-        if scale_ratio > 1.5
-        else f"wan22_{log_model_type}_i2v"
-    )
+    detected_model_name, log_model_type = temp_template._detect_available_model()
+    try:
+        _reg = get_registry()
+        _cfg = _reg.get_model(detected_model_name)
+        if _cfg and _cfg.resolution:
+            expected_workflow = (
+                _cfg.workflow_template_upscale or _cfg.workflow_template
+                if scale_ratio > _cfg.resolution.upscale_trigger_ratio
+                else _cfg.workflow_template
+            )
+        else:
+            expected_workflow = f"wan22_{log_model_type}_with_upscale" if scale_ratio > 1.5 else f"wan22_{log_model_type}_i2v"
+    except Exception:
+        expected_workflow = f"wan22_{log_model_type}_with_upscale" if scale_ratio > 1.5 else f"wan22_{log_model_type}_i2v"
     logger.info(f"   Workflow: {expected_workflow} (ratio: {scale_ratio:.2f}x)")
 
     return jsonify(
@@ -1212,11 +1234,15 @@ def get_model_info():
         if not comfyui_models_dir.exists():
             comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
 
-        # Recherche des modèles disponibles
-        model_priority = [
-            ("wan2.2-i2v-a14b", "14b"),
-            ("wan2.2-ti2v-5b", "5b"),
-        ]
+        # Recherche des modèles disponibles — registre d'abord, fallback hardcodé
+        try:
+            _reg = get_registry()
+            model_priority = _reg.get_detection_priority()
+        except Exception:
+            model_priority = [
+                ("wan2.2-i2v-a14b", "14b"),
+                ("wan2.2-ti2v-5b", "5b"),
+            ]
 
         detected_model = None
         model_type = None
@@ -1244,10 +1270,26 @@ def get_model_info():
                 f"⚠️ API model-info: Utilisation env var: {env_model} (type: {model_type})"
             )
 
-        # Temps estimés pour preset "Naturel" avec 30 steps
-        # Basé sur les benchmarks réels
-        estimated_times = {"5b": "~8 min", "14b": "~15 min"}
+        # Informations enrichies depuis le registre
+        try:
+            _reg = get_registry()
+            model_cfg = _reg.get_model(detected_model)
+        except Exception:
+            model_cfg = None
 
+        if model_cfg:
+            return jsonify(
+                {
+                    "model_type": model_type,
+                    "model_name": detected_model,
+                    "display_name": model_cfg.display_name,
+                    "estimated_time": model_cfg.estimated_time,
+                    "gpu_recommendation": model_cfg.vram_requirement,
+                }
+            )
+
+        # Fallback legacy
+        estimated_times = {"5b": "~8 min", "14b": "~15 min"}
         return jsonify(
             {
                 "model_type": model_type,
@@ -1283,10 +1325,9 @@ def get_model_info():
 @api_bp.route("/jobs/<job_id>/thumbnail", methods=["GET"])
 def get_thumbnail(job_id):
     """Retourne une miniature du résultat (placeholder pour l'instant)"""
-    # TODO: Générer vraie miniature avec PIL
-    from flask import send_file
+    # TODO: Extraire la première frame de la vidéo avec ffmpeg ou PIL
+    logger.warning(f"Thumbnail placeholder retourné pour job {job_id} - extraction première frame non implémentée")
     import io
-    from PIL import Image
 
     # Placeholder image
     img = Image.new("RGB", (400, 300), color="#667eea")

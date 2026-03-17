@@ -8,10 +8,8 @@ import sys
 import argparse
 from pathlib import Path
 
-# Ajouter le répertoire parent au path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from src.logger import get_logger
+from src.model_registry import get_registry
 
 logger = get_logger("t5_verification")
 
@@ -28,8 +26,16 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
         True si le T5 est valide, False sinon
     """
     model_dir = Path(base_dir) / model_name
-    # Format ComfyUI: safetensors FP16 (compatible WanVideoWrapper)
-    t5_file = model_dir / "umt5_xxl_fp16.safetensors"
+
+    # Filename T5 depuis le registre (fallback hardcodé)
+    try:
+        registry = get_registry()
+        shared = registry.get_shared_components()
+        t5_filename = shared.text_encoder.filename
+    except Exception:
+        t5_filename = "umt5_xxl_fp16.safetensors"
+
+    t5_file = model_dir / t5_filename
 
     print(f"🔍 Vérification de l'intégrité du T5 Encoder pour {model_name}...")
     logger.info(
@@ -97,20 +103,21 @@ def verify_t5_encoder(model_name: str, base_dir: str = "models") -> bool:
     print("🔍 Vérification des clés critiques...")
     logger.info("🔍 Vérification des clés critiques du T5 Encoder...")
 
-    # Clés critiques selon le format du fichier (Comfy-Org/HuggingFace standard)
-    # Ces clés seront converties par ComfyUI-WanVideoWrapper lors du chargement
-    # Source: https://github.com/kijai/ComfyUI-WanVideoWrapper/blob/main/nodes_model_loading.py
-    critical_keys = [
-        "shared.weight",  # Embeddings partagés (sera converti en token_embedding.weight)
-        "encoder.block.0.layer.0.SelfAttention.q.weight",  # Premier bloc attention
-        "encoder.block.0.layer.1.DenseReluDense.wi_0.weight",  # Premier bloc FFN gate
-        "encoder.block.0.layer.1.DenseReluDense.wi_1.weight",  # Premier bloc FFN fc1
-        "encoder.block.0.layer.1.DenseReluDense.wo.weight",  # Premier bloc FFN fc2
-        "encoder.block.11.layer.1.DenseReluDense.wi_0.weight",  # Bloc milieu FFN
-        "encoder.block.23.layer.0.SelfAttention.q.weight",  # Dernier bloc attention
-        "encoder.block.23.layer.1.DenseReluDense.wo.weight",  # Dernier bloc FFN fc2
-        "encoder.final_layer_norm.weight",  # Layer norm final (sera converti en norm.weight)
-    ]
+    # Clés critiques depuis le registre (fallback hardcodé)
+    try:
+        critical_keys = shared.text_encoder.critical_keys
+    except Exception:
+        critical_keys = [
+            "shared.weight",
+            "encoder.block.0.layer.0.SelfAttention.q.weight",
+            "encoder.block.0.layer.1.DenseReluDense.wi_0.weight",
+            "encoder.block.0.layer.1.DenseReluDense.wi_1.weight",
+            "encoder.block.0.layer.1.DenseReluDense.wo.weight",
+            "encoder.block.11.layer.1.DenseReluDense.wi_0.weight",
+            "encoder.block.23.layer.0.SelfAttention.q.weight",
+            "encoder.block.23.layer.1.DenseReluDense.wo.weight",
+            "encoder.final_layer_norm.weight",
+        ]
 
     logger.info("Format attendu: HuggingFace/Comfy-Org (sera converti par ComfyUI)")
 

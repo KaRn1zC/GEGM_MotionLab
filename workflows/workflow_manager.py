@@ -6,15 +6,13 @@ Charge et applique les templates de workflows avec paramètres
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any
 from datetime import datetime
 import copy
 
-# Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
-
 # Import du système de logging centralisé
 from src.logger import get_logger
+from src.model_registry import get_registry
 
 logger = get_logger("workflow_manager")
 
@@ -22,53 +20,75 @@ logger = get_logger("workflow_manager")
 class WorkflowTemplate:
     """Représente un template de workflow avec ses paramètres"""
 
-    def __init__(self, template_data: Dict[str, Any]):
+    def __init__(self, template_data: dict[str, Any]):
         self.name = template_data.get("name", "Unknown")
         self.description = template_data.get("description", "")
         self.version = template_data.get("version", "1.0.0")
         self.parameters = template_data.get("parameters", {})
         self.workflow = template_data.get("workflow", {})
         self.metadata = template_data.get("metadata", {})
+        self.model_family = template_data.get("model_family", "wan22")
+        self._template = template_data
 
         logger.debug(f"Template chargé: {self.name} v{self.version}")
 
     def _detect_available_model(self) -> tuple[str, str]:
         """
-        Détecte automatiquement quel modèle WAN 2.2 est disponible
+        Détecte automatiquement quel modèle est disponible sur le filesystem.
+
+        Cherche dans diffusion_models (WAN) et checkpoints (LTX, WAN fallback).
 
         Returns:
-            tuple: (model_name, model_type) où model_type = "5b" ou "14b"
+            tuple: (model_name, model_type)
         """
         import os
 
-        # WanVideoModelLoader cherche dans diffusion_models
-        comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/diffusion_models")
-
-        # Fallback si diffusion_models n'existe pas
-        if not comfyui_models_dir.exists():
-            comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
-
-        # Priorité : 14B > 5B
-        model_priority = [
-            ("wan2.2-i2v-a14b", "14b"),
-            ("wan2.2-ti2v-5b", "5b"),
+        # Répertoires de recherche (WAN: diffusion_models, LTX: checkpoints)
+        search_dirs = [
+            Path("/workspace/comfyui/ComfyUI/models/diffusion_models"),
+            Path("/workspace/comfyui/ComfyUI/models/checkpoints"),
         ]
+        # Filtrer les répertoires existants
+        existing_dirs = [d for d in search_dirs if d.exists()]
+        comfyui_models_dir = existing_dirs[0] if existing_dirs else search_dirs[0]
+
+        # Priorité depuis le registre (fallback hardcodé si registre échoue)
+        try:
+            registry = get_registry()
+            model_priority = registry.get_detection_priority()
+        except Exception:
+            model_priority = [
+                ("wan2.2-i2v-a14b", "14b"),
+                ("wan2.2-ti2v-5b", "5b"),
+            ]
 
         for model_name, model_type in model_priority:
-            model_path = comfyui_models_dir / model_name
-            if model_path.exists() and any(model_path.glob("*.safetensors")):
-                logger.info(f"✅ Modèle détecté: {model_name} (type: {model_type})")
-                return model_name, model_type
+            # Chercher dans tous les répertoires existants (diffusion_models + checkpoints)
+            for search_dir in existing_dirs:
+                model_path = search_dir / model_name
+                if model_path.exists() and any(model_path.glob("*.safetensors")):
+                    logger.info(f"✅ Modèle détecté: {model_name} (type: {model_type})")
+                    return model_name, model_type
 
         # Fallback: Variable d'environnement
         env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
-        model_type = (
-            "14b" if "14b" in env_model.lower() or "a14b" in env_model.lower() else "5b"
-        )
+        # Déduire model_type depuis le registre ou le nom
+        fallback_type = "5b"
+        try:
+            registry_model = get_registry().get_model(env_model)
+            if registry_model:
+                fallback_type = registry_model.model_type
+        except Exception:
+            if "14b" in env_model.lower() or "a14b" in env_model.lower():
+                fallback_type = "14b"
+            elif "distilled" in env_model.lower():
+                fallback_type = "distilled"
+            elif "dev" in env_model.lower() and "ltx" in env_model.lower():
+                fallback_type = "dev"
         logger.warning(
-            f"⚠️ Aucun modèle trouvé, utilisation variable env: {env_model} (type: {model_type})"
+            f"⚠️ Aucun modèle trouvé, utilisation variable env: {env_model} (type: {fallback_type})"
         )
-        return env_model, model_type
+        return env_model, fallback_type
 
     def _get_model_checkpoint_path(self, model_name: str) -> str | tuple[str, str]:
         """
@@ -95,6 +115,12 @@ class WorkflowTemplate:
 
         model_path = comfyui_models_dir / model_name
 
+        # Essayer le registre pour les modèles non-legacy
+        result = self._get_checkpoint_from_registry(model_name, model_path)
+        if result is not None:
+            return result
+
+        # Code legacy existant (5B, 14B) — INCHANGÉ
         # Détection automatique selon la structure des fichiers (ComfyUI Native)
         if "5b" in model_name.lower():
             # Modèle 5B : chercher le fichier ComfyUI Native (Comfy-Org)
@@ -203,13 +229,66 @@ class WorkflowTemplate:
         logger.error("❌ Aucun checkpoint trouvé !")
         return f"{model_name}/model.safetensors"
 
+    def _get_checkpoint_from_registry(
+        self, model_name: str, model_path: Path
+    ) -> str | tuple[str, str] | None:
+        """
+        Résout le chemin checkpoint via le registre pour les modèles non-legacy.
+
+        Les modèles 5B/14B passent dans le code legacy (plus robuste avec ses
+        multiples fallbacks). Seuls les futurs modèles ajoutés au registre
+        passent ici.
+
+        Args:
+            model_name: Nom du dossier modèle
+            model_path: Chemin absolu vers le dossier du modèle
+
+        Returns:
+            Chemin(s) checkpoint si trouvé via registre, None sinon (→ fallback legacy)
+        """
+        # Les modèles legacy gardent leur code éprouvé
+        if "5b" in model_name.lower() or "14b" in model_name.lower():
+            return None
+
+        try:
+            registry = get_registry()
+            cd = registry.get_checkpoint_detection(model_name)
+            if not cd:
+                return None
+
+            if cd.return_type == "moe_pair" and len(cd.primary_files) >= 2:
+                high = model_path / cd.primary_files[0]
+                low = model_path / cd.primary_files[1]
+                if high.exists() and low.exists():
+                    return (
+                        f"{model_name}/{cd.primary_files[0]}",
+                        f"{model_name}/{cd.primary_files[1]}",
+                    )
+            else:
+                for fname in cd.primary_files:
+                    fpath = model_path / fname
+                    if fpath.exists():
+                        return f"{model_name}/{fname}"
+
+            # Fallback fichiers alternatifs
+            for fname in cd.fallback_files:
+                fpath = model_path / fname
+                if fpath.exists():
+                    logger.warning(f"⚠️ Registre: fallback détecté pour {model_name}: {fname}")
+                    return f"{model_name}/{fname}"
+
+        except Exception as e:
+            logger.debug(f"Registre indisponible pour {model_name}: {e}")
+
+        return None
+
     def _generate_random_seed(self) -> int:
         """Génère un seed aléatoire valide (>= 0)"""
         import random
 
         return random.randint(0, 2**31 - 1)
 
-    def _transform_frontend_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _transform_frontend_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Transforme les paramètres high-level du frontend en paramètres low-level ComfyUI
 
@@ -227,7 +306,7 @@ class WorkflowTemplate:
             params: Paramètres du frontend
 
         Returns:
-            Dict: Paramètres transformés pour ComfyUI
+            dict: Paramètres transformés pour ComfyUI
         """
         transformed = params.copy()
 
@@ -328,7 +407,101 @@ class WorkflowTemplate:
 
         return transformed
 
-    def apply_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _transform_frontend_params_ltx23(self, params: dict[str, Any]) -> dict[str, Any]:
+        """
+        Transforme les paramètres frontend en paramètres LTX 2.3 ComfyUI.
+
+        Différences avec WAN 2.2 :
+        - Pas de shift/riflex_freq_index — LTX utilise STG guidance
+        - motion_intensity → stg_scale + prompt engineering
+        - consistency → temporal_tile_size / temporal_overlap
+        - CFG = 1 pour distilled, 3-7 pour dev
+        - frames doit être N×8+1
+
+        Args:
+            params: Paramètres du frontend
+
+        Returns:
+            dict: Paramètres transformés pour LTX 2.3
+        """
+        transformed = params.copy()
+
+        # === STG_SCALE (contrôle qualité spatiale — équivalent du shift WAN) ===
+        motion_intensity = params.get("motion_intensity", "moderate")
+        base_stg = {
+            "subtle": 0.5,
+            "moderate": 1.0,
+            "intense": 1.5,
+        }.get(motion_intensity, 1.0)
+
+        noise_level = params.get("noise_level", "high")
+        noise_mod = {"low": -0.2, "medium": 0.0, "high": 0.2}.get(noise_level, 0.0)
+
+        denoise = params.get("denoise", 75)
+        denoise_mod = (denoise - 50) / 50 * 0.3
+
+        final_stg = max(0.0, min(3.0, base_stg + noise_mod + denoise_mod))
+        transformed["stg_scale"] = round(final_stg, 2)
+
+        # === TEMPORAL TILING (cohérence temporelle — équivalent de riflex_freq_index) ===
+        consistency = params.get("consistency", 80)
+        if consistency >= 85:
+            transformed["temporal_tile_size"] = 80
+            transformed["temporal_overlap"] = 32
+        elif consistency >= 60:
+            transformed["temporal_tile_size"] = 80
+            transformed["temporal_overlap"] = 24
+        else:
+            transformed["temporal_tile_size"] = 64
+            transformed["temporal_overlap"] = 16
+
+        # === FRAMES: arrondir au N×8+1 le plus proche ===
+        frames = params.get("frames", 81)
+        if (frames - 1) % 8 != 0:
+            # Arrondir au N×8+1 le plus proche
+            n = round((frames - 1) / 8)
+            frames = max(9, n * 8 + 1)
+            transformed["frames"] = frames
+
+        # === CFG SCALE ===
+        base_cfg = params.get("cfg_scale", 1.0)
+        color_pres = params.get("color_preservation", 70)
+        cfg_mod = (color_pres - 50) / 100 * 1.0
+        final_cfg = max(1.0, min(15.0, base_cfg + cfg_mod))
+        transformed["cfg_scale"] = round(final_cfg, 1)
+
+        # === COND_IMAGE_INDICES pour boucle seamless ===
+        # Conditionner le premier ET le dernier frame avec la même image
+        last_frame = frames - 1
+        transformed["cond_image_indices"] = f"0, {last_frame}"
+
+        # === PROMPT ENGINEERING pour motion_area ===
+        motion_area = params.get("motion_area", "full")
+        prompt = params.get("prompt", "")
+        if motion_area == "center" and "center" not in prompt.lower():
+            transformed["prompt"] = f"{prompt}, movement focused in center, static edges"
+        elif motion_area == "edges" and "edge" not in prompt.lower():
+            transformed["prompt"] = f"{prompt}, movement on edges only, static center"
+
+        # Toujours ajouter "seamless loop, cinemagraph" au prompt
+        current_prompt = transformed.get("prompt", prompt)
+        if "seamless loop" not in current_prompt.lower():
+            transformed["prompt"] = f"{current_prompt}, seamless loop, cinemagraph"
+
+        # === MAPPING steps → steps_generation pour templates upscale ===
+        if "steps" in params:
+            transformed["steps_generation"] = params["steps"]
+
+        # === LOG ===
+        logger.info("🔧 Transformation paramètres frontend → LTX 2.3:")
+        logger.info(f"   motion_intensity={motion_intensity} → stg_scale={transformed['stg_scale']}")
+        logger.info(f"   consistency={consistency}% → temporal_overlap={transformed['temporal_overlap']}")
+        logger.info(f"   frames={frames} (N×8+1), cond_indices={transformed['cond_image_indices']}")
+        logger.info(f"   cfg_scale={transformed['cfg_scale']}")
+
+        return transformed
+
+    def apply_parameters(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Applique les paramètres au template et retourne le workflow final
 
@@ -336,10 +509,13 @@ class WorkflowTemplate:
             params: Paramètres à appliquer
 
         Returns:
-            Dict: Workflow ComfyUI prêt à l'emploi
+            dict: Workflow ComfyUI prêt à l'emploi
         """
-        # Transformer les paramètres frontend en paramètres ComfyUI
-        transformed_params = self._transform_frontend_params(params)
+        # Dispatcher la transformation selon la famille de modèle du template
+        if self.model_family == "ltx23":
+            transformed_params = self._transform_frontend_params_ltx23(params)
+        else:
+            transformed_params = self._transform_frontend_params(params)
 
         # Valider les paramètres transformés
         validated_params = self._validate_parameters(transformed_params)
@@ -353,16 +529,36 @@ class WorkflowTemplate:
                 f"🤖 Modèle auto-détecté: {detected_model} (type: {model_type})"
             )
 
-        # Injecter le bon nom de VAE selon le modèle
-        if validated_params.get("model_type") == "14b":
+        # Injecter le bon nom de VAE — registre d'abord, fallback legacy
+        try:
+            registry = get_registry()
+            vae_config = registry.get_vae_config(validated_params["model_name"])
+        except Exception:
+            vae_config = None
+
+        if vae_config:
+            validated_params["vae_name"] = vae_config.filename
+            logger.info(f"📦 VAE {vae_config.version}: {vae_config.filename}")
+        elif validated_params.get("model_type") == "14b":
             validated_params["vae_name"] = "wan_2.1_vae.safetensors"
             logger.info("📦 VAE 14B: wan_2.1_vae.safetensors (254 MB - VAE 2.1)")
         else:
             validated_params["vae_name"] = "wan2.2_vae.safetensors"
             logger.info("📦 VAE 5B: wan2.2_vae.safetensors (1.41 GB - VAE 2.2)")
 
+        # Injecter le text encoder model-spécifique (LTX → Gemma, WAN → T5 hardcodé dans template)
+        try:
+            registry = get_registry()
+            model_cfg = registry.get_model(validated_params["model_name"])
+            if model_cfg and model_cfg.text_encoder:
+                te_path = f"{model_cfg.text_encoder.filename}"
+                validated_params["text_encoder_path"] = te_path
+                logger.info(f"📝 Text encoder: {te_path}")
+        except Exception:
+            pass
+
         # Construire le chemin de checkpoint adapté au modèle
-        checkpoint_path = self._get_model_checkpoint_path(detected_model)
+        checkpoint_path = self._get_model_checkpoint_path(validated_params["model_name"])
 
         # Gérer le cas MoE 14B (tuple de deux chemins)
         if isinstance(checkpoint_path, tuple):
@@ -398,7 +594,7 @@ class WorkflowTemplate:
         )
         return workflow
 
-    def _substitute_params_recursive(self, obj: Any, params: Dict[str, Any]) -> Any:
+    def _substitute_params_recursive(self, obj: Any, params: dict[str, Any]) -> Any:
         """
         Substitue les paramètres de manière récursive EN GARDANT LES TYPES
         Args:
@@ -435,7 +631,7 @@ class WorkflowTemplate:
         else:
             return obj
 
-    def _validate_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_parameters(self, params: dict[str, Any]) -> dict[str, Any]:
         """Valide et normalise les paramètres selon les règles du template"""
         validated = {}
 
@@ -490,7 +686,7 @@ class WorkflowManager:
 
     def __init__(self, templates_dir: str = "workflows/templates"):
         self.templates_dir = Path(templates_dir)
-        self.templates: Dict[str, WorkflowTemplate] = {}
+        self.templates: dict[str, WorkflowTemplate] = {}
 
         # Charger tous les templates au démarrage
         self.load_templates()
@@ -519,11 +715,11 @@ class WorkflowManager:
 
         logger.info(f"✅ {loaded_count} templates chargés")
 
-    def get_template(self, template_id: str) -> Optional[WorkflowTemplate]:
+    def get_template(self, template_id: str) -> WorkflowTemplate | None:
         """Récupère un template par son ID"""
         return self.templates.get(template_id)
 
-    def list_templates(self) -> List[Dict[str, str]]:
+    def list_templates(self) -> list[dict[str, str]]:
         """Liste tous les templates disponibles"""
         return [
             {
@@ -536,8 +732,8 @@ class WorkflowManager:
         ]
 
     def create_workflow(
-        self, template_id: str, parameters: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, template_id: str, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Crée un workflow en appliquant les paramètres à un template
 
@@ -546,7 +742,7 @@ class WorkflowManager:
             parameters: Paramètres à appliquer
 
         Returns:
-            Dict: Workflow ComfyUI prêt
+            dict: Workflow ComfyUI prêt
         """
         template = self.get_template(template_id)
         if not template:
@@ -558,13 +754,13 @@ class WorkflowManager:
         return workflow
 
     def validate_template_parameters(
-        self, template_id: str, parameters: Dict[str, Any]
-    ) -> Dict[str, str]:
+        self, template_id: str, parameters: dict[str, Any]
+    ) -> dict[str, str]:
         """
         Valide les paramètres d'un template sans créer le workflow
 
         Returns:
-            Dict: Rapport de validation {param_name: status}
+            dict: Rapport de validation {param_name: status}
         """
         template = self.get_template(template_id)
         if not template:
@@ -587,7 +783,7 @@ class WorkflowManager:
 
         return validation_report
 
-    def validate_workflow(self, workflow_id: str) -> Dict[str, Any]:
+    def validate_workflow(self, workflow_id: str) -> dict[str, Any]:
         """
         Valide un workflow et retourne un rapport
 
@@ -595,7 +791,7 @@ class WorkflowManager:
             workflow_id: ID du workflow à valider
 
         Returns:
-            Dict: Rapport de validation
+            dict: Rapport de validation
         """
         template = self.get_template(workflow_id)
 
@@ -631,7 +827,7 @@ class WorkflowManager:
 
         return report
 
-    def get_workflow_info(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+    def get_workflow_info(self, workflow_id: str) -> dict[str, Any | None]:
         """
         Retourne les informations détaillées d'un workflow
 
@@ -639,7 +835,7 @@ class WorkflowManager:
             workflow_id: ID du workflow
 
         Returns:
-            Dict: Informations du workflow
+            dict: Informations du workflow
         """
         template = self.get_template(workflow_id)
 
@@ -668,7 +864,7 @@ class WorkflowManager:
             "tags": template.metadata.get("tags", []),
         }
 
-    def list_workflows_by_tag(self, tag: str) -> List[Dict[str, str]]:
+    def list_workflows_by_tag(self, tag: str) -> list[dict[str, str]]:
         """
         Liste les workflows par tag
 
@@ -676,7 +872,7 @@ class WorkflowManager:
             tag: Tag à filtrer
 
         Returns:
-            List: Workflows correspondants
+            list: Workflows correspondants
         """
         workflows = []
 
@@ -693,7 +889,7 @@ class WorkflowManager:
 
         return workflows
 
-    def get_parameter_schema(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+    def get_parameter_schema(self, workflow_id: str) -> dict[str, Any | None]:
         """
         Retourne le schéma JSON des paramètres d'un workflow
 
@@ -701,7 +897,7 @@ class WorkflowManager:
             workflow_id: ID du workflow
 
         Returns:
-            Dict: Schéma JSON des paramètres
+            dict: Schéma JSON des paramètres
         """
         template = self.get_template(workflow_id)
 

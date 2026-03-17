@@ -72,12 +72,31 @@ done
 echo "✅ Nettoyage terminé"
 echo ""
 
-# Vérifier la présence des fichiers ComfyUI Native (Comfy-Org)
-# 5B: wan2.2_ti2v_5B_fp16.safetensors
-# 14B: wan2.2_i2v_high_noise_14B_fp16.safetensors + wan2.2_i2v_low_noise_14B_fp16.safetensors
-if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
-   { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp16.safetensors" ] || \
-                                                  [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp16.safetensors" ]; }; }; then
+# Vérifier la présence des fichiers — registre d'abord, fallback hardcodé
+NEED_DOWNLOAD=false
+EXPECTED_JSON=$(python -m src.model_registry get-expected-files "$MODEL_NAME" 2>/dev/null)
+if [ $? -eq 0 ] && [ -n "$EXPECTED_JSON" ]; then
+    # Vérification dynamique via registre
+    NEED_DOWNLOAD=$(echo "$EXPECTED_JSON" | python3 -c "
+import sys, json, os
+files = json.load(sys.stdin)
+for f in files:
+    path = os.path.join('$MODEL_DIR', f['filename'])
+    if not os.path.isfile(path):
+        print('true')
+        sys.exit(0)
+print('false')
+")
+else
+    # Fallback: check hardcodé (5B/14B)
+    if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_fp16.safetensors" ]; } || \
+       { [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ] && { [ ! -f "$MODEL_DIR/wan2.2_i2v_high_noise_14B_fp16.safetensors" ] || \
+                                                      [ ! -f "$MODEL_DIR/wan2.2_i2v_low_noise_14B_fp16.safetensors" ]; }; }; then
+        NEED_DOWNLOAD=true
+    fi
+fi
+
+if [ "$NEED_DOWNLOAD" = "true" ]; then
 
     DOWNLOAD_SUCCESS=false
     USE_OWNCLOUD_FALLBACK=false
@@ -137,8 +156,16 @@ if { [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ] && [ ! -f "$MODEL_DIR/wan2.2_ti2v_5B_f
                     # Supprimer les symlinks cassés
                     find . -maxdepth 1 -type l -delete
 
-                    # Recréer les symlinks avec les bons chemins relatifs
-                    if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+                    # Recréer les symlinks — registre d'abord, fallback hardcodé
+                    SYMLINKS_JSON=$(python -m src.model_registry get-symlinks "$MODEL_NAME" 2>/dev/null)
+                    if [ $? -eq 0 ] && [ -n "$SYMLINKS_JSON" ]; then
+                        echo "$SYMLINKS_JSON" | python3 -c "
+import sys, json, os
+for s in json.load(sys.stdin):
+    os.symlink(s['source'], s['target'])
+"
+                        echo "   ✅ Symlinks $MODEL_NAME recréés (via registre)"
+                    elif [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
                         ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors .
                         ln -sf ../text_encoders/umt5_xxl_fp16.safetensors .
                         ln -sf ../vae/wan2.2_vae.safetensors .
@@ -330,8 +357,12 @@ mkdir -p "$VAE_DIR"
 CHECKPOINTS_BASE="/workspace/comfyui/ComfyUI/models/checkpoints"
 VAE_BASE="$CHECKPOINTS_BASE/vae"
 
-# Déterminer le nom du fichier VAE selon le modèle
-if [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
+# Déterminer le nom du fichier VAE — registre d'abord, fallback hardcodé
+VAE_FILENAME=$(python -m src.model_registry get-vae "$MODEL_NAME" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['filename'])" 2>/dev/null)
+if [ $? -eq 0 ] && [ -n "$VAE_FILENAME" ]; then
+    VAE_SOURCE="$VAE_BASE/$VAE_FILENAME"
+    echo "   Chemin source (registre): $VAE_SOURCE"
+elif [ "$MODEL_NAME" = "wan2.2-ti2v-5b" ]; then
     VAE_SOURCE="$VAE_BASE/wan2.2_vae.safetensors"
     echo "   Chemin source 5B: $VAE_SOURCE (1.41 GB)"
 elif [ "$MODEL_NAME" = "wan2.2-i2v-a14b" ]; then
