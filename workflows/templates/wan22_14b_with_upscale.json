@@ -1,6 +1,6 @@
 {
-  "name": "WAN 2.2 14B + UltraSharp Upscale (MoE)",
-  "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling 4x UltraSharp",
+  "name": "WAN 2.2 14B + HAT-L 4x Upscale (MoE)",
+  "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling HAT-L 4x",
   "version": "2.0.5",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
@@ -202,7 +202,7 @@
     "10": {
       "class_type": "UpscaleModelLoader",
       "inputs": {
-        "model_name": "4x-UltraSharp.pth"
+        "model_name": "HAT-L_SRx4_ImageNet-pretrain.pth"
       }
     },
     "11": {
@@ -234,7 +234,7 @@
         "save_output": true,
         "images": ["11b", 0]
       },
-      "_comment": "pingpong=false pour vraie boucle seamless (recommence au début, pas d'effet miroir)"
+      "_comment": "pingpong=false (pas d'effet miroir aller-retour)"
     }
   },
 

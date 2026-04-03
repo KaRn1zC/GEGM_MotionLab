@@ -10,6 +10,80 @@
 
 ## Modifications récentes
 
+### [2026-04-02] - Progression temps réel ComfyUI → UI
+
+**Objectif :** Remplacer la progression figée (0→50%→100%) par un suivi temps réel fidèle de chaque phase du pipeline ComfyUI.
+
+**Problème :**
+`routes.py` définissait des milestones hardcodés (10%, 30%, 50%, 80%, 85%, 90%) sans jamais lire la progression réelle de ComfyUI. Le job restait bloqué à 50% pendant toute la génération (~13min). De plus, les nodes sans callback de progression (HAT-L 4x upscale) envoyaient 100% en boucle pendant ~8 minutes.
+
+**Solution :**
+1. `comfyui_client.py` — Ajout d'un paramètre `progress_callback` dans `wait_for_completion()`, appelé toutes les 2s avec l'objet `WorkflowProgress`
+2. `routes.py` — Nouvelle classe `ComfyUIProgressTracker` : machine à états qui détecte les phases du pipeline (setup→sampling→VAE decode→upscale→combine) et mappe la progression ComfyUI vers le Job
+3. Pour le HAT-L 4x (pas de progression interne) : estimation temporelle basée sur `nb_frames × temps/frame`, calibré dynamiquement depuis la vitesse du VAE decode précédent
+4. Labels d'étape contextuels avec temps restant estimé pour l'upscale
+
+**Plages de progression :**
+- 2% : Préparation du workflow
+- 5→10% : Setup/chargement modèle
+- 10→35% : Sampling (progression exacte ComfyUI)
+- 35→50% : VAE Decode (progression exacte ComfyUI)
+- 50→80% : HAT-L 4x Upscale (estimation temporelle adaptative)
+- 80→85% : VHS_VideoCombine (progression exacte ComfyUI)
+- 85→100% : Post-processing (ffmpeg resize, crossfade, finalisation)
+
+**Fichiers modifiés :**
+- `src/comfyui_client.py` — `wait_for_completion()` : paramètre `progress_callback`
+- `web_interface/routes.py` — Classe `ComfyUIProgressTracker` + remplacement milestones hardcodés
+
+---
+
+### [2026-03-25] - Fix hallucination LTX 2.3 : text encoder loader + nettoyage workflow (v12.1.0)
+
+**Objectif :** Corriger l'hallucination systématique du modèle LTX 2.3 22B (frame 0 fidèle à l'input, frames 1+ totalement divergentes — structures géométriques sans rapport avec l'image ni les prompts).
+
+**Cause racine :**
+Le text encoder loader `LTXVGemmaCLIPModelLoader` (plugin Lightricks) produit des embeddings avec une normalisation **RMSNorm per-token** incompatible. Le diffusion model LTX 2.3 attend le format **global min-max** avec le flag `unprocessed_ltxav_embeds=True`, produit par `LTXAVTextEncoderLoader` (ComfyUI core, `nodes_lt_audio.py`). Sans ce flag, le modèle ne traite pas les embeddings via son connecteur interne → conditioning incompatible → hallucination sur TOUTES les versions (v7 à v12).
+
+**Vérification workflow officiel :**
+Le workflow officiel Lightricks (`LTX-2.3_T2V_I2V_Single_Stage_Distilled_Full.json` dans `ComfyUI-LTXVideo/example_workflows/2.3/`) utilise `LTXAVTextEncoderLoader`, PAS `LTXVGemmaCLIPModelLoader`. Confirmé : même fichier Gemma (`gemma_3_12B_it.safetensors` depuis `Comfy-Org/ltx-2`, repo public), seul le loader change.
+
+**Corrections :**
+- `workflows/templates/ltx23_i2v.json` — Node 3 : `LTXVGemmaCLIPModelLoader` → `LTXAVTextEncoderLoader`
+- `workflows/templates/ltx23_i2v_with_upscale.json` — Idem
+- `workflows/workflow_manager.py` — Ajout dérivation `text_encoder_flat` + filtre `_strip_workflow_comments()`
+- `docker-entrypoint.sh` — Symlink plat text encoder pour le core loader + fix `hf download` + `.env` info
+- `tests/test_model_registry.py` — Correction 3 assertions text encoder path
+
+**Bug secondaire corrigé :** Les clés `_comment_section_*` dans `ltx23_i2v.json` (strings au top-level du workflow dict) causaient un HTTP 500 de ComfyUI. Supprimées + filtre défensif ajouté.
+
+---
+
+### [2026-03-24] - REFONTE pipeline LTX 2.3 I2V — conformité workflow officiel Lightricks (v8.0.0)
+
+**Objectif :** Corriger l'hallucination totale du modèle LTX 2.3 22B. Le pipeline v7.0.0 utilisait `LTXVAddGuideAdvanced` sans `LTXVPreprocess` ni `LTXVConditioning`, causant une divergence complète dès frame 1 (image d'input correcte en frame 0, puis hallucination pure).
+
+**Cause racine :**
+1. `LTXVPreprocess` (ComfyUI core, `comfy_extras/nodes_lt.py`) était absent — l'image entrait dans le VAE sans compression CRF H.264, créant un décalage avec la distribution d'entraînement du modèle
+2. `LTXVConditioning` (ComfyUI core, `comfy_extras/nodes_lt.py`) était absent — le conditioning n'avait pas d'info de frame_rate, le modèle perdait toute cohérence temporelle
+3. `LTXVAddGuideAdvanced` (Lightricks plugin) n'est PAS utilisé dans le workflow officiel Lightricks I2V — son ajout sans `LTXVPreprocess` créait des signaux de conditioning contradictoires
+
+**Erreur documentaire :** CLAUDE.md affirmait que `LTXVPreprocess` et `LTXVConditioning` "N'EXISTENT PAS". C'est faux — ils existent dans ComfyUI core (pas dans le plugin Lightricks). Cette erreur a mené à un pipeline fondamentalement incorrect.
+
+**Fichiers modifiés :**
+- `workflows/templates/ltx23_i2v.json` — v7.0.0 → v8.0.0 : +LTXVPreprocess (crf=18), +LTXVConditioning (frame_rate), -LTXVAddGuideAdvanced
+- `workflows/templates/ltx23_i2v_with_upscale.json` — idem
+- `CLAUDE.md` — correction architecture LTX 2.3, notes critiques, référence nodes
+
+**Pipeline v8.0.0 :**
+```
+LoadImage → LTXVPreprocess(crf=18) → LTXVImgToVideoConditionOnly(strength=0.7)
+CLIPTextEncode → LTXVConditioning(frame_rate) → STGGuiderAdvanced
+SamplerCustomAdvanced → VAEDecode → VHS_VideoCombine(pingpong=true)
+```
+
+---
+
 ### [2026-03-17] - Pipeline model-agnostic Makefile + setup script (v5.1.0)
 
 **Objectif :** Le pipeline local (download → split → upload → clean) était hardcodé WAN 2.2. Désormais entièrement piloté par le registre modèles, compatible LTX 2.3 sans modification.
@@ -41,7 +115,7 @@
 
 **Nouveaux fichiers :**
 - `workflows/templates/ltx23_i2v.json` — Template I2V avec boucle seamless native (LTXVLoopingSampler + STG guidance)
-- `workflows/templates/ltx23_i2v_with_upscale.json` — Template I2V + UltraSharp 4x upscale (v2 future : latent upsampler natif)
+- `workflows/templates/ltx23_i2v_with_upscale.json` — Template I2V + HAT-L 4x upscale
 
 **Fichiers modifiés :**
 - `config/model_registry.yaml` — 2 modèles LTX 2.3 (distilled + dev) avec text_encoder Gemma 3 12B, VAE intégré, résolution 1080p

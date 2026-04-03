@@ -28,8 +28,8 @@
 - CLI bash pour les scripts : `python -m src.model_registry <commande> [modèle]`
 
 ### Workflow Manager
-- Sélection template automatique via registre (6 templates)
-- Détection modèle auto (priorité : LTX Dev > LTX Distilled > WAN 14B > WAN 5B)
+- Sélection template automatique via registre
+- Détection modèle auto (priorité : LTX 2.3 22B > WAN 14B > WAN 5B)
 - Transformation paramètres frontend → ComfyUI (model-family-specific)
 
 **Fichier** : `workflows/workflow_manager.py`
@@ -61,8 +61,7 @@
 - **Template** : `wan22_14b_i2v.json` (v2.0.5)
 
 ### LTX 2.3 22B DiT (Lightricks)
-- **Distilled FP8** : `ltx-2.3-22b-distilled-fp8.safetensors` (29.5GB)
-- **Dev BF16** : `ltx-2.3-22b-dev.safetensors` (46.1GB)
+- **Fichier** : `ltx-2.3-22b-dev.safetensors` (46.1GB)
 - **VAE** : intégré dans le checkpoint (128ch)
 - **Text encoder** : Gemma 3 12B (model-spécifique, pas T5)
 - **Template** : `ltx23_i2v.json` (v1.0.0)
@@ -93,7 +92,7 @@ Node 9: VAEDecode
 ```
 CheckpointLoaderSimple (MODEL + VAE intégré)
 LTXVGemmaCLIPModelLoader (Gemma 3 12B) → CLIPTextEncode
-STGGuiderAdvancedNode (stg_block_idx, stg_scale)
+STGGuiderAdvanced (stg_block_idx, stg_scale)
 LTXVLoopingSampler (cond_image_indices="0, N" → boucle seamless)
 VAEDecode → VHS_VideoCombine
 ```
@@ -129,7 +128,7 @@ make workflow MODEL=<nom>
 
 - Modèles WAN 5B : `/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-ti2v-5b/`
 - Modèles WAN 14B : `/workspace/comfyui/ComfyUI/models/checkpoints/wan2.2-i2v-a14b/`
-- Modèles LTX : `/workspace/comfyui/ComfyUI/models/checkpoints/ltx-2.3-i2v-*/`
+- Modèles LTX : `/workspace/comfyui/ComfyUI/models/checkpoints/ltx-2.3-i2v-dev/`
 - T5 partagé : `/workspace/comfyui/ComfyUI/models/text_encoders/t5/`
 - Text encoders LTX : `/workspace/comfyui/ComfyUI/models/text_encoders/`
 - VAE : `/workspace/comfyui/ComfyUI/models/vae/`
@@ -153,8 +152,8 @@ make workflow MODEL=<nom>
 2. **MoE OBLIGATOIRE 14B** : Les 2 fichiers (high/low noise) sont REQUIS, sinon artefacts
 3. **VAE spécifiques** : 5B=wan2.2_vae (48ch), 14B=wan_2.1_vae (16ch), LTX=intégré (128ch) — NON INTERCHANGEABLES
 4. **LTX ≠ WAN** : Gemma (pas T5), VAE intégré, STG guidance (pas shift/riflex), frames N×8+1
-5. **Timeouts** : 5400s (WAN 5B), 10800s (WAN 14B), 3600s (LTX Distilled), 7200s (LTX Dev)
-6. **VRAM** : 48GB+ (WAN 5B, LTX Distilled), 80GB+ (WAN 14B, LTX Dev)
+5. **Timeouts** : 5400s (WAN 5B), 10800s (WAN 14B), 7200s (LTX 2.3 22B)
+6. **VRAM** : 48GB+ (WAN 5B), 80GB+ (WAN 14B, LTX 2.3 22B)
 7. **Alignement résolutions** : Multiples de 32 avec floor (préfère crop à upscale)
 8. **Registre modèles** : `config/model_registry.yaml` = source de vérité unique
 9. **Manifeste multi-repo** : chaque fichier porte son `repo` (LTX : checkpoint Lightricks, Gemma Comfy-Org)

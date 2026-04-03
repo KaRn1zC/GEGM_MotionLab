@@ -302,11 +302,18 @@ class ComfyUIClient:
         if workflow_id and workflow_id in self.active_workflows:
             workflow = self.active_workflows[workflow_id]
 
-            # Si node_id est None, cela signifie que le workflow est terminé
+            # Si node_id est None, cela signifie que le workflow est terminé.
+            # ComfyUI envoie toujours executing(node=null) en fin de workflow,
+            # y compris après une erreur → ne pas écraser un statut "error"
             if node_id is None:
-                workflow.status = "completed"
                 workflow.end_time = datetime.now()
-                logger.info(f"✅ Workflow {workflow_id[:8]} terminé avec succès")
+                if workflow.status == "error":
+                    logger.warning(
+                        f"⚠️ Workflow {workflow_id[:8]} terminé avec erreur: {workflow.error_message}"
+                    )
+                else:
+                    workflow.status = "completed"
+                    logger.info(f"✅ Workflow {workflow_id[:8]} terminé avec succès")
                 return
 
             workflow.current_node = node_id
@@ -445,14 +452,20 @@ class ComfyUIClient:
             raise
 
     async def wait_for_completion(
-        self, workflow_id: str, timeout: int | None = None
+        self,
+        workflow_id: str,
+        timeout: int | None = None,
+        progress_callback: Callable[[WorkflowProgress], None] | None = None,
     ) -> WorkflowProgress:
         """
-        Attend la completion d'un workflow
+        Attend la completion d'un workflow avec relais de progression optionnel
 
         Args:
             workflow_id: ID du workflow à surveiller
             timeout: Timeout en secondes (optionnel)
+            progress_callback: Fonction appelée à chaque changement de progression.
+                Reçoit l'objet WorkflowProgress mis à jour par le monitoring WebSocket.
+                Permet au caller de synchroniser la progression en temps réel.
 
         Returns:
             WorkflowProgress: État final du workflow
@@ -475,7 +488,16 @@ class ComfyUIClient:
                 logger.info(
                     f"Workflow {workflow_id[:8]} terminé avec statut: {workflow.status}"
                 )
+                if progress_callback:
+                    progress_callback(workflow)
                 return workflow
+
+            # Appel régulier du callback (toutes les 2s) pour permettre :
+            # - le relais de progression en temps réel
+            # - la détection des phases silencieuses (nodes sans progression)
+            # - l'estimation temporelle pendant ces phases
+            if progress_callback:
+                progress_callback(workflow)
 
             # Vérifier le timeout
             elapsed = (datetime.now() - start_time).total_seconds()
@@ -485,8 +507,7 @@ class ComfyUIClient:
                 logger.error(f"Timeout pour workflow {workflow_id[:8]}")
                 raise ComfyUIError(f"Timeout workflow {workflow_id}")
 
-            # Attendre un peu avant de revérifier
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(2.0)
 
     async def get_output_images(self, workflow_id: str) -> list[dict[str, Any]]:
         """

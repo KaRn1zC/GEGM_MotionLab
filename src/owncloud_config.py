@@ -39,7 +39,7 @@ class OwnCloudConfigManager:
             load_dotenv(self.env_file)
             logger.info(f"✅ Variables d'environnement chargées: {self.env_file}")
         else:
-            logger.warning(f"⚠️  Fichier .env non trouvé: {self.env_file}")
+            logger.debug(f"Fichier .env non présent: {self.env_file} (config via YAML + env vars)")
 
     def _load_yaml(self):
         """Charge la configuration YAML (paramètres techniques)"""

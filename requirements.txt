@@ -1,6 +1,6 @@
 # ============================================
-# Comfy_Img_to_Loop - Dépendances AVEC PyTorch
-# Usage: Développement local
+# Comfy_Img_to_Loop - Dépendances SANS PyTorch
+# Usage: Docker (PyTorch installé séparément avec CUDA)
 # ============================================
 
 # --- Web Framework ---
@@ -35,11 +35,6 @@ huggingface-hub==0.35.0
 
 # --- Video ---
 ffmpeg-python==0.2.0
-
-# --- PyTorch (AVEC CUDA pour local) ---
-torch>=2.5.0,<2.6.0
-torchaudio>=2.5.0,<2.6.0
-torchvision>=0.20.0,<0.21.0
 
 # --- Dev Tools ---
 black==25.9.0

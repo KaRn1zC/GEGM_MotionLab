@@ -150,10 +150,7 @@ rclone-upload-14b: rclone-check ## Alias → make rclone-upload MODEL=wan2.2-i2v
 rclone-upload-5b: rclone-check ## Alias → make rclone-upload MODEL=wan2.2-ti2v-5b
 	@$(MAKE) rclone-upload MODEL=wan2.2-ti2v-5b
 
-rclone-upload-ltx-fast: rclone-check ## Alias → make rclone-upload MODEL=ltx-2.3-i2v-distilled
-	@$(MAKE) rclone-upload MODEL=ltx-2.3-i2v-distilled
-
-rclone-upload-ltx-pro: rclone-check ## Alias → make rclone-upload MODEL=ltx-2.3-i2v-dev
+rclone-upload-ltx: rclone-check ## Alias → make rclone-upload MODEL=ltx-2.3-i2v-dev
 	@$(MAKE) rclone-upload MODEL=ltx-2.3-i2v-dev
 
 rclone-upload-all: rclone-upload-14b rclone-upload-5b ## Upload TOUS les modèles WAN
@@ -175,7 +172,7 @@ rclone-list: rclone-check ## Lister les fichiers sur OwnCloud
 #   make workflow-5b           - Alias → make workflow MODEL=wan2.2-ti2v-5b
 #   make workflow-14b          - Alias → make workflow MODEL=wan2.2-i2v-a14b
 #   make workflow-wan-all      - Workflow séquentiel WAN 14B + 5B
-#   make workflow-ltx-all      - Workflow séquentiel LTX Dev + Distilled
+#   make workflow-ltx           - Alias → make workflow MODEL=ltx-2.3-i2v-dev
 #   make workflow-all           - Workflow séquentiel TOUS les modèles
 #
 # Chaque workflow inclut: Download → Vérif → Split → Upload → Vérif → Deep Clean
@@ -215,47 +212,8 @@ workflow-14b: ## Alias → make workflow MODEL=wan2.2-i2v-a14b
 workflow-5b: ## Alias → make workflow MODEL=wan2.2-ti2v-5b
 	@$(MAKE) workflow MODEL=wan2.2-ti2v-5b
 
-workflow-ltx-fast: ## Alias → make workflow MODEL=ltx-2.3-i2v-distilled
-	@$(MAKE) workflow MODEL=ltx-2.3-i2v-distilled
-
-workflow-ltx-pro: ## Alias → make workflow MODEL=ltx-2.3-i2v-dev
+workflow-ltx: ## Alias → make workflow MODEL=ltx-2.3-i2v-dev
 	@$(MAKE) workflow MODEL=ltx-2.3-i2v-dev
-
-workflow-ltx-all: ## Workflow séquentiel LTX Dev puis Distilled (évite surcharge disque)
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🚀 WORKFLOW SÉQUENTIEL - LTX DEV PUIS DISTILLED"
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo ""
-	@echo "⚠️  Exécution séquentielle pour éviter surcharge disque"
-	@echo "   • Dev: Download → Upload → Deep Clean → Distilled démarre"
-	@echo "   • Distilled: Download → Upload → Deep Clean → Terminé"
-	@echo ""
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🔵 PHASE 1/2: LTX 2.3 Dev (22B BF16)"
-	@echo "═══════════════════════════════════════════════════════════"
-	@$(MAKE) workflow-ltx-pro
-	@echo ""
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🟢 PHASE 2/2: LTX 2.3 Distilled (22B FP8)"
-	@echo "═══════════════════════════════════════════════════════════"
-	@$(MAKE) workflow-ltx-fast
-	@echo ""
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🎉 WORKFLOW SÉQUENTIEL LTX TERMINÉ AVEC SUCCÈS"
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo ""
-	@echo "📊 Vérification finale des uploads sur OwnCloud:"
-	@echo ""
-	@echo "📦 LTX Dev:"
-	@rclone size owncloud:/GEGM_ComfyUI/Models/ltx-2.3-i2v-dev/ || echo "   Non trouvé"
-	@echo ""
-	@echo "📦 LTX Distilled:"
-	@rclone size owncloud:/GEGM_ComfyUI/Models/ltx-2.3-i2v-distilled/ || echo "   Non trouvé"
-	@echo ""
-	@echo "💾 Espace disque actuel:"
-	@df -h . | tail -1
-	@echo ""
-	@echo "✅ Les deux modèles LTX sont uploadés et nettoyés"
 
 workflow-wan-all: ## Workflow séquentiel WAN 14B puis 5B (évite surcharge disque)
 	@echo "═══════════════════════════════════════════════════════════"
@@ -299,40 +257,32 @@ workflow-all: ## Workflow séquentiel TOUS les modèles (LTX → WAN, deep clean
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
 	@echo "⚠️  Exécution séquentielle pour éviter surcharge disque"
-	@echo "   • LTX Dev → LTX Distilled → WAN 14B → WAN 5B"
+	@echo "   • LTX Dev → WAN 14B → WAN 5B"
 	@echo "   • Deep clean entre chaque modèle"
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🔵 PHASE 1/4: LTX 2.3 Dev (22B BF16)"
+	@echo "🔵 PHASE 1/3: LTX 2.3 22B Dev"
 	@echo "═══════════════════════════════════════════════════════════"
 	@$(MAKE) workflow MODEL=ltx-2.3-i2v-dev
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🔵 PHASE 2/4: LTX 2.3 Distilled (22B FP8)"
-	@echo "═══════════════════════════════════════════════════════════"
-	@$(MAKE) workflow MODEL=ltx-2.3-i2v-distilled
-	@echo ""
-	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🔵 PHASE 3/4: WAN 2.2 14B MoE"
+	@echo "🔵 PHASE 2/3: WAN 2.2 14B MoE"
 	@echo "═══════════════════════════════════════════════════════════"
 	@$(MAKE) workflow MODEL=wan2.2-i2v-a14b
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🟢 PHASE 4/4: WAN 2.2 5B"
+	@echo "🟢 PHASE 3/3: WAN 2.2 5B"
 	@echo "═══════════════════════════════════════════════════════════"
 	@$(MAKE) workflow MODEL=wan2.2-ti2v-5b
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "🎉 WORKFLOW SÉQUENTIEL TERMINÉ - 4 MODÈLES"
+	@echo "🎉 WORKFLOW SÉQUENTIEL TERMINÉ - 3 MODÈLES"
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
 	@echo "📊 Vérification finale des uploads sur OwnCloud:"
 	@echo ""
 	@echo "📦 LTX Dev:"
 	@rclone size owncloud:/GEGM_ComfyUI/Models/ltx-2.3-i2v-dev/ || echo "   Non trouvé"
-	@echo ""
-	@echo "📦 LTX Distilled:"
-	@rclone size owncloud:/GEGM_ComfyUI/Models/ltx-2.3-i2v-distilled/ || echo "   Non trouvé"
 	@echo ""
 	@echo "📦 WAN 14B:"
 	@rclone size owncloud:/GEGM_ComfyUI/Models/wan2.2-i2v-a14b/ || echo "   Non trouvé"
@@ -343,7 +293,7 @@ workflow-all: ## Workflow séquentiel TOUS les modèles (LTX → WAN, deep clean
 	@echo "💾 Espace disque actuel:"
 	@df -h . | tail -1
 	@echo ""
-	@echo "✅ Les 4 modèles sont uploadés et nettoyés"
+	@echo "✅ Les 3 modèles sont uploadés et nettoyés"
 
 # ==================== RunPod Commands ====================
 
@@ -363,108 +313,59 @@ print(f'   Utilisateur: {config.username}'); \
 print(f'   Dossier: {config.upload_folder}')" || \
 	(echo "❌ Erreur connexion OwnCloud"; exit 1)
 
-runpod-build: ## Build image multi-arch pour RunPod (AMD64 + ARM64)
-	@echo "🚀 Building multi-arch RunPod image..."
-	@echo "   Plateformes: linux/amd64 (RunPod), linux/arm64 (Mac)"
-	docker buildx build \
-		--platform linux/amd64,linux/arm64 \
-		-t arnaudboy/comfy_img_to_loop:runpod \
-		-t arnaudboy/comfy_img_to_loop:latest \
-		--push \
-		.
-	@echo "✅ Image built and pushed (multi-arch)"
+_runpod-setup-buildx:
+	@docker buildx create --name multiarch --use 2>/dev/null || true
+	@docker buildx inspect --bootstrap > /dev/null 2>&1
 
-runpod-build-amd64-only: ## Build image AMD64 uniquement (plus rapide)
-	@echo "🚀 Building AMD64-only RunPod image..."
+runpod-deploy: _runpod-setup-buildx ## Build et push image prod (:latest) vers Docker Hub
+	@echo "🚀 Build + push image production (AMD64)..."
 	docker buildx build \
 		--platform linux/amd64 \
 		-t arnaudboy/comfy_img_to_loop:runpod \
 		-t arnaudboy/comfy_img_to_loop:latest \
 		--push \
 		.
-	@echo "✅ Image built and pushed (AMD64 only)"
-
-runpod-setup-buildx: ## Initialiser buildx pour multi-arch
-	@echo "🔧 Setup buildx..."
-	docker buildx create --name multiarch --use || true
-	docker buildx inspect --bootstrap
-	@echo "✅ Buildx configuré"
-
-runpod-push: ## Push vers Docker Hub
-	@echo "📤 Pushing to Docker Hub..."
-	docker push arnaudboy/comfy_img_to_loop:runpod
-	docker push arnaudboy/comfy_img_to_loop:latest
-	@echo "✅ Images pushed"
-
-runpod-deploy: runpod-verify-owncloud runpod-setup-buildx runpod-build ## Déploiement complet
 	@echo ""
-	@echo "🎉 Déploiement RunPod complet !"
-	@echo "📍 Image: https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
-	@echo "⚠️  N'oubliez pas de configurer les variables OwnCloud sur RunPod"
+	@echo "✅ Image prod pushed"
+	@echo "📍 https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
 
-runpod-deploy-quick: runpod-setup-buildx runpod-build-amd64-only ## Build AMD64 + Push (rapide)
+runpod-deploy-nocache: _runpod-setup-buildx ## Build SANS CACHE et push image prod (:latest)
+	@echo "🚀 Build + push image production (AMD64, sans cache)..."
+	docker buildx build \
+		--platform linux/amd64 \
+		--no-cache \
+		-t arnaudboy/comfy_img_to_loop:runpod \
+		-t arnaudboy/comfy_img_to_loop:latest \
+		--push \
+		.
 	@echo ""
-	@echo "🎉 Déploiement RunPod rapide terminé !"
-	@echo "📍 Image: https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
-	@echo "⚠️  N'oubliez pas de configurer les variables OwnCloud sur RunPod"
+	@echo "✅ Image prod pushed (no-cache)"
+	@echo "📍 https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
 
-runpod-test: ## Tester localement avec GPU
-	@echo "🧪 Testing with GPU..."
-	docker-compose -f docker-compose.runpod.yml up
+runpod-deploy-test: _runpod-setup-buildx ## Build et push image test (:test) vers Docker Hub
+	@echo "🧪 Build + push image test (AMD64)..."
+	docker buildx build \
+		--platform linux/amd64 \
+		-t arnaudboy/comfy_img_to_loop:test \
+		--push \
+		.
+	@echo ""
+	@echo "✅ Image test pushed"
+	@echo "📍 arnaudboy/comfy_img_to_loop:test"
 
-runpod-test-down: ## Arrêter le test RunPod
-	docker-compose -f docker-compose.runpod.yml down
+runpod-deploy-test-nocache: _runpod-setup-buildx ## Build SANS CACHE et push image test (:test)
+	@echo "🧪 Build + push image test (AMD64, sans cache)..."
+	docker buildx build \
+		--platform linux/amd64 \
+		--no-cache \
+		-t arnaudboy/comfy_img_to_loop:test \
+		--push \
+		.
+	@echo ""
+	@echo "✅ Image test pushed (no-cache)"
+	@echo "📍 arnaudboy/comfy_img_to_loop:test"
 
 runpod-info: ## Afficher les informations RunPod
-	@echo "📦 Image: arnaudboy/comfy_img_to_loop:runpod"
-	@echo "🔗 Docker Hub: https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
-
-# ==================== RunPod Commands - Image TEST ====================
-# Miroir des commandes RunPod ci-dessus, mais pousse vers :test au lieu de :latest
-# Usage : branche debug → make runpod-deploy-quick-test → arnaudboy/comfy_img_to_loop:test
-
-runpod-build-test: ## Build image multi-arch TEST (AMD64 + ARM64) → :test
-	@echo "🧪 Building multi-arch RunPod TEST image..."
-	@echo "   Plateformes: linux/amd64 (RunPod), linux/arm64 (Mac)"
-	@echo "   Tag: arnaudboy/comfy_img_to_loop:test"
-	docker buildx build \
-		--platform linux/amd64,linux/arm64 \
-		-t arnaudboy/comfy_img_to_loop:test \
-		--push \
-		.
-	@echo "✅ Image TEST built and pushed (multi-arch)"
-
-runpod-build-amd64-only-test: ## Build image AMD64 uniquement TEST (plus rapide) → :test
-	@echo "🧪 Building AMD64-only RunPod TEST image..."
-	@echo "   Tag: arnaudboy/comfy_img_to_loop:test"
-	docker buildx build \
-		--platform linux/amd64 \
-		-t arnaudboy/comfy_img_to_loop:test \
-		--push \
-		.
-	@echo "✅ Image TEST built and pushed (AMD64 only)"
-
-runpod-push-test: ## Push image TEST vers Docker Hub
-	@echo "📤 Pushing TEST image to Docker Hub..."
-	docker push arnaudboy/comfy_img_to_loop:test
-	@echo "✅ Image TEST pushed"
-
-runpod-deploy-test: runpod-verify-owncloud runpod-setup-buildx runpod-build-test ## Déploiement complet TEST
-	@echo ""
-	@echo "🧪 Déploiement RunPod TEST complet !"
-	@echo "📍 Image: arnaudboy/comfy_img_to_loop:test"
-	@echo "⚠️  N'oubliez pas de configurer les variables OwnCloud sur RunPod"
-
-runpod-deploy-quick-test: runpod-setup-buildx runpod-build-amd64-only-test ## Build AMD64 + Push TEST (rapide)
-	@echo ""
-	@echo "🧪 Déploiement RunPod TEST rapide terminé !"
-	@echo "📍 Image: arnaudboy/comfy_img_to_loop:test"
-	@echo "⚠️  N'oubliez pas de configurer les variables OwnCloud sur RunPod"
-
-runpod-test-image-test: ## Tester l'image TEST localement avec GPU
-	@echo "🧪 Testing TEST image with GPU..."
-	DOCKER_IMAGE=arnaudboy/comfy_img_to_loop:test docker-compose -f docker-compose.runpod.yml up
-
-runpod-info-test: ## Afficher les informations RunPod TEST
-	@echo "🧪 Image TEST: arnaudboy/comfy_img_to_loop:test"
-	@echo "🔗 Docker Hub: https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
+	@echo "📦 Prod:  arnaudboy/comfy_img_to_loop:latest"
+	@echo "🧪 Test:  arnaudboy/comfy_img_to_loop:test"
+	@echo "🔗 https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"

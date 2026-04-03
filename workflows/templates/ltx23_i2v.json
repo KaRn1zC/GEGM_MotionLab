@@ -1,53 +1,46 @@
 {
-  "name": "LTX 2.3 Image-to-Video Looping",
-  "description": "Génération de cinemagraphs avec LTX 2.3 22B - Boucle seamless native via LTXVLoopingSampler",
-  "version": "1.0.0",
+  "name": "LTX 2.3 22B Image-to-Video",
+  "description": "Full path officiel LTX 2.3 22B — Pipeline AV + MultimodalGuider + ClownSampler_Beta",
+  "version": "12.0.0",
   "author": "Comfy_Img_to_Loop",
-  "tags": ["cinemagraph", "i2v", "ltx2.3", "loop", "animation"],
+  "tags": ["cinemagraph", "i2v", "ltx2.3", "animation"],
   "model_family": "ltx23",
 
   "parameters": {
     "input_image": {
       "type": "string",
       "required": true,
-      "description": "Nom du fichier image d'entrée (doit être dans ComfyUI/input/)"
+      "description": "Nom du fichier image d'entree"
     },
     "prompt": {
       "type": "string",
       "default": "",
-      "description": "Description textuelle de l'animation souhaitée"
+      "description": "Description textuelle de l'animation souhaitee"
     },
     "negative_prompt": {
       "type": "string",
       "default": "",
-      "description": "Éléments à éviter (vide pour distilled avec CFG=1)"
+      "description": "Elements a eviter"
     },
     "steps": {
       "type": "integer",
-      "default": 8,
-      "min": 4,
-      "max": 50,
-      "description": "Nombre de steps (8 distilled, 40 dev)"
-    },
-    "cfg_scale": {
-      "type": "float",
-      "default": 1.0,
-      "min": 1.0,
-      "max": 15.0,
-      "description": "STG guidance scale (1.0 pour distilled, 3-7 pour dev)"
+      "default": 15,
+      "min": 15,
+      "max": 15,
+      "description": "Steps force a 15 (valeur officielle LTX 2.3 22B, override backend)"
     },
     "seed": {
       "type": "integer",
       "default": -1,
       "min": -1,
-      "description": "Seed pour reproductibilité (-1 = aléatoire)"
+      "description": "Seed (-1 = aleatoire)"
     },
     "frames": {
       "type": "integer",
-      "default": 81,
+      "default": 65,
       "min": 9,
       "max": 241,
-      "description": "Nombre de frames (doit être N×8+1 : 9, 17, 25, ..., 241)"
+      "description": "Nombre de frames generees (N*8+1), crossfade seamless en post-processing"
     },
     "fps": {
       "type": "integer",
@@ -58,50 +51,31 @@
     },
     "width": {
       "type": "integer",
-      "default": 768,
+      "default": 960,
       "min": 64,
       "max": 1920,
-      "description": "Largeur de génération (multiple de 32)"
+      "description": "Largeur de generation (multiple de 32)"
     },
     "height": {
       "type": "integer",
-      "default": 512,
+      "default": 544,
       "min": 64,
       "max": 1088,
-      "description": "Hauteur de génération (multiple de 32)"
+      "description": "Hauteur de generation (multiple de 32)"
     },
-    "stg_block_idx": {
-      "type": "integer",
-      "default": 35,
-      "min": 0,
-      "max": 50,
-      "description": "Index bloc STG guidance (35 recommandé pour LTX 2.3)"
-    },
-    "stg_scale": {
+    "i2v_strength": {
       "type": "float",
-      "default": 1.0,
+      "default": 0.7,
       "min": 0.0,
-      "max": 3.0,
-      "description": "Échelle STG guidance (contrôle qualité spatiale)"
+      "max": 1.0,
+      "description": "Force du conditionnement image dans le latent (0.7 officiel Lightricks)"
     },
-    "temporal_tile_size": {
-      "type": "integer",
-      "default": 80,
-      "min": 16,
-      "max": 160,
-      "description": "Taille des tuiles temporelles pour le looping"
-    },
-    "temporal_overlap": {
-      "type": "integer",
-      "default": 24,
-      "min": 4,
-      "max": 64,
-      "description": "Chevauchement entre tuiles temporelles"
-    },
-    "cond_image_indices": {
-      "type": "string",
-      "default": "0",
-      "description": "Indices des frames conditionnées (ex: '0, 80' pour boucle seamless)"
+    "cfg_scale": {
+      "type": "float",
+      "default": 3.0,
+      "min": 1.0,
+      "max": 20.0,
+      "description": "CFG guidance video (3.0 officiel Lightricks 22B)"
     }
   },
 
@@ -112,20 +86,39 @@
         "image": "{input_image}"
       }
     },
+    "14": {
+      "class_type": "LTXVPreprocess",
+      "inputs": {
+        "image": ["1", 0],
+        "img_compression": 18
+      },
+      "_comment": "CRF H.264 preprocessing (ComfyUI core, param verifie: img_compression)"
+    },
+
     "2": {
       "class_type": "CheckpointLoaderSimple",
       "inputs": {
         "ckpt_name": "{checkpoint_path}"
+      }
+    },
+    "18": {
+      "class_type": "LoraLoaderModelOnly",
+      "inputs": {
+        "model": ["2", 0],
+        "lora_name": "{lora_path}",
+        "strength_model": 0.2
       },
-      "_comment": "Charge le modèle LTX 2.3 + VAE intégré depuis un seul fichier"
+      "_comment": "LoRA distilled strength=0.2 — full path officiel Lightricks"
     },
     "3": {
-      "class_type": "LTXVGemmaCLIPModelLoader",
+      "class_type": "LTXAVTextEncoderLoader",
       "inputs": {
-        "gemma_model": "{text_encoder_path}"
-      },
-      "_comment": "Text encoder Gemma 3 12B (FP8 ou BF16 selon variante)"
+        "text_encoder": "{text_encoder_flat}",
+        "ckpt_name": "{checkpoint_path}",
+        "device": "default"
+      }
     },
+
     "4": {
       "class_type": "CLIPTextEncode",
       "inputs": {
@@ -138,48 +131,157 @@
       "inputs": {
         "text": "{negative_prompt}",
         "clip": ["3", 0]
-      },
-      "_comment": "Negative prompt — vide pour distilled (CFG=1)"
+      }
     },
-    "6": {
-      "class_type": "STGGuiderAdvancedNode",
+    "15": {
+      "class_type": "LTXVConditioning",
       "inputs": {
-        "model": ["2", 0],
         "positive": ["4", 0],
         "negative": ["5", 0],
-        "stg_block_idx": "{stg_block_idx}",
-        "stg_scale": "{stg_scale}"
+        "frame_rate": "{fps}"
       },
-      "_comment": "Spatio-Temporal Guidance — requis pour LTXVLoopingSampler"
+      "_comment": "Injecte frame_rate dans conditioning (ComfyUI core)"
     },
-    "7": {
-      "class_type": "LTXVLoopingSampler",
+
+    "13": {
+      "class_type": "EmptyLTXVLatentVideo",
       "inputs": {
-        "guider": ["6", 0],
-        "steps": "{steps}",
-        "seed": "{seed}",
         "width": "{width}",
         "height": "{height}",
-        "num_frames": "{frames}",
-        "optional_cond_images": ["1", 0],
-        "optional_cond_image_indices": "{cond_image_indices}",
-        "temporal_tile_size": "{temporal_tile_size}",
-        "temporal_overlap": "{temporal_overlap}",
-        "temporal_overlap_cond_strength": 0.5,
-        "adain_factor": 0.4,
-        "horizontal_tiles": 1,
-        "vertical_tiles": 1,
-        "spatial_overlap": 64
+        "length": "{frames}",
+        "batch_size": 1
+      }
+    },
+    "16": {
+      "class_type": "LTXVImgToVideoConditionOnly",
+      "inputs": {
+        "vae": ["2", 2],
+        "image": ["14", 0],
+        "latent": ["13", 0],
+        "strength": "{i2v_strength}"
       },
-      "_comment": "Boucle seamless native — image conditionnée au premier et dernier frame"
+      "_comment": "Encode image CRF-preprocessee dans latent frame 0 + noise_mask (strength=0.7 officiel)"
+    },
+    "20": {
+      "class_type": "LTXVAudioVAELoader",
+      "inputs": {
+        "ckpt_name": "{checkpoint_path}"
+      },
+      "_comment": "Charge le VAE audio depuis le meme checkpoint (modele multimodal AV)"
+    },
+    "21": {
+      "class_type": "LTXVEmptyLatentAudio",
+      "inputs": {
+        "frames_number": "{frames}",
+        "frame_rate": "{fps}",
+        "batch_size": 1,
+        "audio_vae": ["20", 0]
+      },
+      "_comment": "Latent audio vide — DOIT matcher les dimensions video (frames/fps) pour coherence NestedTensor"
+    },
+    "22": {
+      "class_type": "LTXVConcatAVLatent",
+      "inputs": {
+        "video_latent": ["16", 0],
+        "audio_latent": ["21", 0]
+      },
+      "_comment": "Pack video+audio en NestedTensor — format attendu par le modele LTX 2.3"
+    },
+
+    "23": {
+      "class_type": "GuiderParameters",
+      "inputs": {
+        "modality": "AUDIO",
+        "cfg": 7.0,
+        "stg": 1.0,
+        "perturb_attn": true,
+        "rescale": 0.7,
+        "modality_scale": 3.0,
+        "skip_step": 0,
+        "cross_attn": true
+      },
+      "_comment": "Parametres guidance AUDIO — valeurs officielles Lightricks 22B"
+    },
+    "24": {
+      "class_type": "GuiderParameters",
+      "inputs": {
+        "modality": "VIDEO",
+        "cfg": "{cfg_scale}",
+        "stg": 1.0,
+        "perturb_attn": true,
+        "rescale": 0.9,
+        "modality_scale": 3.0,
+        "skip_step": 0,
+        "cross_attn": true,
+        "parameters": ["23", 0]
+      },
+      "_comment": "Parametres guidance VIDEO — chaines depuis AUDIO (modele multimodal)"
+    },
+    "6": {
+      "class_type": "MultimodalGuider",
+      "inputs": {
+        "model": ["18", 0],
+        "positive": ["15", 0],
+        "negative": ["15", 1],
+        "parameters": ["24", 0],
+        "skip_blocks": "28"
+      },
+      "_comment": "Guider multimodal officiel — gere le packing/unpacking AV en interne"
+    },
+
+    "10": {
+      "class_type": "RandomNoise",
+      "inputs": {
+        "noise_seed": "{seed}"
+      }
+    },
+    "11": {
+      "class_type": "ClownSampler_Beta",
+      "inputs": {
+        "eta": 0.25,
+        "sampler_name": "exponential/res_2s",
+        "seed": "{seed}",
+        "bongmath": true
+      },
+      "_comment": "Solveur ODE haute qualite (RES4LYF) — full path officiel. eta=0.25 pour SDE temporel"
+    },
+    "12": {
+      "class_type": "LTXVScheduler",
+      "inputs": {
+        "steps": "{steps}",
+        "max_shift": 2.05,
+        "base_shift": 0.95,
+        "stretch": true,
+        "terminal": 0.1,
+        "latent": ["22", 0]
+      },
+      "_comment": "Scheduler avec latent AV — ajuste les sigmas selon les dimensions du tenseur"
+    },
+    "17": {
+      "class_type": "SamplerCustomAdvanced",
+      "inputs": {
+        "noise": ["10", 0],
+        "guider": ["6", 0],
+        "sampler": ["11", 0],
+        "sigmas": ["12", 0],
+        "latent_image": ["22", 0]
+      },
+      "_comment": "Sampling sur le latent AV packe"
+    },
+
+    "25": {
+      "class_type": "LTXVSeparateAVLatent",
+      "inputs": {
+        "av_latent": ["17", 0]
+      },
+      "_comment": "Separe le latent AV debruite → video seule (output 0)"
     },
     "8": {
       "class_type": "VAEDecode",
       "inputs": {
-        "samples": ["7", 0],
+        "samples": ["25", 0],
         "vae": ["2", 2]
-      },
-      "_comment": "VAE intégré au checkpoint (output index 2 de CheckpointLoaderSimple)"
+      }
     },
     "9": {
       "class_type": "VHS_VideoCombine",
@@ -192,8 +294,7 @@
         "pingpong": false,
         "save_output": true,
         "images": ["8", 0]
-      },
-      "_comment": "pingpong=false — la boucle seamless est gérée par LTXVLoopingSampler"
+      }
     }
   },
 
@@ -201,26 +302,43 @@
     "video": {
       "node": "9",
       "output": 0,
-      "description": "Cinemagraph en boucle seamless"
+      "description": "Cinemagraph anime"
     }
   },
 
   "metadata": {
     "comfyui_version": ">=0.16.1",
     "ltxvideo_version": "lightricks_mar2026",
-    "tags": ["cinemagraph", "i2v", "ltx2.3", "loop", "animation"],
+    "tags": ["cinemagraph", "i2v", "ltx2.3", "animation"],
     "required_nodes": [
       "LoadImage",
+      "LTXVPreprocess",
       "CheckpointLoaderSimple",
-      "LTXVGemmaCLIPModelLoader",
+      "LoraLoaderModelOnly",
+      "LTXAVTextEncoderLoader",
       "CLIPTextEncode",
-      "STGGuiderAdvancedNode",
-      "LTXVLoopingSampler",
+      "LTXVConditioning",
+      "EmptyLTXVLatentVideo",
+      "LTXVImgToVideoConditionOnly",
+      "LTXVAudioVAELoader",
+      "LTXVEmptyLatentAudio",
+      "LTXVConcatAVLatent",
+      "GuiderParameters",
+      "MultimodalGuider",
+      "ClownSampler_Beta",
+      "SamplerCustomAdvanced",
+      "LTXVSeparateAVLatent",
       "VAEDecode",
-      "VHS_VideoCombine"
+      "VHS_VideoCombine",
+      "RandomNoise",
+      "LTXVScheduler"
     ],
     "changelog": {
-      "v1.0.0": "FEATURE: Template LTX 2.3 I2V avec boucle seamless native (LTXVLoopingSampler + STGGuider)"
+      "v7-v9": "STGGuiderAdvanced + latent video brut → hallucination (format tenseur incorrect)",
+      "v10": "Tentative distilled — refuse par l'utilisateur",
+      "v11": "Full path avec STGGuiderAdvanced — fade to black (pas de pipeline AV)",
+      "v12.0.0": "Pipeline AV officiel + MultimodalGuider + GuiderParameters",
+      "v12.1.0": "Switch LTXVGemmaCLIPModelLoader → LTXAVTextEncoderLoader (ComfyUI core). L'ancien loader produisait des embeddings avec normalisation RMSNorm incompatible — le modele attend le format global min-max + flag unprocessed_ltxav_embeds du core loader. Cause racine de l'hallucination systematique sur toutes les versions precedentes."
     }
   }
 }
