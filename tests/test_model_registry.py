@@ -44,13 +44,12 @@ class TestRegistryLoading:
         assert registry is not None
 
     def test_should_list_all_models(self, registry: ModelRegistry) -> None:
-        """Les quatre modèles enregistrés sont présents."""
+        """Les trois modèles enregistrés sont présents."""
         models = registry.list_models()
         assert "wan2.2-ti2v-5b" in models
         assert "wan2.2-i2v-a14b" in models
-        assert "ltx-2.3-i2v-distilled" in models
         assert "ltx-2.3-i2v-dev" in models
-        assert len(models) == 4
+        assert len(models) == 3
 
     def test_should_return_none_for_unknown_model(self, registry: ModelRegistry) -> None:
         """Un modèle inconnu retourne None, pas une exception."""
@@ -158,11 +157,10 @@ class TestDetectionPriority:
     """Vérifie la priorité de détection (identique au code hardcodé)."""
 
     def test_should_return_ltx_dev_first(self, registry: ModelRegistry) -> None:
-        """LTX dev > LTX distilled > WAN 14B > WAN 5B."""
+        """LTX 2.3 22B > WAN 14B > WAN 5B."""
         priority = registry.get_detection_priority()
         assert priority == [
             ("ltx-2.3-i2v-dev", "dev"),
-            ("ltx-2.3-i2v-distilled", "distilled"),
             ("wan2.2-i2v-a14b", "14b"),
             ("wan2.2-ti2v-5b", "5b"),
         ]
@@ -195,17 +193,17 @@ class TestSharedComponents:
         assert shared.clip_vision.filename == "clip-vit-large-patch14-336.safetensors"
 
     def test_should_return_upscalers(self, registry: ModelRegistry) -> None:
-        """setup_wan22_native.sh : UltraSharp (requis) + RealESRGAN (optionnel)."""
+        """HAT-L 4x (post-gen) + HAT 2x (pré-gen), tous deux requis."""
         shared = registry.get_shared_components()
         assert len(shared.upscalers) == 2
         names = {u.filename for u in shared.upscalers}
-        assert "4x-UltraSharp.pth" in names
-        assert "RealESRGAN_x4plus.pth" in names
+        assert "HAT-L_SRx4_ImageNet-pretrain.pth" in names
+        assert "HAT_SRx2.pth" in names
 
-        # UltraSharp = non optionnel, RealESRGAN = optionnel
+        # Les deux sont requis (non optionnels)
         by_name = {u.filename: u for u in shared.upscalers}
-        assert by_name["4x-UltraSharp.pth"].optional is False
-        assert by_name["RealESRGAN_x4plus.pth"].optional is True
+        assert by_name["HAT-L_SRx4_ImageNet-pretrain.pth"].optional is False
+        assert by_name["HAT_SRx2.pth"].optional is False
 
 
 # ---------------------------------------------------------------------------
@@ -352,67 +350,8 @@ class TestCLI:
 # Tests LTX 2.3
 # ---------------------------------------------------------------------------
 
-class TestEquivalenceLTX23Distilled:
-    """Vérifie le registre pour LTX 2.3 Distilled (FP8)."""
-
-    def test_should_return_correct_model_type(self, registry: ModelRegistry) -> None:
-        """model_type = 'distilled'."""
-        model = registry.get_model("ltx-2.3-i2v-distilled")
-        assert model is not None
-        assert model.model_type == "distilled"
-        assert model.architecture == "dit"
-
-    def test_should_return_correct_diffusion_file(self, registry: ModelRegistry) -> None:
-        """Fichier unique FP8 distilled."""
-        files = registry.get_diffusion_files("ltx-2.3-i2v-distilled")
-        assert files is not None
-        assert len(files) == 1
-        assert files[0].filename == "ltx-2.3-22b-distilled-fp8.safetensors"
-        assert files[0].comfyui_subdir == "checkpoints"
-
-    def test_should_return_integrated_vae(self, registry: ModelRegistry) -> None:
-        """VAE intégré dans le checkpoint."""
-        vae = registry.get_vae_config("ltx-2.3-i2v-distilled")
-        assert vae is not None
-        assert vae.filename == "integrated"
-        assert vae.expected_channels == 128
-
-    def test_should_return_model_text_encoder(self, registry: ModelRegistry) -> None:
-        """Text encoder Gemma 3 12B FP8 (pas T5)."""
-        model = registry.get_model("ltx-2.3-i2v-distilled")
-        assert model.text_encoder is not None
-        assert isinstance(model.text_encoder, ModelTextEncoderConfig)
-        assert model.text_encoder.filename == "gemma_3_12B_it_fp8_scaled.safetensors"
-        assert model.text_encoder.hf_repo == "Comfy-Org/ltx-2"
-
-    def test_should_return_correct_timeout(self, registry: ModelRegistry) -> None:
-        """Timeout 3600s pour distilled (plus rapide que WAN)."""
-        assert registry.get_timeout("ltx-2.3-i2v-distilled") == 3600
-
-    def test_should_return_single_checkpoint_type(self, registry: ModelRegistry) -> None:
-        """Checkpoint unique (pas de MoE pair)."""
-        cd = registry.get_checkpoint_detection("ltx-2.3-i2v-distilled")
-        assert cd.return_type == "single"
-        assert len(cd.primary_files) == 1
-
-    def test_should_return_correct_resolution(self, registry: ModelRegistry) -> None:
-        """Résolution 1080p native."""
-        res = registry.get_resolution_config("ltx-2.3-i2v-distilled")
-        assert res is not None
-        assert res.max_width == 1920
-        assert res.max_height == 1088
-        assert res.dimension_stride == 32
-        assert res.upscale_trigger_ratio == 1.3
-
-    def test_should_return_correct_workflow_templates(self, registry: ModelRegistry) -> None:
-        """Templates LTX 2.3."""
-        model = registry.get_model("ltx-2.3-i2v-distilled")
-        assert model.workflow_template == "ltx23_i2v"
-        assert model.workflow_template_upscale == "ltx23_i2v_with_upscale"
-
-
 class TestEquivalenceLTX23Dev:
-    """Vérifie le registre pour LTX 2.3 Dev (BF16)."""
+    """Vérifie le registre pour LTX 2.3 22B."""
 
     def test_should_return_correct_model_type(self, registry: ModelRegistry) -> None:
         """model_type = 'dev'."""
@@ -429,47 +368,40 @@ class TestEquivalenceLTX23Dev:
     def test_should_return_bf16_text_encoder(self, registry: ModelRegistry) -> None:
         """Text encoder Gemma 3 12B BF16 (full precision)."""
         model = registry.get_model("ltx-2.3-i2v-dev")
-        assert model.text_encoder.filename == "gemma_3_12B_it.safetensors"
+        assert model.text_encoder.filename == "gemma_3_12B_it/text_encoder/model.safetensors"
 
-    def test_should_return_higher_timeout(self, registry: ModelRegistry) -> None:
-        """Timeout 7200s pour dev (40 steps)."""
+    def test_should_return_correct_timeout(self, registry: ModelRegistry) -> None:
+        """Timeout 7200s pour LTX 2.3 22B."""
         assert registry.get_timeout("ltx-2.3-i2v-dev") == 7200
 
-    def test_should_share_resolution_with_distilled(self, registry: ModelRegistry) -> None:
-        """Les deux variantes LTX ont les mêmes capacités de résolution."""
-        res_distilled = registry.get_resolution_config("ltx-2.3-i2v-distilled")
-        res_dev = registry.get_resolution_config("ltx-2.3-i2v-dev")
-        assert res_distilled.max_width == res_dev.max_width
-        assert res_distilled.max_height == res_dev.max_height
-        assert res_distilled.dimension_stride == res_dev.dimension_stride
+    def test_should_return_correct_resolution(self, registry: ModelRegistry) -> None:
+        """Résolution 1280x736 (gen max optimisée LTX 2.3)."""
+        res = registry.get_resolution_config("ltx-2.3-i2v-dev")
+        assert res is not None
+        assert res.max_width == 1280
+        assert res.max_height == 736
+        assert res.dimension_stride == 32
+        assert res.upscale_trigger_ratio == 1.3
 
 
 class TestDownloadManifestLTX:
     """Vérifie le manifeste de téléchargement pour LTX 2.3."""
 
-    def test_should_build_distilled_manifest(self, registry: ModelRegistry) -> None:
-        """Le manifeste distilled inclut diffusion + text encoder (pas de VAE séparé)."""
-        manifest = registry.get_hf_download_manifest("ltx-2.3-i2v-distilled")
-        assert manifest is not None
-        assert manifest.repo == "Lightricks/LTX-2.3-fp8"
-        # 1 diffusion + 0 vae (integrated) + 1 text encoder = 2 fichiers
-        assert len(manifest.files) == 2
-
-    def test_should_not_include_t5_for_ltx(self, registry: ModelRegistry) -> None:
-        """LTX utilise Gemma, pas T5 — le manifeste ne doit pas inclure T5."""
-        manifest = registry.get_hf_download_manifest("ltx-2.3-i2v-distilled")
-        filenames = [f["filename"] for f in manifest.files]
-        assert "umt5_xxl_fp16.safetensors" not in filenames
-        assert "gemma_3_12B_it_fp8_scaled.safetensors" in filenames
-
     def test_should_build_dev_manifest(self, registry: ModelRegistry) -> None:
-        """Le manifeste dev inclut diffusion + text encoder BF16."""
+        """Le manifeste LTX 2.3 22B inclut diffusion + text encoder BF16."""
         manifest = registry.get_hf_download_manifest("ltx-2.3-i2v-dev")
         assert manifest is not None
         assert manifest.repo == "Lightricks/LTX-2.3"
         assert len(manifest.files) == 2
         filenames = [f["filename"] for f in manifest.files]
-        assert "gemma_3_12B_it.safetensors" in filenames
+        assert "gemma_3_12B_it/text_encoder/model.safetensors" in filenames
+
+    def test_should_not_include_t5_for_ltx(self, registry: ModelRegistry) -> None:
+        """LTX utilise Gemma, pas T5 — le manifeste ne doit pas inclure T5."""
+        manifest = registry.get_hf_download_manifest("ltx-2.3-i2v-dev")
+        filenames = [f["filename"] for f in manifest.files]
+        assert "umt5_xxl_fp16.safetensors" not in filenames
+        assert "gemma_3_12B_it/text_encoder/model.safetensors" in filenames
 
 
 # ---------------------------------------------------------------------------
@@ -484,7 +416,7 @@ class TestResolutionConfig:
         res = registry.get_resolution_config("wan2.2-ti2v-5b")
         assert res is not None
         assert res.max_width == 1280
-        assert res.max_height == 720
+        assert res.max_height == 736
         assert res.dimension_stride == 32
         assert res.upscale_trigger_ratio == 1.5
         assert res.supersampling_max_ratio == 4.0
@@ -496,13 +428,13 @@ class TestResolutionConfig:
         res = registry.get_resolution_config("wan2.2-i2v-a14b")
         assert res is not None
         assert res.max_width == 1280
-        assert res.max_height == 720
+        assert res.max_height == 736
         assert res.dimension_stride == 32
 
     def test_should_calculate_max_pixels(self, registry: ModelRegistry) -> None:
-        """max_pixels retourne 1280 × 720 = 921600."""
+        """max_pixels retourne 1280 × 736 = 942080."""
         res = registry.get_resolution_config("wan2.2-ti2v-5b")
-        assert res.max_pixels == 1280 * 720
+        assert res.max_pixels == 1280 * 736
 
     def test_should_return_none_for_unknown(self, registry: ModelRegistry) -> None:
         """Modèle inconnu → None."""

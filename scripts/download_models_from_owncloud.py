@@ -171,7 +171,7 @@ pass = {obscured_password}
 
 def download_model_from_owncloud(
     model_name: str = "wan2.2-i2v-a14b",
-    target_dir: Path = Path("/workspace/comfyui/ComfyUI/models/diffusion_models"),
+    target_dir: Path = Path("/workspace/comfyui/ComfyUI/models/checkpoints"),
 ) -> tuple[bool, str | None]:
     """
     Télécharge un modèle depuis OwnCloud avec rclone
@@ -296,48 +296,65 @@ def download_model_from_owncloud(
                 logger.error("    et relancer le téléchargement")
                 return False, "Fichiers incomplets après téléchargement"
 
-            # 🔍 Vérification d'intégrité du T5 Encoder (CRITIQUE)
+            # 🔍 Vérification d'intégrité du text encoder
             logger.info("")
-            logger.info("🔍 Vérification de l'intégrité du T5 Encoder...")
 
-            verify_script = Path(__file__).parent / "verify_t5_integrity.py"
-            if verify_script.exists():
-                result = subprocess.run(
-                    [
-                        "python3",
-                        str(verify_script),
-                        model_name,
-                        "--base-dir",
-                        str(target_dir),
-                    ],
-                    capture_output=True,
-                    text=True,
+            # Le T5 partagé ne concerne que les modèles sans text encoder propre
+            try:
+                registry = get_registry()
+                model_cfg = registry.get_model(model_name)
+                has_own_te = model_cfg and model_cfg.text_encoder is not None
+            except Exception:
+                has_own_te = False
+
+            if has_own_te:
+                logger.info(
+                    f"ℹ️  Text encoder model-spécifique ({model_cfg.text_encoder.filename})"
+                    " — vérification T5 non applicable"
                 )
-
-                # Afficher la sortie
-                for line in result.stdout.split("\n"):
-                    if line.strip():
-                        print(f"   {line}")
-
-                if result.returncode != 0:
-                    logger.error("")
-                    logger.error("❌ ÉCHEC DE LA VÉRIFICATION T5 ENCODER")
-                    logger.error(
-                        "   Le workflow est ARRÊTÉ pour éviter d'utiliser un modèle corrompu"
-                    )
-                    logger.error("")
-                    if result.stderr:
-                        for line in result.stderr.split("\n"):
-                            if line.strip():
-                                logger.error(f"   {line}")
-                    return False, "T5 Encoder corrompu ou incomplet"
-
-                logger.success("✅ T5 Encoder validé avec succès")
             else:
-                logger.warning(
-                    f"⚠️  Script de vérification T5 non trouvé: {verify_script}"
-                )
-                logger.warning("   Impossible de vérifier l'intégrité du T5 Encoder")
+                logger.info("🔍 Vérification de l'intégrité du T5 Encoder...")
+
+                verify_script = Path(__file__).parent / "verify_t5_integrity.py"
+                if verify_script.exists():
+                    result = subprocess.run(
+                        [
+                            "python3",
+                            str(verify_script),
+                            model_name,
+                            "--base-dir",
+                            str(target_dir),
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    for line in result.stdout.split("\n"):
+                        if line.strip():
+                            print(f"   {line}")
+
+                    if result.returncode != 0:
+                        logger.error("")
+                        logger.error("❌ ÉCHEC DE LA VÉRIFICATION T5 ENCODER")
+                        logger.error(
+                            "   Le workflow est ARRÊTÉ pour éviter d'utiliser"
+                            " un modèle corrompu"
+                        )
+                        logger.error("")
+                        if result.stderr:
+                            for line in result.stderr.split("\n"):
+                                if line.strip():
+                                    logger.error(f"   {line}")
+                        return False, "T5 Encoder corrompu ou incomplet"
+
+                    logger.success("✅ T5 Encoder validé avec succès")
+                else:
+                    logger.warning(
+                        f"⚠️  Script de vérification T5 non trouvé: {verify_script}"
+                    )
+                    logger.warning(
+                        "   Impossible de vérifier l'intégrité du T5 Encoder"
+                    )
 
             return True, None
         else:
@@ -354,7 +371,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="wan2.2-i2v-a14b")
     parser.add_argument(
-        "--target-dir", default="/workspace/comfyui/ComfyUI/models/diffusion_models"
+        "--target-dir", default="/workspace/comfyui/ComfyUI/models/checkpoints"
     )
 
     args = parser.parse_args()

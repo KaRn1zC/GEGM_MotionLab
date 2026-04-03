@@ -3,7 +3,7 @@
 **Déploiement containerisé local et cloud**
 
 [![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://docker.com)
-[![Multi-arch](https://img.shields.io/badge/platform-AMD64%20%2F%20ARM64-success.svg)](https://docs.docker.com/build/building/multi-platform/)
+[![Platform](https://img.shields.io/badge/platform-AMD64-success.svg)](https://docs.docker.com/build/building/multi-platform/)
 [![Version](https://img.shields.io/badge/version-5.1.0-blue.svg)](CHANGELOG.md)
 
 ---
@@ -129,25 +129,13 @@ docker stats
 
 ---
 
-## Build Multi-arch
-
-### Production (AMD64 + ARM64)
+## Build & Déploiement
 
 ```bash
-make runpod-deploy
-
-# Équivalent
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --file Dockerfile \
-  --tag arnaudboy/comfy_img_to_loop:latest \
-  --push .
-```
-
-### Rapide (AMD64)
-
-```bash
-make runpod-deploy-quick
+make runpod-deploy              # Build + push → :latest (production)
+make runpod-deploy-test         # Build + push → :test (expérimentation)
+make runpod-deploy-nocache      # Idem sans cache (rebuild complet)
+make runpod-deploy-test-nocache # Idem sans cache
 ```
 
 ---
@@ -218,8 +206,7 @@ docker compose exec comfy_img_to_loop tail -f /workspace/logs/comfyui.log
 
 | Fichier | Contenu | Usage |
 |---------|---------|-------|
-| `requirements.txt` | AVEC PyTorch | Local |
-| `requirements-base.txt` | SANS PyTorch | Docker |
+| `requirements.txt` | SANS PyTorch (installé séparément avec CUDA) | Docker |
 
 **Raison :** Dockerfile installe PyTorch optimisé GPU
 

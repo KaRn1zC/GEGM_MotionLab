@@ -1,6 +1,6 @@
 {
-  "name": "WAN 2.2 + UltraSharp Upscale",
-  "description": "Pipeline complet : génération optimale + upscaling adaptatif 4x UltraSharp + resize précis",
+  "name": "WAN 2.2 + HAT-L 4x Upscale",
+  "description": "Pipeline complet : génération optimale + upscaling adaptatif HAT-L 4x + resize précis",
   "version": "3.5.1",
   "author": "Comfy_Img_to_Loop",
   "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
@@ -213,7 +213,7 @@
     "10": {
       "class_type": "UpscaleModelLoader",
       "inputs": {
-        "model_name": "4x-UltraSharp.pth"
+        "model_name": "HAT-L_SRx4_ImageNet-pretrain.pth"
       }
     },
     "11": {
@@ -245,7 +245,7 @@
         "save_output": true,
         "images": ["11b", 0]
       },
-      "_comment": "pingpong=false pour vraie boucle seamless (recommence au début, pas d'effet miroir)"
+      "_comment": "pingpong=false (pas d'effet miroir aller-retour)"
     }
   },
 
@@ -280,7 +280,7 @@
       "v3.5.0": "FEATURE: Implémentation paramètres frontend (shift, riflex_freq_index, pingpong) - contrôle motion_intensity/denoise/consistency/loop_smooth",
       "v3.2.0": "Fix load_device: gpu → main_device (valeurs API WanVideoWrapper: main_device/offload_device uniquement)",
       "v3.1.0": "Optimisation GPU : load_device=gpu + force_offload=false (avec 95GB VRAM, accélération ~3-5x)",
-      "v3.0.0": "Système upscale adaptatif UltraSharp 4x avec node 11b (ImageScale resize vers target exacte)",
+      "v3.0.0": "Système upscale adaptatif HAT-L 4x avec node 11b (ImageScale resize vers target exacte)",
       "v2.0.0": "BREAKING: Remplacé WanVideoImageToVideoEncode par WanVideoEncode + WanVideoEmptyEmbeds (fix erreur 48/96 canaux)"
     }
   }

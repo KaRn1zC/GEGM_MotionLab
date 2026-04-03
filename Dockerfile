@@ -57,11 +57,9 @@ WORKDIR /workspace
 RUN pip install --upgrade --pre torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/nightly/cu128
 
-# Copier requirements-base (sans PyTorch)
-COPY requirements-base.txt .
-
-# Installer les dépendances de base
-RUN pip install --no-cache-dir -r requirements-base.txt
+# Copier et installer les dépendances (sans PyTorch, déjà installé ci-dessus)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Installer bitsandbytes après PyTorch
 RUN pip install --upgrade bitsandbytes
@@ -94,7 +92,8 @@ RUN python -c "import torch; import diffusers; import transformers; print('✅ W
 RUN mkdir -p \
     /workspace/logs \
     /workspace/web_interface/uploads \
-    /workspace/comfyui/ComfyUI/models/diffusion_models
+    /workspace/comfyui/ComfyUI/models/diffusion_models \
+    /workspace/comfyui/ComfyUI/models/checkpoints
 
 # Rendre les scripts exécutables
 RUN chmod +x /workspace/docker-entrypoint.sh && \

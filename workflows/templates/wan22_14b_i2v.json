@@ -197,7 +197,7 @@
         "save_output": true,
         "images": ["9", 0]
       },
-      "_comment": "pingpong=false pour vraie boucle seamless (recommence au début, pas d'effet miroir)"
+      "_comment": "pingpong=false (pas d'effet miroir aller-retour)"
     }
   },
 

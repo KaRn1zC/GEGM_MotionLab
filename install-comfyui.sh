@@ -71,12 +71,20 @@ if [ -f requirements.txt ]; then
 fi
 cd ..
 
+# RES4LYF (ClownSampler_Beta — solveur ODE haute qualite, full path officiel LTX 2.3 22B)
+echo "Installing RES4LYF (ClownSampler_Beta for LTX 2.3 full path)..."
+git clone https://github.com/ClownsharkBatwing/RES4LYF.git
+cd RES4LYF
+if [ -f requirements.txt ]; then
+    pip install --no-cache-dir -r requirements.txt
+fi
+cd ..
+
 cd /workspace/comfyui/ComfyUI
 
 # Créer les dossiers de modèles
 echo "Creating model directories..."
 mkdir -p models/checkpoints/wan2.2-i2v-a14b
-mkdir -p models/checkpoints/ltx-2.3-i2v-distilled
 mkdir -p models/checkpoints/ltx-2.3-i2v-dev
 mkdir -p models/vae
 mkdir -p models/loras

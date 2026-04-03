@@ -13,11 +13,11 @@
 
 ## Vue d'ensemble
 
-GEGM MotionLab transforme vos images statiques en **cinemagraphs professionnels** grâce à 4 modèles IA.
+GEGM MotionLab transforme vos images statiques en **cinemagraphs professionnels** grâce à 3 modèles IA.
 
 **Fonctionnalités :**
 - Interface web Flask moderne
-- 4 modèles IA : WAN 2.2 (5B, 14B MoE) et LTX 2.3 (Distilled, Dev)
+- 3 modèles IA : WAN 2.2 (5B, 14B MoE) et LTX 2.3 (22B)
 - Paramètres avancés : motion, consistance, boucles fluides
 - Qualité 720p à 4K avec upscaling adaptatif
 - Pipeline résolution model-agnostic piloté par registre YAML
@@ -46,7 +46,7 @@ open http://localhost:5000
 make workflow MODEL=wan2.2-ti2v-5b
 
 # Déployer
-make runpod-deploy-quick
+make runpod-deploy
 ```
 
 Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
@@ -55,14 +55,14 @@ Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
 
 ## Stack Technique
 
-| Composant | Technologie |
-|-----------|-------------|
-| Backend | Python 3.11 + Flask 3.0 |
-| IA Engine | ComfyUI + WAN 2.2 (5B/14B MoE) + LTX 2.3 (22B DiT) |
-| Deep Learning | PyTorch 2.6 + CUDA 12.8 |
-| Container | Docker multi-arch |
-| Storage | OwnCloud + rclone |
-| Config | Registre modèles YAML (model-agnostic) |
+| Composant     | Technologie                                        |
+| ------------- | -------------------------------------------------- |
+| Backend       | Python 3.11 + Flask 3.0                            |
+| IA Engine     | ComfyUI + WAN 2.2 (5B/14B MoE) + LTX 2.3 (22B DiT) |
+| Deep Learning | PyTorch 2.6 + CUDA 12.8                            |
+| Container     | Docker (AMD64)                                     |
+| Storage       | OwnCloud + rclone                                  |
+| Config        | Registre modèles YAML (model-agnostic)             |
 
 ---
 
@@ -70,17 +70,16 @@ Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
 
 ### WAN 2.2
 
-| Modèle | Taille | GPU Recommandés | Temps |
-|--------|--------|-----------------|-------|
-| **5B** | 9.3 GB | RTX 6000 Ada, L40, L40S (48GB+) | ~5 min |
-| **14B MoE** | 2×28.6 GB | RTX Pro 6000, H100 SXM (80GB+) | ~8 min |
+| Modèle      | Taille    | GPU Recommandés                 | Temps   |
+| ----------- | --------- | ------------------------------- | ------- |
+| **5B**      | 9.3 GB    | RTX 6000 Ada, L40, L40S (48GB+) | ~10 min |
+| **14B MoE** | 2×28.6 GB | RTX Pro 6000, H100 SXM (80GB+)  | ~28 min |
 
 ### LTX 2.3
 
-| Modèle | Taille | GPU Recommandés | Temps |
-|--------|--------|-----------------|-------|
-| **22B Distilled (FP8)** | 29.5 GB | RTX 6000 Ada, L40, L40S (48GB+) | ~2 min |
-| **22B Dev (BF16)** | 46.1 GB | RTX Pro 6000, H100 SXM (80GB+) | ~8 min |
+| Modèle  | Taille  | GPU Recommandés                | Temps   |
+| ------- | ------- | ------------------------------ | ------- |
+| **22B** | 46.1 GB | RTX Pro 6000, H100 SXM (80GB+) | ~13 min |
 
 ---
 
@@ -96,8 +95,7 @@ GEGM_MotionLab/
 ├── scripts/                # Utilitaires (setup, download, verify)
 ├── config/                 # model_registry.yaml, owncloud.yaml, logging.yaml (ref)
 ├── Dockerfile              # Single-stage CUDA 12.8 (PYTHONPATH=/workspace)
-├── requirements.txt        # Dépendances AVEC PyTorch (local)
-└── requirements-base.txt   # Dépendances SANS PyTorch (Docker)
+└── requirements.txt        # Dépendances Python (sans PyTorch, installé dans Docker)
 ```
 
 ---
@@ -126,13 +124,13 @@ OWNCLOUD_MODEL_FOLDER=/GEGM_ComfyUI/Models
 
 ## API REST
 
-| Endpoint | Méthode | Description |
-|----------|---------|-------------|
-| `/api/generate` | POST | Lancer génération |
-| `/api/jobs/<job_id>` | GET | Statut job |
-| `/api/download/<job_id>` | GET | Télécharger MP4 |
-| `/api/model-info` | GET | Info modèle actif |
-| `/health` | GET | Health check |
+| Endpoint                 | Méthode | Description       |
+| ------------------------ | ------- | ----------------- |
+| `/api/generate`          | POST    | Lancer génération |
+| `/api/jobs/<job_id>`     | GET     | Statut job        |
+| `/api/download/<job_id>` | GET     | Télécharger MP4   |
+| `/api/model-info`        | GET     | Info modèle actif |
+| `/health`                | GET     | Health check      |
 
 ---
 
@@ -148,28 +146,28 @@ make logs                  # Voir logs
 make workflow MODEL=<nom>  # Workflow complet générique
 make workflow-5b           # Alias WAN 5B
 make workflow-14b          # Alias WAN 14B
-make workflow-ltx-fast     # Alias LTX Distilled
-make workflow-ltx-pro      # Alias LTX Dev
+make workflow-ltx           # Alias LTX 2.3 22B
 
 # Workflows séquentiels
 make workflow-wan-all      # WAN 14B puis 5B
-make workflow-ltx-all      # LTX Dev puis Distilled
-make workflow-all          # Tous les modèles (4)
+make workflow-all          # Tous les modèles (3)
 
 # Déploiement
-make runpod-deploy-quick        # Build AMD64 + push → :latest
-make runpod-deploy-quick-test   # Build AMD64 + push → :test
+make runpod-deploy              # Build + push → :latest
+make runpod-deploy-test         # Build + push → :test
+make runpod-deploy-nocache      # Idem sans cache (rebuild complet)
+make runpod-deploy-test-nocache # Idem sans cache
 ```
 
 ---
 
 ## Troubleshooting
 
-| Erreur | Solution |
-|--------|----------|
-| CUDA out of memory | Réduire résolution ou steps |
+| Erreur                 | Solution                         |
+| ---------------------- | -------------------------------- |
+| CUDA out of memory     | Réduire résolution ou steps      |
 | VAE 48/96/128 channels | Vérifier VAE correct pour modèle |
-| ComfyUI timeout | Vérifier modèles présents |
+| ComfyUI timeout        | Vérifier modèles présents        |
 
 ---
 

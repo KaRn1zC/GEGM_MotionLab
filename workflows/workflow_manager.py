@@ -81,8 +81,6 @@ class WorkflowTemplate:
         except Exception:
             if "14b" in env_model.lower() or "a14b" in env_model.lower():
                 fallback_type = "14b"
-            elif "distilled" in env_model.lower():
-                fallback_type = "distilled"
             elif "dev" in env_model.lower() and "ltx" in env_model.lower():
                 fallback_type = "dev"
         logger.warning(
@@ -296,11 +294,13 @@ class WorkflowTemplate:
         - denoise (0-100) → influence sur shift
         - motion_intensity (subtle/moderate/intense) → shift (5.0/7.0/9.0)
         - noise_level (low/medium/high) → ajustement shift
-        - loop_smooth (none/basic/advanced) → pingpong (false/true/true)
         - consistency (0-100) → riflex_freq_index (0-2)
         - color_preservation (0-100) → ajustement cfg_scale
         - motion_area (full/center/edges) → ajout au prompt
         - frame_blending (1-10) → info seulement (non supporté directement)
+
+        Note: pingpong est toujours désactivé (false). WAN 2.2 ne dispose pas de
+        mécanisme de boucle seamless natif — la boucle est gérée en post-processing.
 
         Args:
             params: Paramètres du frontend
@@ -348,10 +348,18 @@ class WorkflowTemplate:
             transformed["riflex_freq_index"] = 0  # Plus créatif
 
         # === PINGPONG désactivé ===
-        # pingpong=false pour vraie boucle seamless (recommence au début)
-        # pingpong=true ferait un effet miroir (aller-retour) non souhaité pour cinemagraphs
-        loop_smooth = params.get("loop_smooth", "basic")
-        transformed["pingpong"] = False  # Toujours false - boucle normale
+        # pingpong=true crée un effet miroir (aller-retour) non souhaité pour cinemagraphs
+        transformed["pingpong"] = False
+
+        # === FRAMES: compensation crossfade post-processing ===
+        # Le crossfade seamless consomme ~0.5s de frames (fusionnées entre fin et début).
+        # On ajoute ces frames pour que la durée finale corresponde à la demande.
+        fps = params.get("fps", 24)
+        crossfade_frames = int(0.5 * fps)
+        desired_frames = params.get("frames", 72)
+        frames = desired_frames + crossfade_frames
+        transformed["frames"] = frames
+        output_frames = frames - crossfade_frames
 
         # === CFG_SCALE ajusté selon color_preservation ===
         base_cfg = params.get("cfg_scale", 7.5)
@@ -378,14 +386,15 @@ class WorkflowTemplate:
         # === LOG des transformations ===
         logger.info("🔧 Transformation paramètres frontend → ComfyUI:")
         logger.info(
+            f"   frames={frames} générées → ~{output_frames} en sortie "
+            f"(crossfade {crossfade_frames}f), demandé={desired_frames}"
+        )
+        logger.info(
             f"   motion_intensity={motion_intensity}, noise_level={noise_level}, denoise={denoise}%"
         )
         logger.info(f"   → shift={transformed['shift']} (base={base_shift})")
         logger.info(
             f"   consistency={consistency}% → riflex_freq_index={transformed['riflex_freq_index']}"
-        )
-        logger.info(
-            f"   loop_smooth={loop_smooth} → pingpong={transformed['pingpong']}"
         )
         logger.info(
             f"   color_preservation={color_pres}% → cfg_scale={transformed['cfg_scale']}"
@@ -411,12 +420,14 @@ class WorkflowTemplate:
         """
         Transforme les paramètres frontend en paramètres LTX 2.3 ComfyUI.
 
-        Différences avec WAN 2.2 :
-        - Pas de shift/riflex_freq_index — LTX utilise STG guidance
-        - motion_intensity → stg_scale + prompt engineering
-        - consistency → temporal_tile_size / temporal_overlap
-        - CFG = 1 pour distilled, 3-7 pour dev
-        - frames doit être N×8+1
+        Pipeline officiel : SamplerCustomAdvanced + LTXVImgToVideoConditionOnly.
+        STG/CFG fixés par apply_parameters() selon valeurs officielles Lightricks 22B.
+        Frames doit être N×8+1.
+
+        Le pipeline LTX utilise pingpong (aller-retour) pour créer l'effet de boucle,
+        car LTXVLoopingSampler est un système de tiling temporel (pas de boucle native).
+        Pingpong double les frames en sortie : N générées → 2N-2 en sortie.
+        On divise donc les frames demandées par 2 avant génération.
 
         Args:
             params: Paramètres du frontend
@@ -426,56 +437,29 @@ class WorkflowTemplate:
         """
         transformed = params.copy()
 
-        # === STG_SCALE (contrôle qualité spatiale — équivalent du shift WAN) ===
-        motion_intensity = params.get("motion_intensity", "moderate")
-        base_stg = {
-            "subtle": 0.5,
-            "moderate": 1.0,
-            "intense": 1.5,
-        }.get(motion_intensity, 1.0)
+        # === FRAMES: arrondir au N×8+1 (pas de pingpong, crossfade en post-processing) ===
+        # Le crossfade consomme ~12 frames (0.5s à 24fps) pour la boucle seamless.
+        # On ajoute ces frames à la demande pour que la durée finale soit correcte.
+        crossfade_frames = 12
+        desired_frames = params.get("frames", 121)
+        gen_target = desired_frames + crossfade_frames
+        # Arrondir au N×8+1 le plus proche
+        n = round((gen_target - 1) / 8)
+        n = max(1, n)
+        frames = n * 8 + 1
+        transformed["frames"] = frames
+        # Frames de sortie réelles après crossfade
+        output_frames = frames - crossfade_frames
 
-        noise_level = params.get("noise_level", "high")
-        noise_mod = {"low": -0.2, "medium": 0.0, "high": 0.2}.get(noise_level, 0.0)
+        # === I2V STRENGTH (force du conditionnement image dans le latent) ===
+        # 0.7 = valeur officielle Lightricks 22B pour I2V (noise_mask=0.3 sur frame 0)
+        # Baisser en dessous de 0.7 donne plus de liberté au modèle mais risque
+        # de générer du mouvement de caméra au lieu d'animation d'éléments.
+        transformed["i2v_strength"] = 0.7
 
-        denoise = params.get("denoise", 75)
-        denoise_mod = (denoise - 50) / 50 * 0.3
-
-        final_stg = max(0.0, min(3.0, base_stg + noise_mod + denoise_mod))
-        transformed["stg_scale"] = round(final_stg, 2)
-
-        # === TEMPORAL TILING (cohérence temporelle — équivalent de riflex_freq_index) ===
-        consistency = params.get("consistency", 80)
-        if consistency >= 85:
-            transformed["temporal_tile_size"] = 80
-            transformed["temporal_overlap"] = 32
-        elif consistency >= 60:
-            transformed["temporal_tile_size"] = 80
-            transformed["temporal_overlap"] = 24
-        else:
-            transformed["temporal_tile_size"] = 64
-            transformed["temporal_overlap"] = 16
-
-        # === FRAMES: arrondir au N×8+1 le plus proche ===
-        frames = params.get("frames", 81)
-        if (frames - 1) % 8 != 0:
-            # Arrondir au N×8+1 le plus proche
-            n = round((frames - 1) / 8)
-            frames = max(9, n * 8 + 1)
-            transformed["frames"] = frames
-
-        # === CFG SCALE ===
-        base_cfg = params.get("cfg_scale", 1.0)
-        color_pres = params.get("color_preservation", 70)
-        cfg_mod = (color_pres - 50) / 100 * 1.0
-        final_cfg = max(1.0, min(15.0, base_cfg + cfg_mod))
-        transformed["cfg_scale"] = round(final_cfg, 1)
-
-        # === COND_IMAGE_INDICES pour boucle seamless ===
-        # Conditionner le premier ET le dernier frame avec la même image
-        last_frame = frames - 1
-        transformed["cond_image_indices"] = f"0, {last_frame}"
-
-        # === PROMPT ENGINEERING pour motion_area ===
+        # === PROMPT ENGINEERING cinemagraph (spécifique LTX 2.3) ===
+        # LTX 2.3 génère naturellement du mouvement de caméra — on le contraint
+        # explicitement via le prompt car il n'a pas de contrôle caméra natif
         motion_area = params.get("motion_area", "full")
         prompt = params.get("prompt", "")
         if motion_area == "center" and "center" not in prompt.lower():
@@ -483,21 +467,58 @@ class WorkflowTemplate:
         elif motion_area == "edges" and "edge" not in prompt.lower():
             transformed["prompt"] = f"{prompt}, movement on edges only, static center"
 
-        # Toujours ajouter "seamless loop, cinemagraph" au prompt
         current_prompt = transformed.get("prompt", prompt)
-        if "seamless loop" not in current_prompt.lower():
-            transformed["prompt"] = f"{current_prompt}, seamless loop, cinemagraph"
+        # Directives caméra statique + cinemagraph
+        cinemagraph_suffix = "static camera, fixed frame, locked tripod shot, seamless loop, cinemagraph"
+        if "static camera" not in current_prompt.lower():
+            transformed["prompt"] = f"{current_prompt}, {cinemagraph_suffix}"
 
-        # === MAPPING steps → steps_generation pour templates upscale ===
-        if "steps" in params:
-            transformed["steps_generation"] = params["steps"]
+        # === STEPS: forcé à 15 pour LTX 2.3 22B ===
+        # Le modèle est calibré pour 15 steps (officiel Lightricks 22B).
+        # Au-delà, sur-convergence : le sampler lisse toute variance temporelle → vidéo statique.
+        # La LoRA distilled + ClownSampler_Beta res_2s compensent le faible nombre de steps.
+        ltx23_steps = 15
+        steps_from_user = params.get("steps", 15)
+        if steps_from_user != ltx23_steps:
+            logger.info(
+                f"   ⚠️  Steps forcé: {steps_from_user} → {ltx23_steps} "
+                f"(LTX 2.3 22B calibré pour {ltx23_steps} steps)"
+            )
+        transformed["steps"] = ltx23_steps
+        transformed["steps_generation"] = ltx23_steps
+
+        # === CFG VIDEO (guidance vidéo du MultimodalGuider) ===
+        # Valeur officielle Lightricks 22B = 3.0.
+        # Un CFG plus élevé produit de l'instabilité et du camera drift au lieu
+        # de renforcer l'adhérence au prompt (testé avec CFG 6/7/8 — container23).
+        ltx23_cfg = 3.0
+        cfg_from_user = params.get("cfg_scale", 3.0)
+        if cfg_from_user != ltx23_cfg:
+            logger.info(
+                f"   ⚠️  CFG forcé: {cfg_from_user} → {ltx23_cfg} "
+                f"(LTX 2.3 22B calibré pour CFG={ltx23_cfg})"
+            )
+        video_cfg = ltx23_cfg
+        transformed["cfg_scale"] = video_cfg
+
+        # === STG STRING VALUES (full path officiel Lightricks 22B) ===
+        transformed["stg_sigmas"] = "1.0"
+        transformed["stg_cfg_values"] = str(video_cfg)
+        transformed["stg_scale_values"] = "1"
+        transformed["stg_rescale_values"] = "0.9"
+        transformed["stg_layers_indices"] = "[28]"
 
         # === LOG ===
         logger.info("🔧 Transformation paramètres frontend → LTX 2.3:")
-        logger.info(f"   motion_intensity={motion_intensity} → stg_scale={transformed['stg_scale']}")
-        logger.info(f"   consistency={consistency}% → temporal_overlap={transformed['temporal_overlap']}")
-        logger.info(f"   frames={frames} (N×8+1), cond_indices={transformed['cond_image_indices']}")
-        logger.info(f"   cfg_scale={transformed['cfg_scale']}")
+        logger.info(
+            f"   frames={frames} générées (N×8+1) → ~{output_frames} en sortie (crossfade {crossfade_frames}f), "
+            f"demandé={desired_frames}"
+        )
+        logger.info(f"   i2v_strength={transformed['i2v_strength']}")
+        logger.info(
+            f"   Full path officiel: MultimodalGuider(VIDEO CFG={video_cfg}/STG=1/rescale=0.9 + AUDIO CFG=7), "
+            f"ClownSampler_Beta(exponential/res_2s, eta=0.25), LoRA=0.2, {ltx23_steps} steps, pipeline AV"
+        )
 
         return transformed
 
@@ -553,7 +574,11 @@ class WorkflowTemplate:
             if model_cfg and model_cfg.text_encoder:
                 te_path = f"{model_cfg.text_encoder.filename}"
                 validated_params["text_encoder_path"] = te_path
-                logger.info(f"📝 Text encoder: {te_path}")
+                # Nom plat pour LTXAVTextEncoderLoader (ComfyUI core, pipeline AV officiel)
+                # "gemma_3_12B_it/text_encoder/model.safetensors" → "gemma_3_12B_it.safetensors"
+                te_flat = te_path.split("/")[0] + ".safetensors"
+                validated_params["text_encoder_flat"] = te_flat
+                logger.info(f"📝 Text encoder: {te_flat} (AV loader)")
         except Exception:
             pass
 
@@ -574,6 +599,29 @@ class WorkflowTemplate:
             validated_params["checkpoint_path"] = checkpoint_path
             logger.info(f"📁 Chemin checkpoint: {checkpoint_path}")
 
+        # Configuration full path officielle Lightricks LTX 2.3 22B.
+        # Source : workflow officiel LTX-2.3_T2V_I2V_Single_Stage (full path).
+        # STGGuiderAdvanced(CFG=3, STG=1, rescale=0.9, cfg_star_rescale=false),
+        # ClownSampler_Beta(res_2s, eta=0.25), LoRA strength=0.2, 15 steps.
+        if (
+            self.model_family == "ltx23"
+            and validated_params.get("model_type") == "dev"
+        ):
+            validated_params["stg_sigmas"] = "1.0"
+            validated_params["stg_cfg_values"] = "3"
+            validated_params["stg_scale_values"] = "1"
+            validated_params["stg_rescale_values"] = "0.9"
+            validated_params["stg_layers_indices"] = "[28]"
+
+            # LoRA distilled — le chemin est injecte, la strength (0.2) est dans le template
+            validated_params["lora_path"] = "ltx-2.3-22b-distilled-lora-384.safetensors"
+            logger.info("🔗 LoRA distilled: ltx-2.3-22b-distilled-lora-384.safetensors (strength=0.2)")
+
+            logger.info(
+                "📎 LTX 2.3 22B — full path officiel Lightricks "
+                "(MultimodalGuider, pipeline AV, ClownSampler_Beta res_2s, LoRA=0.2)"
+            )
+
         # Remplacer seed=-1 par un seed aléatoire
         if "seed" in validated_params and validated_params["seed"] == -1:
             validated_params["seed"] = self._generate_random_seed()
@@ -589,10 +637,41 @@ class WorkflowTemplate:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         workflow = self._substitute_params_recursive(workflow, {"timestamp": timestamp})
 
+        # Nettoyage : supprimer les clés _comment* du workflow avant envoi à ComfyUI
+        # ComfyUI attend uniquement des dicts de nodes (class_type + inputs) à chaque clé
+        workflow = self._strip_workflow_comments(workflow)
+
         logger.info(
             f"Workflow {self.name} préparé avec {len(validated_params)} paramètres"
         )
         return workflow
+
+    @staticmethod
+    def _strip_workflow_comments(workflow: dict[str, Any]) -> dict[str, Any]:
+        """
+        Supprime les clés _comment* du workflow avant envoi à ComfyUI.
+
+        Les clés _comment_section_* au top-level sont des strings (pas des dicts de nodes)
+        et provoquent un crash ComfyUI (HTTP 500). Les clés _comment dans les nodes sont
+        inoffensives mais supprimées par précaution.
+
+        Args:
+            workflow: Workflow ComfyUI avec potentielles clés commentaires
+
+        Returns:
+            dict: Workflow nettoyé, prêt pour ComfyUI
+        """
+        cleaned = {}
+        for key, value in workflow.items():
+            if key.startswith("_comment"):
+                continue
+            if isinstance(value, dict):
+                cleaned[key] = {
+                    k: v for k, v in value.items() if not k.startswith("_comment")
+                }
+            else:
+                cleaned[key] = value
+        return cleaned
 
     def _substitute_params_recursive(self, obj: Any, params: dict[str, Any]) -> Any:
         """

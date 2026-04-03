@@ -345,6 +345,10 @@ else
         TEMP_DL="./models/.temp_download"
         mkdir -p "$TEMP_DL"
 
+        # Déterminer si le modèle utilise des symlinks (WAN) ou des fichiers directs (LTX)
+        SYMLINKS=$(python -m src.model_registry get-symlinks "$MODEL" 2>/dev/null || echo "[]")
+        HAS_SYMLINKS=$(echo "$SYMLINKS" | python3 -c "import sys,json; print('yes' if json.load(sys.stdin) else 'no')")
+
         FILE_COUNT=$(echo "$MANIFEST" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['files']))")
         FILE_IDX=0
 
@@ -360,19 +364,30 @@ for f in data['files']:
             FILE_IDX=$((FILE_IDX + 1))
             echo "  $FILE_IDX/$FILE_COUNT: $filename..."
 
-            mkdir -p "./models/$dest_subdir"
             hf download "$file_repo" "$hf_path" --local-dir "$TEMP_DL"
-            mv "$TEMP_DL/$hf_path" "./models/$dest_subdir/"
+
+            if [ "$HAS_SYMLINKS" = "yes" ]; then
+                # WAN : fichiers dans dossiers partagés (diffusion_models/, text_encoders/, vae/)
+                mkdir -p "./models/$dest_subdir"
+                mv "$TEMP_DL/$hf_path" "./models/$dest_subdir/"
+            elif [ "$dest_subdir" = "text_encoders" ]; then
+                # LTX text encoder : séparer du checkpoint pour faciliter le placement ComfyUI
+                mkdir -p "./models/text_encoders"
+                mv "$TEMP_DL/$hf_path" "./models/text_encoders/"
+            else
+                # LTX checkpoint : dans le dossier modèle
+                mkdir -p "./models/$MODEL"
+                mv "$TEMP_DL/$hf_path" "./models/$MODEL/"
+            fi
         done
 
         rm -rf "$TEMP_DL"
         echo "✅ $MODEL téléchargé"
 
-        # Créer symlinks via registre
-        echo ""
-        echo "🔗 Création de symlinks pour $MODEL..."
-        SYMLINKS=$(python -m src.model_registry get-symlinks "$MODEL" 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$SYMLINKS" ]; then
+        # Créer symlinks via registre (WAN uniquement)
+        if [ "$HAS_SYMLINKS" = "yes" ]; then
+            echo ""
+            echo "🔗 Création de symlinks pour $MODEL..."
             mkdir -p "models/$MODEL"
             echo "$SYMLINKS" | python3 -c "
 import sys, json
@@ -460,60 +475,38 @@ else
     echo "  ✅ CLIP Vision déjà présent: $(du -h $CLIP_FILE | cut -f1)"
 fi
 
-# 4x-UltraSharp (~67 MB) - Upscaler haute qualité
-ULTRASHARP_FILE="models/upscale_models/4x-UltraSharp.pth"
-if [ ! -f "$ULTRASHARP_FILE" ]; then
-    echo "  2/3: 4x-UltraSharp (~67 MB)..."
+# HAT-L 4x (~40 MB) - Upscaler post-génération (Hybrid Attention Transformer)
+HAT_L_4X_FILE="models/upscale_models/HAT-L_SRx4_ImageNet-pretrain.pth"
+if [ ! -f "$HAT_L_4X_FILE" ]; then
+    echo "  2/4: HAT-L 4x (~158 MB)..."
     curl -L -# \
-        "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
-        -o "$ULTRASHARP_FILE"
+        "https://huggingface.co/jaideepsingh/upscale_models/resolve/main/HAT/HAT-L_SRx4_ImageNet-pretrain.pth" \
+        -o "$HAT_L_4X_FILE"
 
     if [ $? -eq 0 ]; then
-        echo "  ✅ 4x-UltraSharp téléchargé ($(du -h $ULTRASHARP_FILE | cut -f1))"
+        echo "  ✅ HAT-L 4x téléchargé ($(du -h $HAT_L_4X_FILE | cut -f1))"
     else
-        echo "  ⚠️ Échec téléchargement 4x-UltraSharp (non bloquant)"
+        echo "  ⚠️ Échec téléchargement HAT-L 4x (non bloquant)"
     fi
 else
-    echo "  ✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
+    echo "  ✅ HAT-L 4x déjà présent: $(du -h $HAT_L_4X_FILE | cut -f1)"
 fi
 
-# RealESRGAN (~64 MB) - Upscaler backup (optionnel)
-REALESRGAN_FILE="models/upscale_models/RealESRGAN_x4plus.pth"
-if [ ! -f "$REALESRGAN_FILE" ]; then
-    echo "  3/3: RealESRGAN (~64 MB, optionnel)..."
+# HAT 2x (~6 MB) - Upscaler pré-génération
+HAT_2X_FILE="models/upscale_models/HAT_SRx2.pth"
+if [ ! -f "$HAT_2X_FILE" ]; then
+    echo "  3/4: HAT 2x (~81 MB)..."
+    curl -L -# \
+        "https://huggingface.co/jaideepsingh/upscale_models/resolve/main/HAT/HAT_SRx2.pth" \
+        -o "$HAT_2X_FILE"
 
-    # Retry jusqu'à 3 fois avec délai croissant (GitHub peut être temporairement indisponible)
-    RETRY_COUNT=0
-    MAX_RETRIES=3
-    SUCCESS=false
-
-    while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = false ]; do
-        if [ $RETRY_COUNT -gt 0 ]; then
-            WAIT_TIME=$((RETRY_COUNT * 2))
-            echo "  ⏳ Retry $RETRY_COUNT/$MAX_RETRIES après ${WAIT_TIME}s..."
-            sleep $WAIT_TIME
-        fi
-
-        curl -L -# --connect-timeout 10 --max-time 60 \
-            "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
-            -o "$REALESRGAN_FILE" 2>/dev/null
-
-        if [ $? -eq 0 ] && [ -f "$REALESRGAN_FILE" ] && [ -s "$REALESRGAN_FILE" ]; then
-            echo "  ✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
-            SUCCESS=true
-        else
-            rm -f "$REALESRGAN_FILE"  # Nettoyer fichier partiel
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-        fi
-    done
-
-    if [ "$SUCCESS" = false ]; then
-        echo "  ⚠️ RealESRGAN indisponible après $MAX_RETRIES tentatives (non bloquant)"
-        echo "     GitHub Releases peut être temporairement inaccessible"
-        echo "     Le système fonctionnera avec 4x-UltraSharp uniquement"
+    if [ $? -eq 0 ]; then
+        echo "  ✅ HAT 2x téléchargé ($(du -h $HAT_2X_FILE | cut -f1))"
+    else
+        echo "  ⚠️ Échec téléchargement HAT 2x (non bloquant)"
     fi
 else
-    echo "  ✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
+    echo "  ✅ HAT 2x déjà présent: $(du -h $HAT_2X_FILE | cut -f1)"
 fi
 
 echo "✅ Composants partagés téléchargés"
@@ -540,11 +533,11 @@ for m in $MODELS_TO_LINK; do
     if [ -f "$CLIP_FILE" ]; then
         ln -sf "../../clip_vision/$(basename $CLIP_FILE)" "models/$m/clip_vision/"
     fi
-    if [ -f "$ULTRASHARP_FILE" ]; then
-        ln -sf "../../upscale_models/$(basename $ULTRASHARP_FILE)" "models/$m/upscale_models/"
+    if [ -f "$HAT_L_4X_FILE" ]; then
+        ln -sf "../../upscale_models/$(basename $HAT_L_4X_FILE)" "models/$m/upscale_models/"
     fi
-    if [ -f "$REALESRGAN_FILE" ]; then
-        ln -sf "../../upscale_models/$(basename $REALESRGAN_FILE)" "models/$m/upscale_models/"
+    if [ -f "$HAT_2X_FILE" ]; then
+        ln -sf "../../upscale_models/$(basename $HAT_2X_FILE)" "models/$m/upscale_models/"
     fi
     echo "  ✅ Symlinks $m créés"
 done

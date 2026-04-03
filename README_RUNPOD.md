@@ -10,21 +10,21 @@
 
 ## Choix GPU
 
-### GPU 48GB+ (WAN 5B / LTX Distilled)
+### GPU 48GB+ (WAN 5B)
 
-| Priorité | GPU | VRAM | WAN 5B | LTX Distilled |
-|----------|-----|------|--------|----------------|
-| 1 | **RTX 6000 Ada** | 48GB | ~5 min | ~2 min |
-| 2 | **L40** | 48GB | ~5 min | ~2 min |
-| 3 | **L40S** | 48GB | ~5 min | ~2 min |
+| Priorité | GPU              | VRAM | WAN 5B  |
+| -------- | ---------------- | ---- | ------- |
+| 1        | **RTX 6000 Ada** | 48GB | ~10 min |
+| 2        | **L40**          | 48GB | ~10 min |
+| 3        | **L40S**         | 48GB | ~10 min |
 
-### GPU 80GB+ (WAN 14B / LTX Dev)
+### GPU 80GB+ (WAN 14B / LTX 2.3 22B)
 
-| Priorité | GPU | VRAM | WAN 14B | LTX Dev |
-|----------|-----|------|---------|---------|
-| 1 | **RTX Pro 6000** | 96GB | ~8 min | ~8 min |
-| 2 | **RTX Pro 6000 WK** | 96GB | ~8 min | ~8 min |
-| 3 | **H100 SXM** | 80GB | ~8 min | ~8 min |
+| Priorité | GPU                 | VRAM | WAN 14B | LTX 2.3 22B |
+| -------- | ------------------- | ---- | ------- | ----------- |
+| 1        | **RTX Pro 6000**    | 96GB | ~28 min | ~13 min     |
+| 2        | **RTX Pro 6000 WK** | 96GB | ~28 min | ~13 min     |
+| 3        | **H100 SXM**        | 80GB | ~28 min | ~13 min     |
 
 ---
 
@@ -75,7 +75,7 @@ rclone ls owncloud:/GEGM_ComfyUI/Models/
 make workflow MODEL=wan2.2-ti2v-5b     # ou wan2.2-i2v-a14b
 
 # LTX 2.3
-make workflow MODEL=ltx-2.3-i2v-distilled   # ou ltx-2.3-i2v-dev
+make workflow MODEL=ltx-2.3-i2v-dev
 ```
 
 Chaque workflow : Download HF → Vérification intégrité → Upload OwnCloud → Deep clean local.
@@ -84,15 +84,14 @@ Chaque workflow : Download HF → Vérification intégrité → Upload OwnCloud 
 
 ```bash
 make workflow-wan-all      # WAN 14B puis 5B
-make workflow-ltx-all      # LTX Dev puis Distilled
-make workflow-all          # Tous les modèles (4)
+make workflow-all          # Tous les modèles (3)
 ```
 
 ### Vérification Upload
 
 ```bash
 make rclone-verify MODEL=wan2.2-ti2v-5b
-make rclone-verify MODEL=ltx-2.3-i2v-distilled
+make rclone-verify MODEL=ltx-2.3-i2v-dev
 rclone ls owncloud:/GEGM_ComfyUI/Models/
 ```
 
@@ -103,11 +102,8 @@ rclone ls owncloud:/GEGM_ComfyUI/Models/
 ### Production (branche main)
 
 ```bash
-# Build multi-arch + push Docker Hub → :latest
-make runpod-deploy
-
-# Build rapide AMD64 uniquement → :latest
-make runpod-deploy-quick
+make runpod-deploy           # Build + push → :latest
+make runpod-deploy-nocache   # Idem sans cache (rebuild complet)
 ```
 
 **Image :** `arnaudboy/comfy_img_to_loop:latest`
@@ -115,11 +111,8 @@ make runpod-deploy-quick
 ### Test (branche debug)
 
 ```bash
-# Build rapide AMD64 uniquement → :test
-make runpod-deploy-quick-test
-
-# Build multi-arch + push → :test
-make runpod-deploy-test
+make runpod-deploy-test           # Build + push → :test
+make runpod-deploy-test-nocache   # Idem sans cache (rebuild complet)
 ```
 
 **Image :** `arnaudboy/comfy_img_to_loop:test`
@@ -129,11 +122,11 @@ make runpod-deploy-test
 ```bash
 # PRODUCTION — code stable validé
 git checkout main
-make runpod-deploy-quick       # → arnaudboy/comfy_img_to_loop:latest
+make runpod-deploy       # → arnaudboy/comfy_img_to_loop:latest
 
 # TEST — expérimentation
 git checkout debug
-make runpod-deploy-quick-test  # → arnaudboy/comfy_img_to_loop:test
+make runpod-deploy-test  # → arnaudboy/comfy_img_to_loop:test
 ```
 
 Sur RunPod, créer 2 templates séparés :
@@ -160,8 +153,8 @@ Environment Variables:
 
 ### GPU Recommandé
 
-- **WAN 5B / LTX Distilled :** RTX 6000 Ada, L40, L40S (48GB+)
-- **WAN 14B / LTX Dev :** RTX Pro 6000, RTX Pro 6000 WK, H100 SXM (80GB+)
+- **WAN 5B :** RTX 6000 Ada, L40, L40S (48GB+)
+- **WAN 14B / LTX 2.3 22B :** RTX Pro 6000, RTX Pro 6000 WK, H100 SXM (80GB+)
 
 ### Temps Démarrage
 
@@ -189,7 +182,7 @@ https://<pod-id>-5000.proxy.runpod.net
 1. Ouvrir URL Pod
 2. Uploader image (JPG/PNG)
 3. Configurer paramètres
-4. Générer (~2-8 min selon modèle)
+4. Générer (~10-28 min selon modèle)
 5. Télécharger MP4
 
 ### API
@@ -208,34 +201,34 @@ curl https://<pod-id>-5000.proxy.runpod.net/api/jobs/<job_id>
 
 ### Optimisation
 - Arrêter Pod après utilisation
-- RTX 6000 Ada pour 5B/LTX Distilled (pas H100)
+- RTX 6000 Ada pour WAN 5B (pas H100)
 - Batch processing
 - Auto-stop inactivité
 
 ### Calcul
 
 **RTX 6000 Ada ($0.77/h) :**
-| Durée | Coût | Vidéos (LTX) | Vidéos (WAN 5B) |
-|-------|------|--------------|-----------------|
-| 1h | $0.77 | 30 | 12 |
-| 6h | $4.62 | 180 | 72 |
+| Durée | Coût  | Vidéos (LTX) | Vidéos (WAN 5B) |
+| ----- | ----- | ------------ | --------------- |
+| 1h    | $0.77 | 30           | 12              |
+| 6h    | $4.62 | 180          | 72              |
 
 **H100 SXM ($2.69/h) :**
-| Durée | Coût | Vidéos (LTX) | Vidéos (WAN 14B) |
-|-------|------|--------------|------------------|
-| 1h | $2.69 | 30 | 7 |
-| 6h | $16.14 | 180 | 42 |
+| Durée | Coût   | Vidéos (LTX) | Vidéos (WAN 14B) |
+| ----- | ------ | ------------ | ---------------- |
+| 1h    | $2.69  | 30           | 7                |
+| 6h    | $16.14 | 180          | 42               |
 
 ---
 
 ## Troubleshooting
 
-| Problème | Solution |
-|----------|----------|
-| Pod ne démarre pas | Vérifier variables OwnCloud |
-| Modèles non téléchargés | Vérifier credentials rclone |
-| ComfyUI timeout | Vérifier VRAM GPU |
-| CUDA out of memory | GPU supérieur ou réduire résolution |
+| Problème                | Solution                            |
+| ----------------------- | ----------------------------------- |
+| Pod ne démarre pas      | Vérifier variables OwnCloud         |
+| Modèles non téléchargés | Vérifier credentials rclone         |
+| ComfyUI timeout         | Vérifier VRAM GPU                   |
+| CUDA out of memory      | GPU supérieur ou réduire résolution |
 
 ### Logs
 
