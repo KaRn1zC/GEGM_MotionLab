@@ -10,10 +10,10 @@ services:
 
     # Hot reload du code
     volumes:
-      - ./src:/app/src
-      - ./web_interface:/app/web_interface
-      - ./workflows:/app/workflows
-      - ./scripts:/app/scripts
+      - ./src:/workspace/src
+      - ./web_interface:/workspace/web_interface
+      - ./workflows:/workspace/workflows
+      - ./scripts:/workspace/scripts
 
     # Pas de restart en dev
     restart: "no"

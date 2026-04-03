@@ -43,13 +43,13 @@
                         🎬 GEGM MotionLab 🔬
                     </h1>
                     <p class="text-purple-100 text-lg">
-                        Transformez vos images en cinemagraphs avec l'IA WAN 2.2
+                        Transformez vos images en cinemagraphs avec <span id="subtitleModelName">l'IA</span>
                     </p>
                 </div>
                 <div class="hidden md:block">
                     <div class="bg-white bg-opacity-20 backdrop-blur rounded-lg px-6 py-3">
                         <p class="text-sm font-semibold">Modèle</p>
-                        <p id="headerModelName" class="text-2xl font-bold">WAN 2.2</p>
+                        <p id="headerModelName" class="text-2xl font-bold">…</p>
                     </div>
                 </div>
             </div>
@@ -144,7 +144,7 @@
                             <label class="block text-sm font-semibold text-gray-700 mb-2">
                                 Durée (secondes)
                             </label>
-                            <input type="number" id="duration" value="5" min="1" max="30" step="0.5"
+                            <input type="number" id="duration" value="3" min="1" max="30" step="0.5"
                                    class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500">
                         </div>
                         <div>
@@ -346,30 +346,6 @@
                                     </div>
                                 </div>
                                 
-                                <!-- Loop Smoothness -->
-                                <div class="relative group">
-                                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                                        Loop Smoothness
-                                        <span class="ml-2 cursor-help text-purple-600">ⓘ</span>
-                                    </label>
-                                    <select id="loopSmooth" class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-                                        <option value="none">Aucune (rapide)</option>
-                                        <option value="basic" selected>Basique (blend) ⭐</option>
-                                        <option value="advanced">Avancée (interpolation)</option>
-                                    </select>
-                                    
-                                    <!-- Tooltip -->
-                                    <div class="absolute z-10 invisible group-hover:visible bg-gray-900 text-white text-xs rounded-lg p-3 w-64 bottom-full left-0 mb-2 shadow-xl">
-                                        <p class="font-semibold mb-1">Qualité de la boucle</p>
-                                        <p class="mb-2">Améliore la transition entre fin et début</p>
-                                        <div class="bg-gray-800 rounded p-2 text-xs">
-                                            <p>• <strong>None:</strong> Peut saccader</p>
-                                            <p>• <strong>Basic:</strong> Transition lissée ✅</p>
-                                            <p>• <strong>Advanced:</strong> Boucle parfaite (lent)</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                
                                 <!-- Temporal Consistency -->
                                 <div class="relative group">
                                     <label class="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
@@ -455,7 +431,7 @@
                                         
                                         <div class="mt-2 bg-yellow-900 bg-opacity-30 border border-yellow-600 rounded p-2">
                                             <p class="text-yellow-200 text-xs">
-                                                <strong>⚠️ Important :</strong> Le seed ne garantit pas un résultat identique si vous changez le modèle IA (WAN 2.2 5B vs 14B) ou la résolution.
+                                                <strong>⚠️ Important :</strong> Le seed ne garantit pas un résultat identique si vous changez le modèle IA ou la résolution.
                                             </p>
                                         </div>
                                     </div>
@@ -576,27 +552,27 @@
                                 <div>
                                     <p class="font-semibold text-cyan-700">🎬 Cinemagraph</p>
                                     <p>Éléments statiques + mouvements subtils</p>
-                                    <p class="text-cyan-600">⏱️ ~6 min</p>
+                                    <p class="text-cyan-600">⏱️ ~20 min</p>
                                 </div>
                                 <div>
                                     <p class="font-semibold text-purple-700">💎 Qualité Max</p>
                                     <p>Détails fins</p>
-                                    <p class="text-purple-600">⏱️ ~8 min</p>
+                                    <p class="text-purple-600">⏱️ ~30 min</p>
                                 </div>
                                 <div>
                                     <p class="font-semibold text-purple-700">⚖️ Équilibré</p>
                                     <p>Bon compromis</p>
-                                    <p class="text-purple-600">⏱️ ~5 min</p>
+                                    <p class="text-purple-600">⏱️ ~10 min</p>
                                 </div>
                                 <div>
                                     <p class="font-semibold text-gray-700">⚡ Rapide</p>
                                     <p>Test rapide</p>
-                                    <p class="text-gray-600">⏱️ ~3 min</p>
+                                    <p class="text-gray-600">⏱️ ~5 min</p>
                                 </div>
                                 <div>
                                     <p class="font-semibold text-green-700">🍃 Naturel</p>
                                     <p>Mouvements plus subtils</p>
-                                    <p class="text-green-600">⏱️ ~5 min</p>
+                                    <p class="text-green-600">⏱️ ~15 min</p>
                                 </div>
                             </div>
                     </div>
@@ -736,11 +712,11 @@
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-600">Temps moyen estimé</span>
-                            <span id="statsEstimatedTime" class="font-bold text-purple-600">~8 min</span>
+                            <span id="statsEstimatedTime" class="font-bold text-purple-600">~13 min</span>
                         </div>
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-600">Modèle actif</span>
-                            <span id="statsModelName" class="font-bold text-purple-600">WAN 2.2 5B</span>
+                            <span id="statsModelName" class="font-bold text-purple-600">…</span>
                         </div>
                     </div>
                 </div>
@@ -948,7 +924,6 @@
                 denoise: parseInt(document.getElementById('denoise').value),
                 motion_intensity: document.getElementById('motionIntensity').value,
                 noise_level: document.getElementById('noiseLevel').value,
-                loop_smooth: document.getElementById('loopSmooth').value,
                 consistency: parseInt(document.getElementById('consistency').value),
                 seed: parseInt(document.getElementById('seed').value),
                 motion_area: document.getElementById('motionArea').value,
@@ -1084,6 +1059,12 @@
                     headerModelName.textContent = data.display_name;
                 }
 
+                // Mettre à jour le sous-titre
+                const subtitle = document.getElementById('subtitleModelName');
+                if (subtitle) {
+                    subtitle.textContent = data.display_name;
+                }
+
                 // Mettre à jour les statistiques
                 const statsModelName = document.getElementById('statsModelName');
                 if (statsModelName) {
@@ -1116,13 +1097,12 @@
         function applyPreset(preset) {
             const presets = {
                 cinemagraph: {
-                    steps: 35,
-                    cfgScale: 5.5,
-                    denoise: 60,
+                    steps: 30,
+                    cfgScale: 6.0,
+                    denoise: 30,
                     motionIntensity: 'moderate',
                     noiseLevel: 'low',
-                    loopSmooth: 'advanced',
-                    consistency: 92,
+                    consistency: 90,
                     seed: -1,
                     motionArea: 'full',
                     colorPreservation: 90,
@@ -1130,11 +1110,10 @@
                 },
                 quality: {
                     steps: 40,
-                    cfgScale: 7,
+                    cfgScale: 7.0,
                     denoise: 75,
                     motionIntensity: 'strong',
                     noiseLevel: 'medium',
-                    loopSmooth: 'advanced',
                     consistency: 88,
                     seed: -1,
                     motionArea: 'full',
@@ -1143,12 +1122,11 @@
                 },
                 balanced: {
                     steps: 20,
-                    cfgScale: 6.5,
-                    denoise: 70,
+                    cfgScale: 5.0,
+                    denoise: 50,
                     motionIntensity: 'moderate',
                     noiseLevel: 'medium',
-                    loopSmooth: 'basic',
-                    consistency: 80,
+                    consistency: 50,
                     seed: -1,
                     motionArea: 'full',
                     colorPreservation: 75,
@@ -1160,7 +1138,6 @@
                     denoise: 65,
                     motionIntensity: 'subtle',
                     noiseLevel: 'medium',
-                    loopSmooth: 'basic',
                     consistency: 75,
                     seed: -1,
                     motionArea: 'full',
@@ -1169,11 +1146,10 @@
                 },
                 natural: {
                     steps: 30,
-                    cfgScale: 5.5,
-                    denoise: 55,
+                    cfgScale: 5.0,
+                    denoise: 40,
                     motionIntensity: 'subtle',
                     noiseLevel: 'low',
-                    loopSmooth: 'advanced',
                     consistency: 90,
                     seed: -1,
                     motionArea: 'full',
@@ -1189,7 +1165,6 @@
             document.getElementById('denoiseValue').textContent = p.denoise + '%';
             document.getElementById('motionIntensity').value = p.motionIntensity;
             document.getElementById('noiseLevel').value = p.noiseLevel;
-            document.getElementById('loopSmooth').value = p.loopSmooth;
             document.getElementById('consistency').value = p.consistency;
             document.getElementById('consistencyValue').textContent = p.consistency + '%';
             document.getElementById('seed').value = p.seed;

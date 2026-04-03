@@ -5,13 +5,13 @@ Interface web pour la génération de cinemagraphs avec WAN 2.2
 
 import os
 import sys
+import logging
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger, setup_logger
 from src.comfyui_client import ComfyUIConfig
@@ -21,6 +21,58 @@ from web_interface.jobs import JobManager
 # Configuration du logger
 setup_logger(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger("flask_app")
+
+
+class OncePerActionFilter(logging.Filter):
+    """
+    Limite les logs d'accès Werkzeug à une seule occurrence par action.
+
+    Le frontend poll le statut toutes les 3s, le health check arrive
+    toutes les 30s, et calculate-resolution est appelé à chaque
+    mouvement de slider — on ne logge que le premier appel de chaque
+    action, puis on supprime les suivants.
+
+    Pour /api/jobs/<id>, chaque nouveau job_id déclenche un log unique.
+    """
+
+    _quiet_patterns: list[str] = [
+        "GET /health",
+        "GET /api/jobs/",
+        "POST /api/calculate-resolution",
+        "GET /api/model-info",
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen: set[str] = set()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Logge la première occurrence de chaque action, supprime les suivantes."""
+        msg = record.getMessage()
+
+        for pattern in self._quiet_patterns:
+            if pattern not in msg:
+                continue
+
+            # Clé unique : pour /api/jobs/<id> on isole le job_id,
+            # pour les autres le pattern suffit
+            if pattern == "GET /api/jobs/":
+                try:
+                    start = msg.index("/api/jobs/") + len("/api/jobs/")
+                    end = msg.index(" ", start)
+                    key = f"jobs/{msg[start:end]}"
+                except ValueError:
+                    key = pattern
+            else:
+                key = pattern
+
+            if key in self._seen:
+                return False
+            self._seen.add(key)
+            return True
+
+        # Endpoints non filtrés → toujours loggés
+        return True
 
 
 def create_app(config_name="default"):
@@ -146,6 +198,9 @@ def create_app(config_name="default"):
             },
         }
         return jsonify(status)
+
+    # Filtrer les logs d'accès Werkzeug pour les endpoints de polling
+    logging.getLogger("werkzeug").addFilter(OncePerActionFilter())
 
     logger.info("✅ Application Flask créée avec succès")
     return app

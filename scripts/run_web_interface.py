@@ -2,10 +2,7 @@
 Script de démarrage de l'interface web Flask
 """
 
-import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from web_interface.app import app
 from src.logger import setup_logger, get_logger

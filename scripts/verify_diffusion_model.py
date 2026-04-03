@@ -8,10 +8,8 @@ import sys
 import argparse
 from pathlib import Path
 
-# Ajouter le répertoire parent au path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from src.logger import get_logger
+from src.model_registry import get_registry
 
 logger = get_logger("diffusion_verification")
 
@@ -29,14 +27,15 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
     """
     model_dir = Path(base_dir) / model_name
 
-    # Définir les fichiers selon le modèle (ComfyUI Native format)
-    if model_name == "wan2.2-ti2v-5b":
-        diffusion_files = [model_dir / "wan2.2_ti2v_5B_fp16.safetensors"]
-    elif model_name == "wan2.2-i2v-a14b":
-        diffusion_files = [
-            model_dir / "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-            model_dir / "wan2.2_i2v_low_noise_14B_fp16.safetensors",
-        ]
+    # Définir les fichiers via le registre (extensible)
+    try:
+        registry = get_registry()
+        registry_files = registry.get_diffusion_files(model_name)
+    except Exception:
+        registry_files = None
+
+    if registry_files:
+        diffusion_files = [model_dir / f.filename for f in registry_files]
     else:
         print(f"❌ Modèle inconnu: {model_name}")
         logger.error(f"❌ Modèle inconnu: {model_name}")
@@ -59,13 +58,13 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
         print(f"✅ Fichier trouvé: {diffusion_file.name}")
         logger.success(f"✅ Fichier trouvé: {diffusion_file.name}")
 
-    # 2. Vérifier la taille des fichiers
-    # Tailles attendues par fichier (ComfyUI Native format)
-    expected_file_sizes = {
-        "wan2.2_ti2v_5B_fp16.safetensors": (8.0, 11.0),  # ~9.3 GB
-        "wan2.2_i2v_high_noise_14B_fp16.safetensors": (25.0, 32.0),  # ~28.6 GB FP16
-        "wan2.2_i2v_low_noise_14B_fp16.safetensors": (25.0, 32.0),  # ~28.6 GB FP16
-    }
+    # 2. Vérifier la taille des fichiers (tailles depuis le registre)
+    if registry_files:
+        expected_file_sizes = {
+            f.filename: (f.min_size_gb, f.max_size_gb) for f in registry_files
+        }
+    else:
+        expected_file_sizes = {}
 
     total_size_gb = 0.0
 
@@ -127,13 +126,16 @@ def verify_diffusion_model(model_name: str, base_dir: str = "models") -> bool:
     print("🔍 Vérification des clés critiques...")
     logger.info("🔍 Vérification des clés critiques du modèle de diffusion...")
 
-    # Clés critiques du modèle de diffusion WAN 2.2
-    # Ce sont les clés qui causaient KeyError dans les logs originaux
-    critical_keys = [
-        "blocks.0.ffn.0.weight",  # Premier bloc
-        "blocks.14.ffn.0.weight",  # Bloc milieu (celle qui causait l'erreur !)
-        "blocks.23.ffn.0.weight",  # Dernier bloc
-    ]
+    # Clés critiques depuis le registre
+    ver_config = registry.get_verification_config(model_name) if registry_files else None
+    if ver_config:
+        critical_keys = ver_config.diffusion_keys
+    else:
+        critical_keys = [
+            "blocks.0.ffn.0.weight",
+            "blocks.14.ffn.0.weight",
+            "blocks.23.ffn.0.weight",
+        ]
 
     missing_keys = []
     for key in critical_keys:

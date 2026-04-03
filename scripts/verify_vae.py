@@ -8,10 +8,8 @@ import sys
 import argparse
 from pathlib import Path
 
-# Ajouter le répertoire parent au path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from src.logger import get_logger
+from src.model_registry import get_registry
 
 logger = get_logger("vae_verification")
 
@@ -29,19 +27,25 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     """
     model_dir = Path(base_dir) / model_name
 
-    # Déterminer le nom du fichier VAE selon le modèle
-    if model_name == "wan2.2-ti2v-5b":
-        vae_file = model_dir / "wan2.2_vae.safetensors"
-        expected_size_min = 0.5  # ~1.41 GB
-        expected_size_max = 2.0
-        expected_channels = 48  # VAE 2.2 - 48 canaux
-        vae_version = "2.2"
-    elif model_name == "wan2.2-i2v-a14b":
-        vae_file = model_dir / "wan_2.1_vae.safetensors"
-        expected_size_min = 0.2  # ~254 MB
-        expected_size_max = 0.4
-        expected_channels = 16  # VAE 2.1 - 16 canaux
-        vae_version = "2.1"
+    # Déterminer la config VAE via le registre (extensible)
+    try:
+        registry = get_registry()
+        vae_config = registry.get_vae_config(model_name)
+    except Exception:
+        vae_config = None
+
+    if vae_config:
+        # VAE intégré dans le checkpoint (ex: LTX 2.3) → rien à vérifier
+        if vae_config.filename == "integrated":
+            print(f"✅ VAE intégré dans le checkpoint pour {model_name} (rien à vérifier)")
+            logger.info(f"✅ VAE intégré dans le checkpoint pour {model_name}")
+            return True
+
+        vae_file = model_dir / vae_config.filename
+        expected_size_min = vae_config.min_size_gb
+        expected_size_max = vae_config.max_size_gb
+        expected_channels = vae_config.expected_channels
+        vae_version = vae_config.version
     else:
         logger.error(f"❌ Modèle inconnu: {model_name}")
         return False
@@ -111,17 +115,20 @@ def verify_vae(model_name: str, base_dir: str = "models") -> bool:
     print("🔍 Vérification des clés critiques...")
     logger.info("🔍 Vérification des clés critiques du VAE...")
 
-    # Clés critiques pour WanVideoVAE38 (ComfyUI Native)
-    # Structure réelle du fichier wan2.2_vae.safetensors
-    critical_keys = [
-        "conv1.bias",  # (96,) - Entrée VAE global
-        "conv2.bias",  # (48,) - Sortie VAE global
-        "conv2.weight",  # (48, 48, 1, 1, 1) - Critique pour vérif canaux
-        "decoder.conv1.bias",  # (1024,) - Entrée décodeur
-        "decoder.conv1.weight",  # (1024, 48, 3, 3, 3) - Critique pour vérif canaux
-        "encoder.conv1.bias",  # Entrée encodeur
-        "encoder.conv1.weight",  # Entrée encodeur
-    ]
+    # Clés critiques depuis le registre
+    ver_config = registry.get_verification_config(model_name) if vae_config else None
+    if ver_config:
+        critical_keys = ver_config.vae_keys
+    else:
+        critical_keys = [
+            "conv1.bias",
+            "conv2.bias",
+            "conv2.weight",
+            "decoder.conv1.bias",
+            "decoder.conv1.weight",
+            "encoder.conv1.bias",
+            "encoder.conv1.weight",
+        ]
 
     logger.info("Format attendu: WanVideoVAE38 (ComfyUI Native, 48 canaux)")
 

@@ -11,15 +11,368 @@ from werkzeug.utils import secure_filename
 import subprocess
 import sys
 
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import get_logger
-from src.comfyui_client import ComfyUISession, test_comfyui_connection
+from src.comfyui_client import ComfyUISession, WorkflowProgress, test_comfyui_connection
+from src.model_registry import get_registry
 from src.owncloud_uploader import OwnCloudUploader, upload_cinemagraph
 from workflows.workflow_manager import workflow_manager
-from web_interface.jobs import JobStatus
+from web_interface.jobs import JobManager, JobStatus
 
+import time
 from PIL import Image
+
+
+# ============================================
+# PROGRESSION TEMPS RÉEL COMFYUI → JOB
+# ============================================
+
+_PROGRESS_POSTPROC_START = 0.85   # ffmpeg resize + crossfade
+
+
+class ComfyUIProgressTracker:
+    """
+    Traduit la progression brute ComfyUI en progression Job linéaire et fidèle.
+
+    Détection de phase basée sur le taux de progression réel (pas le compteur de resets) :
+    - Reset (100% → bas) + progression lente (>7s/update) = sampling
+    - Reset (100% → bas) + progression rapide (<7s/update) = VAE decode
+    - 100% maintenu sans changement pendant >15s = node silencieux (HAT-L)
+    - Progression ultra-rapide (>5%/<0.5s) = VHS_VideoCombine
+
+    Compatible multi-sampling (WAN 14B MoE: 2 phases sampling séparées)
+    et single-sampling (LTX 2.3: 1 phase sampling).
+
+    Args:
+        job_manager: Gestionnaire de jobs pour les mises à jour
+        job_id: ID du job en cours
+        total_frames: Nombre total de frames à générer (pour l'estimation HAT-L)
+        has_upscale: True si le workflow inclut un upscale HAT-L post-génération
+    """
+
+    # Au-delà de ce seuil (secondes entre 2 updates), une phase est classée
+    # "sampling" (lente). En-dessous, c'est du VAE decode (rapide).
+    # LTX sampling: ~9s/update, WAN sampling: ~34s/update, VAE: ~4s/update
+    _RATE_THRESHOLD_SECONDS = 7.0
+
+    def __init__(
+        self,
+        job_manager: JobManager,
+        job_id: str,
+        total_frames: int,
+        has_upscale: bool,
+    ):
+        self.job_manager = job_manager
+        self.job_id = job_id
+        self.total_frames = total_frames
+        self.has_upscale = has_upscale
+
+        # État interne
+        self._last_comfyui_progress: float = -1.0
+        self._last_job_progress: float = 0.05
+        self._last_step_label: str = ""
+
+        # Détection de phase par taux de progression
+        self._current_phase: str = "setup"
+        self._heavy_phase_count: int = 0
+        self._last_progress_time: float = time.monotonic()
+        self._last_real_change_time: float = time.monotonic()
+
+        # Classification par taux — après un reset, on collecte les 3 premières
+        # updates pour mesurer le taux et classifier la phase
+        self._pending_classification: bool = False
+        self._phase_start_time: float = 0.0
+        self._phase_update_count: int = 0
+
+        # Phase silencieuse (HAT-L upscale)
+        self._silent_phase_start: float | None = None
+        self._silent_phase_estimated_duration: float | None = None
+        self._had_vae_phase: bool = False  # Au moins 1 phase rapide (VAE) observée
+
+        # Calibration VAE decode
+        self._vae_start_time: float | None = None
+        self._vae_progress_count: int = 0
+        self._calibrated_time_per_frame: float | None = None
+
+    def __call__(self, workflow: WorkflowProgress) -> None:
+        """Appelé toutes les ~2s par wait_for_completion()."""
+        now = time.monotonic()
+
+        if workflow.status in ("completed", "error"):
+            return
+
+        progress = workflow.progress
+        progress_changed = progress != self._last_comfyui_progress
+
+        if progress_changed:
+            self._detect_phase(progress, now)
+            self._last_comfyui_progress = progress
+            self._last_real_change_time = now
+
+        # Détection phase silencieuse : 100% maintenu sans changement > 15s
+        # Exige qu'au moins une phase VAE (rapide) ait été observée pour éviter
+        # les faux positifs pendant le setup ou entre deux phases de sampling
+        time_since_change = now - self._last_real_change_time
+        if (
+            self._last_comfyui_progress >= 0.99
+            and time_since_change > 15.0
+            and self._silent_phase_start is None
+            and self._had_vae_phase
+        ):
+            self._enter_silent_phase(now)
+
+        # Calcul progression Job
+        job_progress = self._compute_job_progress(progress, now)
+        step_label = self._get_step_label(now)
+
+        # Mise à jour si changement significatif (>0.5% ou label différent)
+        progress_delta = abs(job_progress - self._last_job_progress)
+        if progress_delta >= 0.005 or step_label != self._last_step_label:
+            self.job_manager.update_job(
+                self.job_id,
+                progress=round(job_progress, 3),
+                current_step=step_label,
+            )
+            self._last_job_progress = job_progress
+            self._last_step_label = step_label
+
+    def _detect_phase(self, progress: float, now: float) -> None:
+        """
+        Détecte la phase en cours via le taux de progression.
+
+        Après chaque reset (100% → bas), entre en classification pendante.
+        Après 3 updates, mesure le temps moyen entre updates et classifie :
+        - > 7s/update → sampling (lent)
+        - < 7s/update → VAE decode (rapide)
+
+        Compatible avec WAN 14B MoE (2 phases sampling + 1 VAE)
+        et LTX 2.3 (1 sampling + 1 VAE).
+        """
+        prev = self._last_comfyui_progress
+        prev_phase = self._current_phase
+        dt = now - self._last_progress_time
+        self._last_progress_time = now
+
+        # Ignorer le premier callback (prev=-1 → état initial)
+        if prev < 0:
+            return
+
+        # Reset de progression : un nouveau node lourd commence
+        if prev >= 0.90 and progress < 0.30:
+            self._heavy_phase_count += 1
+            self._silent_phase_start = None
+            self._silent_phase_estimated_duration = None
+
+            # Entrer en classification pendante — on ne sait pas encore
+            # si c'est du sampling (lent) ou du VAE decode (rapide)
+            self._pending_classification = True
+            self._phase_start_time = now
+            self._phase_update_count = 0
+            self._current_phase = "classifying"
+
+        # Pendant la classification : compter les updates
+        elif self._pending_classification:
+            self._phase_update_count += 1
+
+            if self._phase_update_count >= 3:
+                # Assez de données pour mesurer le taux
+                elapsed = now - self._phase_start_time
+                avg_interval = elapsed / self._phase_update_count
+
+                if avg_interval > self._RATE_THRESHOLD_SECONDS:
+                    # Progression lente → sampling
+                    self._current_phase = "sampling"
+                else:
+                    # Progression rapide → VAE decode
+                    self._current_phase = "vae_decode"
+                    self._had_vae_phase = True
+                    self._vae_start_time = self._phase_start_time
+                    self._vae_progress_count = self._phase_update_count
+
+                self._pending_classification = False
+
+        # Progression ultra-rapide (>5% en <0.5s) = VHS_VideoCombine
+        elif dt > 0 and dt < 0.5 and (progress - prev) > 0.05:
+            if self._current_phase != "combine":
+                self._current_phase = "combine"
+                self._silent_phase_start = None
+                self._pending_classification = False
+
+        # Calibration pendant le VAE decode confirmé
+        if self._current_phase == "vae_decode" and self._vae_start_time:
+            self._vae_progress_count += 1
+            elapsed = now - self._vae_start_time
+            if elapsed > 3.0 and self._vae_progress_count > 5:
+                vae_time_per_frame = elapsed / self._vae_progress_count
+                self._calibrated_time_per_frame = vae_time_per_frame * 1.8
+
+        if prev_phase != self._current_phase:
+            logger.info(
+                f"Phase progression: {prev_phase} → {self._current_phase} "
+                f"(heavy_count={self._heavy_phase_count}, progress={progress:.0%})"
+            )
+
+    def _enter_silent_phase(self, now: float) -> None:
+        """Active l'estimation temporelle pour le HAT-L upscale."""
+        if not self.has_upscale:
+            return
+
+        self._current_phase = "upscale"
+        self._silent_phase_start = now
+
+        if self._calibrated_time_per_frame:
+            self._silent_phase_estimated_duration = (
+                self._calibrated_time_per_frame * self.total_frames
+            )
+        else:
+            self._silent_phase_estimated_duration = 6.0 * self.total_frames
+
+        logger.info(
+            f"Phase silencieuse (HAT-L upscale) — estimation: "
+            f"{self._silent_phase_estimated_duration:.0f}s "
+            f"({self.total_frames} frames"
+            f"{', calibré' if self._calibrated_time_per_frame else ', fallback 6s/f'})"
+        )
+
+    def _compute_job_progress(self, comfyui_progress: float, now: float) -> float:
+        """
+        Mappe la progression ComfyUI vers la progression Job (5% → 85%).
+
+        Plages :
+        - setup (5→10%)     : nodes de configuration rapides
+        - sampling (10→35%) : génération latent
+        - vae_decode (35→50%) : décodage frames
+        - upscale (50→80%)  : HAT-L 4x (estimation temporelle)
+        - combine (80→85%)  : VHS_VideoCombine
+        """
+        phase = self._current_phase
+
+        if phase == "setup":
+            return 0.05
+
+        elif phase == "classifying":
+            # En attente de classification — garder la dernière valeur connue
+            return self._last_job_progress
+
+        elif phase == "sampling":
+            return 0.10 + comfyui_progress * 0.25
+
+        elif phase == "vae_decode":
+            return 0.35 + comfyui_progress * 0.15
+
+        elif phase == "upscale":
+            if self._silent_phase_start and self._silent_phase_estimated_duration:
+                elapsed = now - self._silent_phase_start
+                ratio = min(elapsed / self._silent_phase_estimated_duration, 0.95)
+                return 0.50 + ratio * 0.30
+            return 0.50
+
+        elif phase == "combine":
+            return 0.80 + comfyui_progress * 0.05
+
+        return 0.05
+
+    def _get_step_label(self, now: float) -> str:
+        """Retourne un label humain pour l'étape en cours."""
+        phase = self._current_phase
+
+        if phase == "setup":
+            return "Chargement du modèle..."
+        elif phase == "classifying":
+            return "Génération en cours..."
+        elif phase == "sampling":
+            pct = int(self._last_comfyui_progress * 100)
+            return f"Génération du cinemagraph ({pct}%)"
+        elif phase == "vae_decode":
+            pct = int(self._last_comfyui_progress * 100)
+            return f"Décodage vidéo ({pct}%)"
+        elif phase == "upscale":
+            if self._silent_phase_start and self._silent_phase_estimated_duration:
+                elapsed = now - self._silent_phase_start
+                remaining = max(0, self._silent_phase_estimated_duration - elapsed)
+                minutes = int(remaining // 60)
+                seconds = int(remaining % 60)
+                if minutes > 0:
+                    return f"Upscale HAT-L 4x... ~{minutes}min{seconds:02d}s restantes"
+                return f"Upscale HAT-L 4x... ~{seconds}s restantes"
+            return "Upscale HAT-L 4x..."
+        elif phase == "combine":
+            return "Encodage vidéo finale..."
+
+        return "Génération en cours..."
+
+
+# Cache global pour le modèle HAT 2x (chargé une seule fois)
+_hat_2x_model = None
+
+
+def _hat_2x_upscale(image_path: Path) -> Image.Image | None:
+    """
+    Upscale une image avec HAT 2x via spandrel (super-résolution ML).
+
+    Charge le modèle au premier appel puis le garde en cache.
+    Retourne l'image PIL upscalée 2x, ou None si le modèle est indisponible.
+
+    Args:
+        image_path: Chemin vers l'image source
+
+    Returns:
+        Image PIL upscalée 2x ou None en cas d'échec
+    """
+    global _hat_2x_model
+
+    try:
+        import torch
+        import spandrel
+        import numpy as np
+
+        # Chercher le fichier HAT 2x dans les emplacements ComfyUI
+        hat_paths = [
+            Path("/workspace/comfyui/ComfyUI/models/upscale_models/HAT_SRx2.pth"),
+            Path("models/upscale_models/HAT_SRx2.pth"),
+        ]
+        hat_path = None
+        for p in hat_paths:
+            if p.exists():
+                hat_path = p
+                break
+
+        if hat_path is None:
+            logger.warning("   HAT_SRx2.pth introuvable dans les dossiers upscale_models")
+            return None
+
+        # Charger le modèle (une seule fois)
+        if _hat_2x_model is None:
+            logger.info(f"   Chargement HAT 2x depuis {hat_path}...")
+            _hat_2x_model = spandrel.ModelLoader().load_from_file(hat_path)
+            _hat_2x_model = _hat_2x_model.eval()
+            if torch.cuda.is_available():
+                _hat_2x_model = _hat_2x_model.cuda()
+            logger.info("   ✅ HAT 2x chargé")
+
+        # Préparer l'image : PIL → tensor [1, C, H, W] float32 [0, 1]
+        with Image.open(image_path) as img:
+            img_rgb = img.convert("RGB")
+            img_array = np.array(img_rgb).astype(np.float32) / 255.0
+            tensor = torch.from_numpy(img_array).permute(2, 0, 1).unsqueeze(0)
+            if torch.cuda.is_available():
+                tensor = tensor.cuda()
+
+        # Inférence
+        with torch.no_grad():
+            output = _hat_2x_model(tensor)
+
+        # Tensor → PIL
+        output_np = output.squeeze(0).permute(1, 2, 0).clamp(0, 1).cpu().numpy()
+        output_np = (output_np * 255).astype(np.uint8)
+        return Image.fromarray(output_np)
+
+    except ImportError:
+        logger.warning("   spandrel ou torch non disponible pour HAT 2x")
+        return None
+    except Exception as e:
+        logger.warning(f"   Erreur HAT 2x: {e}")
+        return None
 
 
 def find_best_generation_dims(
@@ -39,6 +392,9 @@ def find_best_generation_dims(
     Returns:
         (width, height) ajustés aux multiples de `multiple` avec ratio optimal
     """
+    if width <= 0 or height <= 0:
+        return (width, height)
+
     original_ratio = width / height
 
     w_floor = (width // multiple) * multiple
@@ -94,41 +450,45 @@ def calculate_optimal_generation_strategy(
     source_height: int,
     target_width: int,
     target_height: int,
-    model_type: str = "5b",
+    model_name: str | None = None,
 ) -> dict:
     """
-    Calcule la stratégie de génération optimale pour WAN 2.2.
+    Calcule la stratégie de génération optimale, adaptée au modèle actif.
 
-    Principe UNIFIÉ 5B et 14B (résolution native WAN 2.2 : 720p max) :
-    1. Si source < 720p : upscale Lanczos vers ~720p max
-    2. Si source > 720p : downscale Lanczos vers ~720p max
-    3. Si source ~720p : ajuster multiples de 32 uniquement
-    4. Génération WAN 2.2 à résolution optimale (~720p)
-    5. Post-génération : UltraSharp 4x + Lanczos vers target
-
-    Les deux modèles utilisent désormais la même stratégie d'upscale adaptatif.
-    Référence: Documentation officielle WAN 2.2 supporte 480P et 720P pour 14B.
+    Génère à la résolution cible demandée (ajustée au stride du modèle),
+    clampée au max du modèle si elle le dépasse.
 
     Args:
-        source_width, source_height: Dimensions image source (déjà ajustées multiples 32)
+        source_width, source_height: Dimensions image source (déjà ajustées au stride)
         target_width, target_height: Dimensions cible finales
-        model_type: Type de modèle ('5b' ou '14b') - même stratégie pour les deux
+        model_name: Nom du modèle dans le registre (fallback WAN 2.2 si None)
 
     Returns:
-        dict: {
-            'generation_width': int,       # Résolution pour WAN 2.2 (~720p max)
-            'generation_height': int,
-            'needs_pregen_resize': bool,   # Si redimensionnement pré-génération requis
-            'upscale_ratio': float,        # Ratio upscale post-génération
-            'total_ratio': float,          # Ratio source→target
-            'use_supersampling': bool,     # True si ratio ≤4x (downscale après UltraSharp)
-            'strategy': str                # Description stratégie
-        }
+        dict avec generation_width, generation_height, needs_pregen_resize,
+        resize_type, upscale_ratio, total_ratio, use_supersampling,
+        dimension_stride, strategy
     """
-    # Constantes officielles WAN 2.2 (identiques pour 5B et 14B)
-    WAN22_MAX_WIDTH = 1280
-    WAN22_MAX_HEIGHT = 720
-    WAN22_MAX_PIXELS = WAN22_MAX_WIDTH * WAN22_MAX_HEIGHT
+    from src.model_registry import ResolutionConfig
+
+    # Lookup registre avec fallback WAN 2.2 legacy
+    res: ResolutionConfig | None = None
+    try:
+        registry = get_registry()
+        res = registry.get_resolution_config(model_name) if model_name else None
+    except Exception:
+        pass
+
+    if not res:
+        res = ResolutionConfig(
+            max_width=1280, max_height=720, dimension_stride=32,
+            upscale_trigger_ratio=1.5, supersampling_max_ratio=4.0,
+            vae_tiling_pixel_threshold=2073600, vae_tiling_upscale_threshold=4.0,
+        )
+
+    max_w = res.max_width
+    max_h = res.max_height
+    max_pixels = res.max_pixels
+    stride = res.dimension_stride
 
     # Calculer ratios et dimensions
     source_pixels = source_width * source_height
@@ -136,43 +496,30 @@ def calculate_optimal_generation_strategy(
     total_ratio = target_pixels / source_pixels
     aspect_ratio = source_width / source_height
 
-    # STRATÉGIE UNIFIÉE 5B et 14B
-    # Les deux modèles utilisent la même logique d'upscale adaptatif vers ~720p max
-    # Référence: Documentation officielle WAN 2.2 confirme support 480P/720P pour 14B
+    # Génération = résolution cible, clampée au max du modèle
+    # La résolution cible est déjà ajustée au stride par l'appelant
+    gen_w = min(target_width, max_w)
+    gen_h = min(target_height, max_h)
 
-    # Note: Le paramètre model_type est conservé pour compatibilité future
-    # mais la stratégie est maintenant identique pour 5B et 14B
-    _ = model_type  # Unused but kept for API compatibility
-
-    # Calculer résolution de génération optimale (~720p max)
-    # EXCEPTION: Si target ≤ source, générer à résolution source (pas d'upscale inutile)
-    if target_width <= source_width and target_height <= source_height:
-        gen_w = source_width
-        gen_h = source_height
-    else:
-        # Calculer dimensions max possibles en conservant ratio
-        if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-            # Limité par largeur (image wide)
-            gen_w = WAN22_MAX_WIDTH
-            gen_h = int(WAN22_MAX_WIDTH / aspect_ratio)
+    # Si le clampage a modifié une dimension, recalculer l'autre pour le ratio
+    if gen_w < target_width or gen_h < target_height:
+        if aspect_ratio >= (gen_w / gen_h):
+            gen_h = int(gen_w / aspect_ratio)
         else:
-            # Limité par hauteur (image tall)
-            gen_h = WAN22_MAX_HEIGHT
-            gen_w = int(WAN22_MAX_HEIGHT * aspect_ratio)
+            gen_w = int(gen_h * aspect_ratio)
 
-        # Ajuster aux multiples de 32 (arrondi ratio-aware)
-        gen_w, gen_h = find_best_generation_dims(gen_w, gen_h)
+    # Ajuster aux multiples du stride
+    gen_w, gen_h = find_best_generation_dims(gen_w, gen_h, multiple=stride)
 
-        # Vérifier si on dépasse encore 720p après ajustement
-        if gen_w * gen_h > WAN22_MAX_PIXELS:
-            # Réduire légèrement pour rester sous la limite
-            if aspect_ratio >= (WAN22_MAX_WIDTH / WAN22_MAX_HEIGHT):
-                raw_w = WAN22_MAX_WIDTH - 32
-                raw_h = int(raw_w / aspect_ratio)
-            else:
-                raw_h = WAN22_MAX_HEIGHT - 32
-                raw_w = int(raw_h * aspect_ratio)
-            gen_w, gen_h = find_best_generation_dims(raw_w, raw_h)
+    # Sécurité : ne pas dépasser le max pixels du modèle
+    if gen_w * gen_h > max_pixels:
+        if aspect_ratio >= (max_w / max_h):
+            raw_w = max_w - stride
+            raw_h = int(raw_w / aspect_ratio)
+        else:
+            raw_h = max_h - stride
+            raw_w = int(raw_h * aspect_ratio)
+        gen_w, gen_h = find_best_generation_dims(raw_w, raw_h, multiple=stride)
 
     # Déterminer si redimensionnement pré-génération nécessaire
     needs_pregen_resize = gen_w != source_width or gen_h != source_height
@@ -180,7 +527,7 @@ def calculate_optimal_generation_strategy(
     # Déterminer type de redimensionnement pré-génération
     if source_pixels < gen_w * gen_h:
         resize_type = "upscale"
-        strategy_desc = f"Upscale Lanczos pré-génération: {source_width}x{source_height} → {gen_w}x{gen_h}"
+        strategy_desc = f"Upscale HAT 2x + Lanczos pré-génération: {source_width}x{source_height} → {gen_w}x{gen_h}"
     elif source_pixels > gen_w * gen_h:
         resize_type = "downscale"
         strategy_desc = f"Downscale Lanczos pré-génération: {source_width}x{source_height} → {gen_w}x{gen_h}"
@@ -189,8 +536,12 @@ def calculate_optimal_generation_strategy(
         strategy_desc = f"Génération directe à résolution source: {gen_w}x{gen_h}"
 
     # Calculer ratio upscale post-génération
-    upscale_ratio = (target_width * target_height) / (gen_w * gen_h)
-    use_supersampling = upscale_ratio <= 4.0
+    gen_pixels = gen_w * gen_h
+    if gen_pixels == 0:
+        gen_w, gen_h = stride, stride
+        gen_pixels = gen_w * gen_h
+    upscale_ratio = (target_width * target_height) / gen_pixels
+    use_supersampling = upscale_ratio <= res.supersampling_max_ratio
 
     return {
         "generation_width": gen_w,
@@ -200,6 +551,7 @@ def calculate_optimal_generation_strategy(
         "upscale_ratio": upscale_ratio,
         "total_ratio": total_ratio,
         "use_supersampling": use_supersampling,
+        "dimension_stride": stride,
         "strategy": strategy_desc,
     }
 
@@ -256,7 +608,7 @@ async def process_cinemagraph_generation(job_id: str):
             job_id,
             status=JobStatus.PROCESSING,
             current_step="Préparation du workflow",
-            progress=0.1,
+            progress=0.02,
         )
 
         # Sélection automatique du workflow selon résolution
@@ -272,26 +624,33 @@ async def process_cinemagraph_generation(job_id: str):
         user_target_width = job.parameters.get("user_target_width", target_width)
         user_target_height = job.parameters.get("user_target_height", target_height)
 
-        # Ajuster les dimensions pour compatibilité WAN 2.2 (multiples de 32)
-        # Arrondi ratio-aware : teste floor/ceil pour préserver le ratio d'aspect
-
-        # Ajuster dimensions source
-        adjusted_source_width, adjusted_source_height = find_best_generation_dims(
-            source_width, source_height
-        )
-
-        # Ajuster dimensions cibles
-        adjusted_target_width, adjusted_target_height = find_best_generation_dims(
-            target_width, target_height
-        )
-
-        # Détecter le modèle disponible (5B ou 14B) AVANT le calcul de stratégie
-        # CRITIQUE: Le 14B nécessite une stratégie différente (génération à résolution source)
+        # Détecter le modèle disponible AVANT le calcul de stratégie
         from workflows.workflow_manager import WorkflowTemplate
 
         temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
         detected_model, model_type = temp_template._detect_available_model()
         logger.info(f"🤖 Modèle détecté: {detected_model} (type: {model_type})")
+
+        # Obtenir la config du modèle depuis le registre (pour stride, seuils, etc.)
+        model_cfg = None
+        try:
+            _registry = get_registry()
+            model_cfg = _registry.get_model(detected_model)
+        except Exception:
+            pass
+
+        # Stride d'alignement depuis le registre (fallback 32)
+        stride = 32
+        if model_cfg and model_cfg.resolution:
+            stride = model_cfg.resolution.dimension_stride
+
+        # Ajuster dimensions source et cible au stride du modèle
+        adjusted_source_width, adjusted_source_height = find_best_generation_dims(
+            source_width, source_height, multiple=stride
+        )
+        adjusted_target_width, adjusted_target_height = find_best_generation_dims(
+            target_width, target_height, multiple=stride
+        )
 
         # Calculer la stratégie de génération optimale selon le modèle
         strategy = calculate_optimal_generation_strategy(
@@ -299,7 +658,7 @@ async def process_cinemagraph_generation(job_id: str):
             adjusted_source_height,
             adjusted_target_width,
             adjusted_target_height,
-            model_type=model_type,
+            model_name=detected_model,
         )
 
         generation_width = strategy["generation_width"]
@@ -320,7 +679,7 @@ async def process_cinemagraph_generation(job_id: str):
 
         if needs_resize_to_adjusted:
             logger.info(
-                f"📐 Ajustement multiples de 32: "
+                f"📐 Ajustement multiples de {stride}: "
                 f"{source_width}x{source_height} → {adjusted_source_width}x{adjusted_source_height}"
             )
 
@@ -340,36 +699,57 @@ async def process_cinemagraph_generation(job_id: str):
             image_to_upload = adjusted_path
             upload_filename = adjusted_path.name
 
-        # Étape 2: Redimensionnement vers ~720p pour génération optimale (Lanczos)
+        # Étape 2: Redimensionnement pré-génération (HAT 2x pour upscale, Lanczos pour downscale)
         if needs_pregen_resize and (
             generation_width != adjusted_source_width
             or generation_height != adjusted_source_height
         ):
             if resize_type == "upscale":
                 logger.info(
-                    f"🔼 Upscale Lanczos pré-génération: "
+                    f"🔼 Upscale HAT 2x + Lanczos pré-génération: "
                     f"{adjusted_source_width}x{adjusted_source_height} → {generation_width}x{generation_height}"
                 )
+
+                # HAT 2x via spandrel (ML super-résolution) puis Lanczos downscale vers cible exacte
+                hat_2x_result = _hat_2x_upscale(image_to_upload)
+                if hat_2x_result is not None:
+                    # Lanczos downscale du résultat HAT 2x vers la résolution de génération
+                    resized_img = hat_2x_result.resize(
+                        (generation_width, generation_height),
+                        Image.Resampling.LANCZOS,
+                    )
+                    logger.info(
+                        f"   HAT 2x: {adjusted_source_width}x{adjusted_source_height} → "
+                        f"{hat_2x_result.width}x{hat_2x_result.height} → "
+                        f"Lanczos: {generation_width}x{generation_height}"
+                    )
+                else:
+                    # Fallback Lanczos si HAT 2x échoue
+                    logger.warning("   ⚠️  HAT 2x indisponible, fallback Lanczos")
+                    with Image.open(image_to_upload) as img:
+                        resized_img = img.resize(
+                            (generation_width, generation_height),
+                            Image.Resampling.LANCZOS,
+                        )
             elif resize_type == "downscale":
                 logger.info(
                     f"🔽 Downscale Lanczos pré-génération: "
                     f"{adjusted_source_width}x{adjusted_source_height} → {generation_width}x{generation_height}"
                 )
+                with Image.open(image_to_upload) as img:
+                    resized_img = img.resize(
+                        (generation_width, generation_height),
+                        Image.Resampling.LANCZOS,
+                    )
 
-            with Image.open(image_to_upload) as img:
-                resized_img = img.resize(
-                    (generation_width, generation_height),
-                    Image.Resampling.LANCZOS,
-                )
+            pregen_path = (
+                img_path.parent / f"{img_path.stem}_pregen{img_path.suffix}"
+            )
 
-                pregen_path = (
-                    img_path.parent / f"{img_path.stem}_pregen{img_path.suffix}"
-                )
-
-                resized_img.save(pregen_path, quality=95)
-                logger.success(
-                    f"   ✅ Image préparée pour génération: {pregen_path.name}"
-                )
+            resized_img.save(pregen_path, quality=95)
+            logger.success(
+                f"   ✅ Image préparée pour génération: {pregen_path.name}"
+            )
 
             image_to_upload = pregen_path
             upload_filename = pregen_path.name
@@ -380,7 +760,7 @@ async def process_cinemagraph_generation(job_id: str):
         logger.info(
             f"   Image ajustée (×32): {adjusted_source_width}x{adjusted_source_height}"
         )
-        logger.info(f"   Génération WAN 2.2: {generation_width}x{generation_height}")
+        logger.info(f"   Génération vidéo: {generation_width}x{generation_height}")
         logger.info(
             f"   Résolution génération cible: {adjusted_target_width}x{adjusted_target_height}"
         )
@@ -401,36 +781,44 @@ async def process_cinemagraph_generation(job_id: str):
 
             if use_supersampling:
                 logger.success(
-                    f"   ✅ Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - 4x-UltraSharp + supersampling Lanczos"
+                    f"   ✅ Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - HAT-L 4x + supersampling Lanczos"
                 )
             else:
                 logger.warning(
-                    f"   ⚠️  Upscale élevé ({upscale_ratio:.2f}x > 4x) - 4x UltraSharp + {upscale_ratio / 4:.2f}x Lanczos supplémentaire"
+                    f"   ⚠️  Upscale élevé ({upscale_ratio:.2f}x > 4x) - HAT-L 4x + {upscale_ratio / 4:.2f}x Lanczos supplémentaire"
                 )
                 logger.warning(
                     "   Des artefacts peuvent apparaître au-delà de 4x. Qualité optimale garantie jusqu'à 4x."
                 )
 
-        # Calculer si VAE tiling doit être activé (pour résolutions >1080p ou upscale >4x)
+        # VAE tiling — piloté par le registre
         target_pixels = adjusted_target_width * adjusted_target_height
-        enable_vae_tiling = target_pixels > (1920 * 1080) or upscale_ratio > 4.0
+        if model_cfg and model_cfg.resolution:
+            _res = model_cfg.resolution
+            enable_vae_tiling = (
+                target_pixels > _res.vae_tiling_pixel_threshold
+                or upscale_ratio > _res.vae_tiling_upscale_threshold
+            )
+        else:
+            enable_vae_tiling = target_pixels > 2073600 or upscale_ratio > 4.0
 
-        # Sélectionner le workflow selon modèle ET upscale
-        if upscale_ratio > 1.5:  # Besoin d'upscale intelligent
-            if model_type == "14b":
-                selected_workflow = "wan22_14b_with_upscale"
-            else:
-                selected_workflow = "wan22_5b_with_upscale"
+        # Sélection workflow — piloté par le registre
+        if model_cfg and model_cfg.resolution:
+            trigger = model_cfg.resolution.upscale_trigger_ratio
+            base_wf = model_cfg.workflow_template
+            upscale_wf = model_cfg.workflow_template_upscale or base_wf
+        else:
+            trigger = 1.5
+            base_wf = f"wan22_{model_type}_i2v"
+            upscale_wf = f"wan22_{model_type}_with_upscale"
+
+        if upscale_ratio > trigger:
+            selected_workflow = upscale_wf
 
             logger.info(
                 f"🔍 Workflow {model_type.upper()} avec upscale sélectionné (ratio: {upscale_ratio:.2f}x)"
             )
 
-            # Pour le workflow upscale, utiliser la résolution de génération optimale calculée
-            # L'upscaling sera fait par 4x-UltraSharp (node 11) + resize Lanczos (node 11b)
-            # IMPORTANT: Créer workflow_params SANS utiliser job.parameters pour width/height
-            # car job.parameters contient la résolution cible (final_width/final_height)
-            # mais nous voulons utiliser generation_width/generation_height
             base_params = {
                 k: v for k, v in job.parameters.items() if k not in ["width", "height"]
             }
@@ -438,15 +826,14 @@ async def process_cinemagraph_generation(job_id: str):
                 "input_image": upload_filename,
                 "prompt": job.prompt,
                 "negative_prompt": job.parameters.get("negative_prompt", ""),
-                **base_params,  # Tous les params sauf width/height
-                "width": generation_width,  # Résolution génération WAN 2.2
+                **base_params,
+                "width": generation_width,
                 "height": generation_height,
-                "target_width": adjusted_target_width,  # Résolution finale après upscale
+                "target_width": adjusted_target_width,
                 "target_height": adjusted_target_height,
                 "enable_vae_tiling": enable_vae_tiling,
             }
 
-            # Sortie attendue du workflow upscale : résolution cible ajustée
             expected_output_width = adjusted_target_width
             expected_output_height = adjusted_target_height
 
@@ -455,10 +842,7 @@ async def process_cinemagraph_generation(job_id: str):
                     f"🔧 VAE tiling activé (résolution finale: {adjusted_target_width}x{adjusted_target_height}, upscale: {upscale_ratio:.2f}x)"
                 )
         else:
-            if model_type == "14b":
-                selected_workflow = "wan22_14b_i2v"
-            else:
-                selected_workflow = "wan22_5b_i2v"
+            selected_workflow = base_wf
 
             logger.info(
                 f"✅ Workflow {model_type.upper()} standard (ratio: {upscale_ratio:.2f}x)"
@@ -491,8 +875,19 @@ async def process_cinemagraph_generation(job_id: str):
         workflow = workflow_manager.create_workflow(selected_workflow, workflow_params)
 
         # 2. Générer le cinemagraph
+        # Nombre de frames pour l'estimation de durée (HAT-L upscale)
+        gen_frames = workflow_params.get("frames", 81)
+        has_upscale = upscale_ratio > trigger
+
+        progress_tracker = ComfyUIProgressTracker(
+            job_manager=job_manager,
+            job_id=job_id,
+            total_frames=gen_frames,
+            has_upscale=has_upscale,
+        )
+
         job_manager.update_job(
-            job_id, current_step="Génération du cinemagraph", progress=0.3
+            job_id, current_step="Lancement de la génération...", progress=0.05
         )
 
         async with ComfyUISession(comfyui_config) as client:
@@ -507,27 +902,34 @@ async def process_cinemagraph_generation(job_id: str):
 
             job_manager.update_job(job_id, workflow_id=comfyui_workflow_id)
 
-            # Attendre la completion
-            job_manager.update_job(
-                job_id, current_step="Génération en cours...", progress=0.5
-            )
-
-            # Timeout adapté par modèle : 14B nécessite plus de temps (3h) que le 5B (90 min)
-            workflow_timeout = 10800 if model_type == "14b" else 5400
+            # Timeout adapté par modèle — registre d'abord, fallback hardcodé
+            try:
+                _reg = get_registry()
+                workflow_timeout = _reg.get_timeout(detected_model) or (10800 if model_type == "14b" else 5400)
+            except Exception:
+                workflow_timeout = 10800 if model_type == "14b" else 5400
             logger.info(
                 f"⏱️  Timeout workflow {model_type.upper()}: {workflow_timeout}s ({workflow_timeout // 60} min)"
             )
 
+            # Attente avec progression temps réel via le tracker
             workflow_result = await client.wait_for_completion(
-                comfyui_workflow_id, timeout=workflow_timeout
+                comfyui_workflow_id,
+                timeout=workflow_timeout,
+                progress_callback=progress_tracker,
             )
             logger.info(
                 f"Workflow terminé: {workflow_result.status if hasattr(workflow_result, 'status') else 'completed'}"
             )
 
+            # Vérifier si ComfyUI a remonté une erreur d'exécution
+            if hasattr(workflow_result, "status") and workflow_result.status == "error":
+                error_msg = getattr(workflow_result, "error_message", "Erreur inconnue")
+                raise Exception(f"Erreur ComfyUI: {error_msg}")
+
             # Récupérer les images de sortie
             job_manager.update_job(
-                job_id, current_step="Récupération du résultat", progress=0.8
+                job_id, current_step="Récupération du résultat", progress=_PROGRESS_POSTPROC_START
             )
 
             output_images = await client.get_output_images(comfyui_workflow_id)
@@ -555,7 +957,7 @@ async def process_cinemagraph_generation(job_id: str):
                     f"{user_target_width}x{user_target_height}"
                 )
                 job_manager.update_job(
-                    job_id, current_step="Ajustement dimensions finales", progress=0.85
+                    job_id, current_step="Ajustement dimensions finales", progress=0.88
                 )
 
                 temp_output = output_path + ".tmp.mp4"
@@ -598,6 +1000,63 @@ async def process_cinemagraph_generation(job_id: str):
                     # Nettoyer le fichier temporaire s'il existe encore
                     if os.path.exists(temp_output):
                         os.remove(temp_output)
+
+            # Crossfade seamless loop — appliqué à tous les modèles
+            # Fond les dernières 0.5s avec les premières pour une boucle sans couture
+            fps = job.parameters.get("fps", 24)
+            crossfade_duration = 0.5  # secondes
+            logger.info(
+                f"🔄 Crossfade seamless loop: {crossfade_duration}s à {fps}fps"
+            )
+            job_manager.update_job(
+                job_id,
+                current_step="Création boucle seamless",
+                progress=0.93,
+            )
+
+            # ffmpeg : xfade entre la vidéo et elle-même pour boucle seamless
+            probe_result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    output_path,
+                ],
+                capture_output=True, text=True,
+            )
+            video_duration = float(probe_result.stdout.strip())
+            xfade_offset = video_duration - crossfade_duration
+
+            temp_loop = output_path + ".loop.mp4"
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y",
+                        "-i", output_path,
+                        "-i", output_path,
+                        "-filter_complex",
+                        f"[0:v][1:v]xfade=transition=fade:duration={crossfade_duration}:offset={xfade_offset},trim=0:{xfade_offset},setpts=PTS-STARTPTS",
+                        "-c:v", "libx264",
+                        "-preset", "fast",
+                        "-crf", "18",
+                        "-pix_fmt", "yuv420p",
+                        temp_loop,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                os.replace(temp_loop, output_path)
+                logger.success(
+                    f"   ✅ Boucle seamless: {xfade_offset:.1f}s "
+                    f"(crossfade {crossfade_duration}s)"
+                )
+            except subprocess.CalledProcessError as e:
+                logger.error(f"   ❌ Erreur crossfade: {e.stderr}")
+                logger.warning("   ⚠️ Sortie conservée sans crossfade")
+            finally:
+                if os.path.exists(temp_loop):
+                    os.remove(temp_loop)
 
             job_manager.update_job(job_id, output_video=output_path)
 
@@ -714,11 +1173,11 @@ def calc_resolution():
             source_w, source_h
         )
 
-        # Détecter le modèle disponible (5B ou 14B) pour calcul stratégie
+        # Détecter le modèle disponible pour calcul stratégie
         from workflows.workflow_manager import WorkflowTemplate
 
         temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
-        detected_model, model_type = temp_template._detect_available_model()
+        detected_model, _model_type = temp_template._detect_available_model()
 
         # Calculer la stratégie de génération complète selon le modèle
         strategy = calculate_optimal_generation_strategy(
@@ -726,7 +1185,7 @@ def calc_resolution():
             adjusted_source_h,
             final_w,
             final_h,
-            model_type=model_type,
+            model_name=detected_model,
         )
 
         upscale_ratio = strategy["upscale_ratio"]
@@ -738,10 +1197,10 @@ def calc_resolution():
             upscale_description = "Pas d'upscale nécessaire"
         elif use_supersampling:
             upscale_type = "optimal"
-            upscale_description = f"Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - 4x-UltraSharp + supersampling Lanczos"
+            upscale_description = f"Upscale optimal ({upscale_ratio:.2f}x ≤ 4x) - HAT-L 4x + supersampling Lanczos"
         else:
             upscale_type = "elevated"
-            upscale_description = f"⚠️ Upscale élevé ({upscale_ratio:.2f}x > 4x) - 4x UltraSharp + {upscale_ratio / 4:.2f}x Lanczos. Artefacts possibles."
+            upscale_description = f"⚠️ Upscale élevé ({upscale_ratio:.2f}x > 4x) - HAT-L 4x + {upscale_ratio / 4:.2f}x Lanczos. Artefacts possibles."
 
         # Protection contre division par zéro
         ratio = round(final_w / final_h, 2) if final_h > 0 else 0
@@ -838,7 +1297,7 @@ def generate_cinemagraph():
     )
 
     # Paramètres temporels
-    duration = float(request.form.get("duration", 5.0))  # secondes
+    duration = float(request.form.get("duration", 3.0))  # secondes
     fps = int(request.form.get("fps", 24))
     frames = int(duration * fps)
 
@@ -914,18 +1373,28 @@ def generate_cinemagraph():
     logger.info(
         f"   Résolution: {final_width}x{final_height} ({frames} frames @ {fps}fps)"
     )
+    logger.info(f"   Prompt: {prompt[:200]}{'...' if len(prompt) > 200 else ''}")
+    if negative_prompt:
+        logger.info(f"   Negative: {negative_prompt[:150]}{'...' if len(negative_prompt) > 150 else ''}")
     # Log du workflow qui sera utilisé
     scale_ratio = (final_width * final_height) / (source_width * source_height)
-    # Détecter le modèle pour log informatif
     from workflows.workflow_manager import WorkflowTemplate
 
     temp_template = WorkflowTemplate({"parameters": {}, "workflow": {}})
-    _, log_model_type = temp_template._detect_available_model()
-    expected_workflow = (
-        f"wan22_{log_model_type}_with_upscale"
-        if scale_ratio > 1.5
-        else f"wan22_{log_model_type}_i2v"
-    )
+    detected_model_name, log_model_type = temp_template._detect_available_model()
+    try:
+        _reg = get_registry()
+        _cfg = _reg.get_model(detected_model_name)
+        if _cfg and _cfg.resolution:
+            expected_workflow = (
+                _cfg.workflow_template_upscale or _cfg.workflow_template
+                if scale_ratio > _cfg.resolution.upscale_trigger_ratio
+                else _cfg.workflow_template
+            )
+        else:
+            expected_workflow = f"wan22_{log_model_type}_with_upscale" if scale_ratio > 1.5 else f"wan22_{log_model_type}_i2v"
+    except Exception:
+        expected_workflow = f"wan22_{log_model_type}_with_upscale" if scale_ratio > 1.5 else f"wan22_{log_model_type}_i2v"
     logger.info(f"   Workflow: {expected_workflow} (ratio: {scale_ratio:.2f}x)")
 
     return jsonify(
@@ -1191,91 +1660,113 @@ def check_owncloud():
 @api_bp.route("/model-info", methods=["GET"])
 def get_model_info():
     """
-    Retourne les informations sur le modèle WAN 2.2 déployé
+    Retourne les informations sur le modèle actif déployé.
+
+    Détection par filesystem (registre) → fallback env var → 503 si rien.
 
     Returns:
-        JSON avec:
-        - model_type: "5b" ou "14b"
-        - model_name: Nom complet du modèle
-        - display_name: Nom d'affichage pour l'UI
-        - estimated_time: Temps estimé pour preset "Naturel" (30 steps)
+        JSON avec model_type, model_name, display_name, estimated_time, gpu_recommendation
     """
-    import os
-    from pathlib import Path
-
     try:
-        # Détection directe du modèle disponible (sans dépendre d'un template)
-        # Priorité : 14B > 5B (14B est le modèle plus puissant)
-        comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/diffusion_models")
-
-        # Fallback si diffusion_models n'existe pas
-        if not comfyui_models_dir.exists():
-            comfyui_models_dir = Path("/workspace/comfyui/ComfyUI/models/checkpoints")
-
-        # Recherche des modèles disponibles
-        model_priority = [
-            ("wan2.2-i2v-a14b", "14b"),
-            ("wan2.2-ti2v-5b", "5b"),
+        # Répertoires de recherche des modèles
+        search_dirs = [
+            Path("/workspace/comfyui/ComfyUI/models/diffusion_models"),
+            Path("/workspace/comfyui/ComfyUI/models/checkpoints"),
         ]
 
-        detected_model = None
-        model_type = None
+        # Détection via registre uniquement — plus de fallback hardcodé
+        try:
+            _reg = get_registry()
+            model_priority = _reg.get_detection_priority()
+        except Exception:
+            model_priority = []
+
+        detected_model: str | None = None
+        model_type: str | None = None
 
         for model_name, m_type in model_priority:
-            model_path = comfyui_models_dir / model_name
-            if model_path.exists() and any(model_path.glob("*.safetensors")):
-                detected_model = model_name
-                model_type = m_type
-                logger.info(
-                    f"✅ API model-info: Modèle détecté: {model_name} (type: {m_type})"
-                )
+            for models_dir in search_dirs:
+                model_path = models_dir / model_name
+                if model_path.exists() and any(model_path.glob("*.safetensors")):
+                    detected_model = model_name
+                    model_type = m_type
+                    logger.info(
+                        f"✅ API model-info: Modèle détecté: {model_name} (type: {m_type})"
+                    )
+                    break
+            if detected_model:
                 break
 
-        # Si aucun modèle trouvé dans les dossiers, utiliser variable d'environnement
+        # Fallback env var — sans défaut hardcodé
         if not detected_model:
-            env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
+            env_model = os.getenv("OWNCLOUD_MODEL_NAME", "")
+            if not env_model:
+                logger.error("❌ API model-info: Aucun modèle détecté et OWNCLOUD_MODEL_NAME non défini")
+                return jsonify({"error": "Aucun modèle détecté"}), 503
             detected_model = env_model
-            model_type = (
-                "14b"
-                if "14b" in env_model.lower() or "a14b" in env_model.lower()
-                else "5b"
-            )
             logger.warning(
-                f"⚠️ API model-info: Utilisation env var: {env_model} (type: {model_type})"
+                f"⚠️ API model-info: Utilisation env var: {env_model}"
             )
 
-        # Temps estimés pour preset "Naturel" avec 30 steps
-        # Basé sur les benchmarks réels
-        estimated_times = {"5b": "~8 min", "14b": "~15 min"}
+        # Enrichissement via registre
+        try:
+            _reg = get_registry()
+            model_cfg = _reg.get_model(detected_model)
+        except Exception:
+            model_cfg = None
 
+        if model_cfg:
+            return jsonify(
+                {
+                    "model_type": model_cfg.model_type,
+                    "model_name": detected_model,
+                    "display_name": model_cfg.display_name,
+                    "estimated_time": model_cfg.estimated_time,
+                    "gpu_recommendation": model_cfg.vram_requirement,
+                }
+            )
+
+        # Registre KO → réponse minimale avec le nom brut
         return jsonify(
             {
-                "model_type": model_type,
+                "model_type": model_type or "unknown",
                 "model_name": detected_model,
-                "display_name": f"WAN 2.2 {model_type.upper()}",
-                "estimated_time": estimated_times.get(model_type, "~10 min"),
-                "gpu_recommendation": "48GB+ VRAM"
-                if model_type == "5b"
-                else "80GB+ VRAM",
+                "display_name": detected_model,
+                "estimated_time": "~10 min",
+                "gpu_recommendation": "N/A",
             }
         )
 
     except Exception as e:
         logger.warning(f"Impossible de détecter le modèle: {e}")
-        # Fallback par défaut - utiliser variable d'environnement
-        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "wan2.2-ti2v-5b")
-        model_type = (
-            "14b" if "14b" in env_model.lower() or "a14b" in env_model.lower() else "5b"
-        )
+        env_model = os.getenv("OWNCLOUD_MODEL_NAME", "")
+        if not env_model:
+            return jsonify({"error": "Aucun modèle détecté"}), 503
+
+        # Tentative registre sur env var
+        try:
+            _reg = get_registry()
+            model_cfg = _reg.get_model(env_model)
+            if model_cfg:
+                return jsonify(
+                    {
+                        "model_type": model_cfg.model_type,
+                        "model_name": env_model,
+                        "display_name": model_cfg.display_name,
+                        "estimated_time": model_cfg.estimated_time,
+                        "gpu_recommendation": model_cfg.vram_requirement,
+                    }
+                )
+        except Exception:
+            pass
+
         return jsonify(
             {
-                "model_type": model_type,
+                "model_type": "unknown",
                 "model_name": env_model,
-                "display_name": f"WAN 2.2 {model_type.upper()}",
-                "estimated_time": "~15 min" if model_type == "14b" else "~8 min",
-                "gpu_recommendation": "80GB+ VRAM"
-                if model_type == "14b"
-                else "48GB+ VRAM",
+                "display_name": env_model,
+                "estimated_time": "~10 min",
+                "gpu_recommendation": "N/A",
             }
         )
 
@@ -1283,10 +1774,9 @@ def get_model_info():
 @api_bp.route("/jobs/<job_id>/thumbnail", methods=["GET"])
 def get_thumbnail(job_id):
     """Retourne une miniature du résultat (placeholder pour l'instant)"""
-    # TODO: Générer vraie miniature avec PIL
-    from flask import send_file
+    # TODO: Extraire la première frame de la vidéo avec ffmpeg ou PIL
+    logger.warning(f"Thumbnail placeholder retourné pour job {job_id} - extraction première frame non implémentée")
     import io
-    from PIL import Image
 
     # Placeholder image
     img = Image.new("RGB", (400, 300), color="#667eea")

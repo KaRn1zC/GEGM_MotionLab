@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Argument: nom du modèle spécifique ou "all" (défaut)
 MODEL="${1:-all}"
 
-echo "🎬 Setup WAN 2.2 - Version ComfyUI Native (Comfy-Org)"
-echo "====================================================="
+echo "🎬 Setup modèles - Version ComfyUI Native"
+echo "============================================"
 
 # Vérifier l'environnement virtuel (sauf sur Docker/RunPod)
 # Docker/RunPod : Python installé globalement, pas de venv nécessaire
@@ -31,7 +31,7 @@ pip install -q "huggingface_hub"
 
 # Étape 2: Créer les dossiers modèles (structure ComfyUI native)
 echo "📁 Création des dossiers de modèles (structure ComfyUI)..."
-mkdir -p models/{diffusion_models,text_encoders,vae}
+mkdir -p models/{diffusion_models,text_encoders,vae,checkpoints}
 mkdir -p models/wan2.2-ti2v-5b  # Pour compatibilité avec upload/download existant
 mkdir -p models/wan2.2-i2v-a14b
 
@@ -258,75 +258,6 @@ elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
         exit 1
     fi
 
-elif [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
-    echo ""
-    echo "📥 Téléchargement WAN 2.2 TI2V 5B depuis $REPO..."
-    echo ""
-
-    # Dossier temporaire pour téléchargement
-    TEMP_DL="./models/.temp_download"
-    mkdir -p "$TEMP_DL"
-
-    # 1. Diffusion model (~9.3 GB)
-    echo "  1/3: Diffusion model (~9.3 GB)..."
-    hf download "$REPO" \
-        split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors \
-        --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors" ./models/diffusion_models/
-
-    # 2. Text encoder FP16 (~11.4 GB)
-    echo "  2/3: Text encoder FP16 (~11.4 GB)..."
-    hf download "$REPO" \
-        split_files/text_encoders/umt5_xxl_fp16.safetensors \
-        --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/text_encoders/umt5_xxl_fp16.safetensors" ./models/text_encoders/
-
-    # 3. VAE 5B (~600 MB)
-    echo "  3/3: VAE 5B (~600 MB)..."
-    hf download "$REPO" \
-        split_files/vae/wan2.2_vae.safetensors \
-        --local-dir "$TEMP_DL"
-    mv "$TEMP_DL/split_files/vae/wan2.2_vae.safetensors" ./models/vae/
-
-    # Nettoyer le dossier temporaire
-    rm -rf "$TEMP_DL"
-
-    echo "✅ WAN 2.2 5B téléchargé"
-
-    # Créer dossier wan2.2-ti2v-5b avec symlinks
-    echo ""
-    echo "🔗 Création de symlinks pour compatibilité..."
-    mkdir -p models/wan2.2-ti2v-5b
-    ln -sf ../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors models/wan2.2-ti2v-5b/
-    ln -sf ../text_encoders/umt5_xxl_fp16.safetensors models/wan2.2-ti2v-5b/
-    ln -sf ../vae/wan2.2_vae.safetensors models/wan2.2-ti2v-5b/
-    echo "✅ Symlinks créés"
-
-    # Vérifications
-    echo ""
-    echo "🔍 Vérification intégrité modèle de diffusion..."
-    python "$SCRIPT_DIR/verify_diffusion_model.py" wan2.2-ti2v-5b
-    if [ $? -ne 0 ]; then
-        echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
-        exit 1
-    fi
-
-    echo ""
-    echo "🔍 Vérification intégrité Text Encoder..."
-    python "$SCRIPT_DIR/verify_t5_integrity.py" wan2.2-ti2v-5b
-    if [ $? -ne 0 ]; then
-        echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
-        exit 1
-    fi
-
-    echo ""
-    echo "🔍 Vérification intégrité VAE..."
-    python "$SCRIPT_DIR/verify_vae.py" wan2.2-ti2v-5b
-    if [ $? -ne 0 ]; then
-        echo "❌ ÉCHEC: VAE corrompu ou incomplet"
-        exit 1
-    fi
-
 elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     echo ""
     echo "📥 Téléchargement WAN 2.2 I2V 14B depuis $REPO..."
@@ -405,9 +336,114 @@ elif [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
     fi
 
 else
-    echo "❌ Modèle invalide: $MODEL"
-    echo "Usage: $0 [all|wan2.2-i2v-a14b|wan2.2-ti2v-5b]"
-    exit 1
+    # Modèle inconnu du code legacy — essayer le registre
+    echo ""
+    echo "📥 Modèle $MODEL : consultation du registre..."
+
+    MANIFEST=$(python -m src.model_registry get-hf-downloads "$MODEL" 2>/dev/null)
+    if [ $? -eq 0 ] && [ -n "$MANIFEST" ]; then
+        TEMP_DL="./models/.temp_download"
+        mkdir -p "$TEMP_DL"
+
+        # Déterminer si le modèle utilise des symlinks (WAN) ou des fichiers directs (LTX)
+        SYMLINKS=$(python -m src.model_registry get-symlinks "$MODEL" 2>/dev/null || echo "[]")
+        HAS_SYMLINKS=$(echo "$SYMLINKS" | python3 -c "import sys,json; print('yes' if json.load(sys.stdin) else 'no')")
+
+        FILE_COUNT=$(echo "$MANIFEST" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['files']))")
+        FILE_IDX=0
+
+        # Téléchargement multi-repo : chaque fichier porte son propre repo
+        echo "$MANIFEST" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+default_repo = data['repo']
+for f in data['files']:
+    repo = f.get('repo', default_repo)
+    print(repo + '|' + f['hf_path'] + '|' + f['dest_subdir'] + '|' + f['filename'])
+" | while IFS='|' read -r file_repo hf_path dest_subdir filename; do
+            FILE_IDX=$((FILE_IDX + 1))
+            echo "  $FILE_IDX/$FILE_COUNT: $filename..."
+
+            hf download "$file_repo" "$hf_path" --local-dir "$TEMP_DL"
+
+            if [ "$HAS_SYMLINKS" = "yes" ]; then
+                # WAN : fichiers dans dossiers partagés (diffusion_models/, text_encoders/, vae/)
+                mkdir -p "./models/$dest_subdir"
+                mv "$TEMP_DL/$hf_path" "./models/$dest_subdir/"
+            elif [ "$dest_subdir" = "text_encoders" ]; then
+                # LTX text encoder : séparer du checkpoint pour faciliter le placement ComfyUI
+                mkdir -p "./models/text_encoders"
+                mv "$TEMP_DL/$hf_path" "./models/text_encoders/"
+            else
+                # LTX checkpoint : dans le dossier modèle
+                mkdir -p "./models/$MODEL"
+                mv "$TEMP_DL/$hf_path" "./models/$MODEL/"
+            fi
+        done
+
+        rm -rf "$TEMP_DL"
+        echo "✅ $MODEL téléchargé"
+
+        # Créer symlinks via registre (WAN uniquement)
+        if [ "$HAS_SYMLINKS" = "yes" ]; then
+            echo ""
+            echo "🔗 Création de symlinks pour $MODEL..."
+            mkdir -p "models/$MODEL"
+            echo "$SYMLINKS" | python3 -c "
+import sys, json
+for s in json.load(sys.stdin):
+    print(s['source'] + '|' + s['target'])
+" | while IFS='|' read -r source target; do
+                ln -sf "$source" "models/$MODEL/$target"
+            done
+            echo "✅ Symlinks créés"
+        fi
+
+        # Vérification intégrité — modèle de diffusion
+        echo ""
+        echo "🔍 Vérification intégrité modèle de diffusion ($MODEL)..."
+        python "$SCRIPT_DIR/verify_diffusion_model.py" "$MODEL"
+        if [ $? -ne 0 ]; then
+            echo "❌ ÉCHEC: Modèle de diffusion corrompu ou incomplet"
+            exit 1
+        fi
+
+        # Vérification text encoder — T5 partagé uniquement (skip si model-spécifique)
+        HAS_SHARED_T5=$(python3 -c "
+from src.model_registry import get_registry
+m = get_registry().get_model('$MODEL')
+print('yes' if m and not m.text_encoder else 'no')
+" 2>/dev/null || echo "yes")
+
+        if [ "$HAS_SHARED_T5" = "yes" ]; then
+            echo ""
+            echo "🔍 Vérification intégrité Text Encoder T5 ($MODEL)..."
+            python "$SCRIPT_DIR/verify_t5_integrity.py" "$MODEL"
+            if [ $? -ne 0 ]; then
+                echo "❌ ÉCHEC: Text Encoder corrompu ou incomplet"
+                exit 1
+            fi
+        else
+            echo ""
+            echo "ℹ️  Text encoder model-spécifique (skip vérification T5)"
+        fi
+
+        # Vérification VAE
+        echo ""
+        echo "🔍 Vérification intégrité VAE ($MODEL)..."
+        python "$SCRIPT_DIR/verify_vae.py" "$MODEL"
+        if [ $? -ne 0 ]; then
+            echo "❌ ÉCHEC: VAE corrompu ou incomplet"
+            exit 1
+        fi
+    else
+        echo "❌ Modèle invalide: $MODEL"
+        echo "Usage: $0 [all|<model_name>]"
+        echo ""
+        echo "Modèles disponibles dans le registre:"
+        python -m src.model_registry list-models 2>/dev/null || true
+        exit 1
+    fi
 fi
 
 # === COMPOSANTS PARTAGÉS (CLIP + UPSCALERS) ===
@@ -439,60 +475,38 @@ else
     echo "  ✅ CLIP Vision déjà présent: $(du -h $CLIP_FILE | cut -f1)"
 fi
 
-# 4x-UltraSharp (~67 MB) - Upscaler haute qualité
-ULTRASHARP_FILE="models/upscale_models/4x-UltraSharp.pth"
-if [ ! -f "$ULTRASHARP_FILE" ]; then
-    echo "  2/3: 4x-UltraSharp (~67 MB)..."
+# HAT-L 4x (~40 MB) - Upscaler post-génération (Hybrid Attention Transformer)
+HAT_L_4X_FILE="models/upscale_models/HAT-L_SRx4_ImageNet-pretrain.pth"
+if [ ! -f "$HAT_L_4X_FILE" ]; then
+    echo "  2/4: HAT-L 4x (~158 MB)..."
     curl -L -# \
-        "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth" \
-        -o "$ULTRASHARP_FILE"
+        "https://huggingface.co/jaideepsingh/upscale_models/resolve/main/HAT/HAT-L_SRx4_ImageNet-pretrain.pth" \
+        -o "$HAT_L_4X_FILE"
 
     if [ $? -eq 0 ]; then
-        echo "  ✅ 4x-UltraSharp téléchargé ($(du -h $ULTRASHARP_FILE | cut -f1))"
+        echo "  ✅ HAT-L 4x téléchargé ($(du -h $HAT_L_4X_FILE | cut -f1))"
     else
-        echo "  ⚠️ Échec téléchargement 4x-UltraSharp (non bloquant)"
+        echo "  ⚠️ Échec téléchargement HAT-L 4x (non bloquant)"
     fi
 else
-    echo "  ✅ 4x-UltraSharp déjà présent: $(du -h $ULTRASHARP_FILE | cut -f1)"
+    echo "  ✅ HAT-L 4x déjà présent: $(du -h $HAT_L_4X_FILE | cut -f1)"
 fi
 
-# RealESRGAN (~64 MB) - Upscaler backup (optionnel)
-REALESRGAN_FILE="models/upscale_models/RealESRGAN_x4plus.pth"
-if [ ! -f "$REALESRGAN_FILE" ]; then
-    echo "  3/3: RealESRGAN (~64 MB, optionnel)..."
+# HAT 2x (~6 MB) - Upscaler pré-génération
+HAT_2X_FILE="models/upscale_models/HAT_SRx2.pth"
+if [ ! -f "$HAT_2X_FILE" ]; then
+    echo "  3/4: HAT 2x (~81 MB)..."
+    curl -L -# \
+        "https://huggingface.co/jaideepsingh/upscale_models/resolve/main/HAT/HAT_SRx2.pth" \
+        -o "$HAT_2X_FILE"
 
-    # Retry jusqu'à 3 fois avec délai croissant (GitHub peut être temporairement indisponible)
-    RETRY_COUNT=0
-    MAX_RETRIES=3
-    SUCCESS=false
-
-    while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = false ]; do
-        if [ $RETRY_COUNT -gt 0 ]; then
-            WAIT_TIME=$((RETRY_COUNT * 2))
-            echo "  ⏳ Retry $RETRY_COUNT/$MAX_RETRIES après ${WAIT_TIME}s..."
-            sleep $WAIT_TIME
-        fi
-
-        curl -L -# --connect-timeout 10 --max-time 60 \
-            "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
-            -o "$REALESRGAN_FILE" 2>/dev/null
-
-        if [ $? -eq 0 ] && [ -f "$REALESRGAN_FILE" ] && [ -s "$REALESRGAN_FILE" ]; then
-            echo "  ✅ RealESRGAN téléchargé ($(du -h $REALESRGAN_FILE | cut -f1))"
-            SUCCESS=true
-        else
-            rm -f "$REALESRGAN_FILE"  # Nettoyer fichier partiel
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-        fi
-    done
-
-    if [ "$SUCCESS" = false ]; then
-        echo "  ⚠️ RealESRGAN indisponible après $MAX_RETRIES tentatives (non bloquant)"
-        echo "     GitHub Releases peut être temporairement inaccessible"
-        echo "     Le système fonctionnera avec 4x-UltraSharp uniquement"
+    if [ $? -eq 0 ]; then
+        echo "  ✅ HAT 2x téléchargé ($(du -h $HAT_2X_FILE | cut -f1))"
+    else
+        echo "  ⚠️ Échec téléchargement HAT 2x (non bloquant)"
     fi
 else
-    echo "  ✅ RealESRGAN déjà présent: $(du -h $REALESRGAN_FILE | cut -f1)"
+    echo "  ✅ HAT 2x déjà présent: $(du -h $HAT_2X_FILE | cut -f1)"
 fi
 
 echo "✅ Composants partagés téléchargés"
@@ -504,66 +518,53 @@ echo "🔗 Création de symlinks vers composants partagés dans dossiers modèle
 # Pour upload sur OwnCloud : créer symlinks dans models/{model_name}/
 # split_and_upload.py utilise --copy-links donc uploadera le contenu réel
 
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
-    echo "  Modèle 5B: Ajout symlinks CLIP + Upscalers..."
-    mkdir -p models/wan2.2-ti2v-5b/clip_vision
-    mkdir -p models/wan2.2-ti2v-5b/upscale_models
-
-    # Symlinks relatifs (plus robustes)
-    if [ -f "$CLIP_FILE" ]; then
-        ln -sf ../../clip_vision/clip-vit-large-patch14-336.safetensors models/wan2.2-ti2v-5b/clip_vision/
-    fi
-    if [ -f "$ULTRASHARP_FILE" ]; then
-        ln -sf ../../upscale_models/4x-UltraSharp.pth models/wan2.2-ti2v-5b/upscale_models/
-    fi
-    if [ -f "$REALESRGAN_FILE" ]; then
-        ln -sf ../../upscale_models/RealESRGAN_x4plus.pth models/wan2.2-ti2v-5b/upscale_models/
-    fi
-    echo "  ✅ Symlinks 5B créés"
+# Déterminer les modèles à linker
+if [ "$MODEL" = "all" ]; then
+    MODELS_TO_LINK="wan2.2-ti2v-5b wan2.2-i2v-a14b"
+else
+    MODELS_TO_LINK="$MODEL"
 fi
 
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
-    echo "  Modèle 14B: Ajout symlinks CLIP + Upscalers..."
-    mkdir -p models/wan2.2-i2v-a14b/clip_vision
-    mkdir -p models/wan2.2-i2v-a14b/upscale_models
+for m in $MODELS_TO_LINK; do
+    echo "  Modèle $m: Ajout symlinks CLIP + Upscalers..."
+    mkdir -p "models/$m/clip_vision"
+    mkdir -p "models/$m/upscale_models"
 
-    # Symlinks relatifs (plus robustes)
     if [ -f "$CLIP_FILE" ]; then
-        ln -sf ../../clip_vision/clip-vit-large-patch14-336.safetensors models/wan2.2-i2v-a14b/clip_vision/
+        ln -sf "../../clip_vision/$(basename $CLIP_FILE)" "models/$m/clip_vision/"
     fi
-    if [ -f "$ULTRASHARP_FILE" ]; then
-        ln -sf ../../upscale_models/4x-UltraSharp.pth models/wan2.2-i2v-a14b/upscale_models/
+    if [ -f "$HAT_L_4X_FILE" ]; then
+        ln -sf "../../upscale_models/$(basename $HAT_L_4X_FILE)" "models/$m/upscale_models/"
     fi
-    if [ -f "$REALESRGAN_FILE" ]; then
-        ln -sf ../../upscale_models/RealESRGAN_x4plus.pth models/wan2.2-i2v-a14b/upscale_models/
+    if [ -f "$HAT_2X_FILE" ]; then
+        ln -sf "../../upscale_models/$(basename $HAT_2X_FILE)" "models/$m/upscale_models/"
     fi
-    echo "  ✅ Symlinks 14B créés"
-fi
+    echo "  ✅ Symlinks $m créés"
+done
 
 echo "✅ Symlinks composants partagés créés (seront uploadés avec les modèles)"
 
 # Étape 5: Vérification des téléchargements
 echo ""
 echo "🔍 Vérification des modèles téléchargés..."
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-i2v-a14b" ]; then
-    if [ -d "models/wan2.2-i2v-a14b" ]; then
-        size=$(du -sh models/wan2.2-i2v-a14b | cut -f1)
-        echo "✅ wan2.2-i2v-a14b ($size - symlinks)"
-    fi
+if [ "$MODEL" = "all" ]; then
+    MODELS_TO_VERIFY="wan2.2-ti2v-5b wan2.2-i2v-a14b"
+else
+    MODELS_TO_VERIFY="$MODEL"
 fi
 
-if [ "$MODEL" = "all" ] || [ "$MODEL" = "wan2.2-ti2v-5b" ]; then
-    if [ -d "models/wan2.2-ti2v-5b" ]; then
-        size=$(du -sh models/wan2.2-ti2v-5b | cut -f1)
-        echo "✅ wan2.2-ti2v-5b ($size - symlinks)"
+for m in $MODELS_TO_VERIFY; do
+    if [ -d "models/$m" ]; then
+        size=$(du -sh "models/$m" | cut -f1)
+        echo "✅ $m ($size - symlinks)"
     fi
-fi
+done
 
 echo ""
 echo "📂 Structure des fichiers (ComfyUI native):"
-echo "   models/diffusion_models/ - Modèles de diffusion"
+echo "   models/diffusion_models/ - Modèles de diffusion (WAN)"
+echo "   models/checkpoints/ - Checkpoints (LTX)"
 echo "   models/text_encoders/ - Text encoders"
 echo "   models/vae/ - VAE"
 echo ""
-echo "✅ Setup WAN 2.2 terminé (Version ComfyUI Native) !"
-echo "ℹ️  Repository: $REPO"
+echo "✅ Setup terminé pour $MODEL !"

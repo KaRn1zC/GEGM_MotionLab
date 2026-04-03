@@ -20,6 +20,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 
+[tool.setuptools.packages.find]
+include = ["src*", "web_interface*", "workflows*"]
+
 [tool.black]
 line-length = 88
 target-version = ["py311"]

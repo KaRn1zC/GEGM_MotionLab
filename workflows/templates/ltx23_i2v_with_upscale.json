@@ -1,0 +1,341 @@
+{
+  "name": "LTX 2.3 22B + HAT-L 4x Upscale",
+  "description": "Full path officiel LTX 2.3 22B — Pipeline AV + MultimodalGuider + ClownSampler_Beta + upscaling HAT-L 4x",
+  "version": "12.0.0",
+  "author": "Comfy_Img_to_Loop",
+  "tags": ["pipeline", "cinemagraph", "upscale", "ltx2.3", "complete"],
+  "model_family": "ltx23",
+
+  "parameters": {
+    "input_image": {
+      "type": "string",
+      "required": true,
+      "description": "Image d'entree"
+    },
+    "prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Prompt de generation"
+    },
+    "negative_prompt": {
+      "type": "string",
+      "default": "",
+      "description": "Elements a eviter"
+    },
+    "steps_generation": {
+      "type": "integer",
+      "default": 15,
+      "min": 15,
+      "max": 15,
+      "description": "Steps force a 15 (valeur officielle LTX 2.3 22B, override backend)"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 65,
+      "min": 9,
+      "max": 241,
+      "description": "Nombre de frames generees (N*8+1), crossfade seamless en post-processing"
+    },
+    "fps": {
+      "type": "integer",
+      "default": 24,
+      "min": 4,
+      "max": 50,
+      "description": "FPS de sortie"
+    },
+    "seed": {
+      "type": "integer",
+      "default": -1,
+      "min": -1,
+      "description": "Seed (-1 = aleatoire)"
+    },
+    "width": {
+      "type": "integer",
+      "default": 960,
+      "min": 64,
+      "max": 1920,
+      "description": "Largeur de generation"
+    },
+    "height": {
+      "type": "integer",
+      "default": 544,
+      "min": 64,
+      "max": 1088,
+      "description": "Hauteur de generation"
+    },
+    "target_width": {
+      "type": "integer",
+      "default": 1920,
+      "description": "Largeur finale apres upscale"
+    },
+    "target_height": {
+      "type": "integer",
+      "default": 1080,
+      "description": "Hauteur finale apres upscale"
+    },
+    "i2v_strength": {
+      "type": "float",
+      "default": 0.7,
+      "min": 0.0,
+      "max": 1.0,
+      "description": "Force du conditionnement image (officiel = 0.7)"
+    },
+    "cfg_scale": {
+      "type": "float",
+      "default": 3.0,
+      "min": 1.0,
+      "max": 20.0,
+      "description": "CFG guidance video (3.0 officiel Lightricks 22B)"
+    }
+  },
+
+  "workflow": {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "{input_image}"
+      }
+    },
+    "14": {
+      "class_type": "LTXVPreprocess",
+      "inputs": {
+        "image": ["1", 0],
+        "img_compression": 18
+      }
+    },
+    "2": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "{checkpoint_path}"
+      }
+    },
+    "18": {
+      "class_type": "LoraLoaderModelOnly",
+      "inputs": {
+        "model": ["2", 0],
+        "lora_name": "{lora_path}",
+        "strength_model": 0.2
+      }
+    },
+    "3": {
+      "class_type": "LTXAVTextEncoderLoader",
+      "inputs": {
+        "text_encoder": "{text_encoder_flat}",
+        "ckpt_name": "{checkpoint_path}",
+        "device": "default"
+      }
+    },
+    "4": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{prompt}",
+        "clip": ["3", 0]
+      }
+    },
+    "5": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{negative_prompt}",
+        "clip": ["3", 0]
+      }
+    },
+    "15": {
+      "class_type": "LTXVConditioning",
+      "inputs": {
+        "positive": ["4", 0],
+        "negative": ["5", 0],
+        "frame_rate": "{fps}"
+      }
+    },
+    "13": {
+      "class_type": "EmptyLTXVLatentVideo",
+      "inputs": {
+        "width": "{width}",
+        "height": "{height}",
+        "length": "{frames}",
+        "batch_size": 1
+      }
+    },
+    "16": {
+      "class_type": "LTXVImgToVideoConditionOnly",
+      "inputs": {
+        "vae": ["2", 2],
+        "image": ["14", 0],
+        "latent": ["13", 0],
+        "strength": "{i2v_strength}"
+      }
+    },
+    "20": {
+      "class_type": "LTXVAudioVAELoader",
+      "inputs": {
+        "ckpt_name": "{checkpoint_path}"
+      }
+    },
+    "21": {
+      "class_type": "LTXVEmptyLatentAudio",
+      "inputs": {
+        "frames_number": "{frames}",
+        "frame_rate": "{fps}",
+        "batch_size": 1,
+        "audio_vae": ["20", 0]
+      }
+    },
+    "22": {
+      "class_type": "LTXVConcatAVLatent",
+      "inputs": {
+        "video_latent": ["16", 0],
+        "audio_latent": ["21", 0]
+      }
+    },
+    "23": {
+      "class_type": "GuiderParameters",
+      "inputs": {
+        "modality": "AUDIO",
+        "cfg": 7.0,
+        "stg": 1.0,
+        "perturb_attn": true,
+        "rescale": 0.7,
+        "modality_scale": 3.0,
+        "skip_step": 0,
+        "cross_attn": true
+      }
+    },
+    "24": {
+      "class_type": "GuiderParameters",
+      "inputs": {
+        "modality": "VIDEO",
+        "cfg": "{cfg_scale}",
+        "stg": 1.0,
+        "perturb_attn": true,
+        "rescale": 0.9,
+        "modality_scale": 3.0,
+        "skip_step": 0,
+        "cross_attn": true,
+        "parameters": ["23", 0]
+      }
+    },
+    "6": {
+      "class_type": "MultimodalGuider",
+      "inputs": {
+        "model": ["18", 0],
+        "positive": ["15", 0],
+        "negative": ["15", 1],
+        "parameters": ["24", 0],
+        "skip_blocks": "28"
+      }
+    },
+    "10": {
+      "class_type": "RandomNoise",
+      "inputs": {
+        "noise_seed": "{seed}"
+      }
+    },
+    "11": {
+      "class_type": "ClownSampler_Beta",
+      "inputs": {
+        "eta": 0.25,
+        "sampler_name": "exponential/res_2s",
+        "seed": "{seed}",
+        "bongmath": true
+      }
+    },
+    "12": {
+      "class_type": "LTXVScheduler",
+      "inputs": {
+        "steps": "{steps_generation}",
+        "max_shift": 2.05,
+        "base_shift": 0.95,
+        "stretch": true,
+        "terminal": 0.1,
+        "latent": ["22", 0]
+      }
+    },
+    "17": {
+      "class_type": "SamplerCustomAdvanced",
+      "inputs": {
+        "noise": ["10", 0],
+        "guider": ["6", 0],
+        "sampler": ["11", 0],
+        "sigmas": ["12", 0],
+        "latent_image": ["22", 0]
+      }
+    },
+    "25": {
+      "class_type": "LTXVSeparateAVLatent",
+      "inputs": {
+        "av_latent": ["17", 0]
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["25", 0],
+        "vae": ["2", 2]
+      }
+    },
+    "26": {
+      "class_type": "UpscaleModelLoader",
+      "inputs": {
+        "model_name": "HAT-L_SRx4_ImageNet-pretrain.pth"
+      }
+    },
+    "27": {
+      "class_type": "ImageUpscaleWithModel",
+      "inputs": {
+        "upscale_model": ["26", 0],
+        "image": ["8", 0]
+      }
+    },
+    "28": {
+      "class_type": "ImageScale",
+      "inputs": {
+        "image": ["27", 0],
+        "width": "{target_width}",
+        "height": "{target_height}",
+        "upscale_method": "lanczos",
+        "crop": "disabled"
+      }
+    },
+    "30": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": "{fps}",
+        "loop_count": 0,
+        "filename_prefix": "ltx23_upscaled",
+        "format": "video/h264-mp4",
+        "crf": 18,
+        "pingpong": false,
+        "save_output": true,
+        "images": ["28", 0]
+      }
+    }
+  },
+
+  "outputs": {
+    "video": {
+      "node": "30",
+      "output": 0,
+      "description": "Cinemagraph upscale"
+    }
+  },
+
+  "metadata": {
+    "comfyui_version": ">=0.16.1",
+    "ltxvideo_version": "lightricks_mar2026",
+    "tags": ["pipeline", "cinemagraph", "upscale", "ltx2.3", "complete"],
+    "required_nodes": [
+      "LoadImage", "LTXVPreprocess", "CheckpointLoaderSimple", "LoraLoaderModelOnly",
+      "LTXAVTextEncoderLoader", "CLIPTextEncode", "LTXVConditioning",
+      "EmptyLTXVLatentVideo", "LTXVImgToVideoConditionOnly",
+      "LTXVAudioVAELoader", "LTXVEmptyLatentAudio", "LTXVConcatAVLatent",
+      "GuiderParameters", "MultimodalGuider", "ClownSampler_Beta",
+      "SamplerCustomAdvanced", "LTXVSeparateAVLatent", "VAEDecode",
+      "RandomNoise", "LTXVScheduler",
+      "UpscaleModelLoader", "ImageUpscaleWithModel", "ImageScale", "VHS_VideoCombine"
+    ],
+    "changelog": {
+      "v7-v11": "Pas de pipeline AV — format tenseur incorrect pour le modele multimodal",
+      "v12.0.0": "Pipeline AV officiel + MultimodalGuider + GuiderParameters + LTXVScheduler avec latent"
+    }
+  }
+}

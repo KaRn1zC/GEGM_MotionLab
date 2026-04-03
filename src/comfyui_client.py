@@ -11,7 +11,8 @@ import aiohttp
 import io
 import base64
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Any
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -31,9 +32,7 @@ class ComfyUIConfig:
     timeout: int = 300  # 5 minutes par défaut
     max_retries: int = 3
     retry_delay: float = 1.0
-    websocket_timeout: int = (
-        1200  # 20 minutes pour les gros workflows (presets qualité maximale)
-    )
+    websocket_timeout: int = 5400  # 90 minutes (défaut pour 5B, override 10800s pour 14B dans routes.py)
 
     @property
     def base_url(self) -> str:
@@ -51,15 +50,15 @@ class WorkflowProgress:
     workflow_id: str
     status: str = "pending"  # pending, running, completed, error
     progress: float = 0.0
-    current_node: Optional[str] = None
+    current_node: str | None = None
     total_nodes: int = 0
     completed_nodes: int = 0
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error_message: Optional[str] = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    error_message: str | None = None
 
     @property
-    def duration(self) -> Optional[timedelta]:
+    def duration(self) -> timedelta | None:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         elif self.start_time:
@@ -71,7 +70,7 @@ class ComfyUIError(Exception):
     """Exception personnalisée pour les erreurs ComfyUI"""
 
     def __init__(
-        self, message: str, code: Optional[str] = None, details: Optional[Dict] = None
+        self, message: str, code: str | None = None, details: dict | None = None
     ):
         super().__init__(message)
         self.code = code
@@ -84,15 +83,15 @@ class ComfyUIClient:
     Gère les workflows, le monitoring et la communication bidirectionnelle
     """
 
-    def __init__(self, config: Optional[ComfyUIConfig] = None):
+    def __init__(self, config: ComfyUIConfig | None = None):
         self.config = config or ComfyUIConfig()
-        self.websocket: Optional[websockets.WebSocketServerProtocol] = None
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.websocket: websockets.WebSocketServerProtocol | None = None
+        self.session: aiohttp.ClientSession | None = None
         self.client_id = str(uuid.uuid4())
-        self.active_workflows: Dict[str, WorkflowProgress] = {}
-        self.message_handlers: Dict[str, Callable] = {}
+        self.active_workflows: dict[str, WorkflowProgress] = {}
+        self.message_handlers: dict[str, Callable] = {}
         self.is_connected = False
-        self._monitoring_task: Optional[asyncio.Task] = None
+        self._monitoring_task: asyncio.Task | None = None
 
         logger.info(f"Client ComfyUI initialisé - ID: {self.client_id}")
         logger.info(f"Configuration: {self.config.base_url}")
@@ -267,12 +266,12 @@ class ComfyUIClient:
             logger.error(f"Erreur dans le monitoring des messages: {e}")
             self.is_connected = False
 
-    async def _handle_status_message(self, data: Dict[str, Any]):
+    async def _handle_status_message(self, data: dict[str, Any]):
         """Gère les messages de statut"""
         status_data = data.get("data", {})
         logger.debug(f"Statut ComfyUI: {status_data}")
 
-    async def _handle_progress_message(self, data: Dict[str, Any]):
+    async def _handle_progress_message(self, data: dict[str, Any]):
         """Gère les messages de progression"""
         progress_data = data.get("data", {})
         workflow_id = progress_data.get("prompt_id")
@@ -294,7 +293,7 @@ class ComfyUIClient:
                 f"Progression workflow {workflow_id[:8]}: {workflow.progress:.1%}"
             )
 
-    async def _handle_executing_message(self, data: Dict[str, Any]):
+    async def _handle_executing_message(self, data: dict[str, Any]):
         """Gère les messages d'exécution de nœud"""
         exec_data = data.get("data", {})
         workflow_id = exec_data.get("prompt_id")
@@ -303,11 +302,18 @@ class ComfyUIClient:
         if workflow_id and workflow_id in self.active_workflows:
             workflow = self.active_workflows[workflow_id]
 
-            # Si node_id est None, cela signifie que le workflow est terminé
+            # Si node_id est None, cela signifie que le workflow est terminé.
+            # ComfyUI envoie toujours executing(node=null) en fin de workflow,
+            # y compris après une erreur → ne pas écraser un statut "error"
             if node_id is None:
-                workflow.status = "completed"
                 workflow.end_time = datetime.now()
-                logger.info(f"✅ Workflow {workflow_id[:8]} terminé avec succès")
+                if workflow.status == "error":
+                    logger.warning(
+                        f"⚠️ Workflow {workflow_id[:8]} terminé avec erreur: {workflow.error_message}"
+                    )
+                else:
+                    workflow.status = "completed"
+                    logger.info(f"✅ Workflow {workflow_id[:8]} terminé avec succès")
                 return
 
             workflow.current_node = node_id
@@ -318,7 +324,7 @@ class ComfyUIClient:
 
             logger.info(f"Exécution nœud {node_id} pour workflow {workflow_id[:8]}")
 
-    async def _handle_executed_message(self, data: Dict[str, Any]):
+    async def _handle_executed_message(self, data: dict[str, Any]):
         """Gère les messages de nœud exécuté"""
         exec_data = data.get("data", {})
         workflow_id = exec_data.get("prompt_id")
@@ -335,7 +341,7 @@ class ComfyUIClient:
                 f"Nœud terminé pour workflow {workflow_id[:8]} ({workflow.completed_nodes}/{workflow.total_nodes})"
             )
 
-    async def _handle_error_message(self, data: Dict[str, Any]):
+    async def _handle_error_message(self, data: dict[str, Any]):
         """Gère les messages d'erreur"""
         error_data = data.get("data", {})
         workflow_id = error_data.get("prompt_id")
@@ -356,7 +362,7 @@ class ComfyUIClient:
             workflow.error_message = error_message
             workflow.end_time = datetime.now()
 
-    async def _handle_cached_message(self, data: Dict[str, Any]):
+    async def _handle_cached_message(self, data: dict[str, Any]):
         """Gère les messages de cache"""
         cache_data = data.get("data", {})
         workflow_id = cache_data.get("prompt_id")
@@ -365,7 +371,7 @@ class ComfyUIClient:
             logger.info(f"Nœuds en cache utilisés pour workflow {workflow_id[:8]}")
 
     async def queue_prompt(
-        self, workflow: Dict[str, Any], images: Optional[Dict[str, Any]] = None
+        self, workflow: dict[str, Any], images: dict[str, Any | None] = None
     ) -> str:
         """
         Met en file d'attente un workflow pour exécution
@@ -415,7 +421,7 @@ class ComfyUIClient:
             logger.error(f"Erreur lors de la mise en queue du workflow: {e}")
             raise ComfyUIError(f"Échec de la mise en queue: {e}")
 
-    async def _upload_image(self, name: str, image_data: Union[bytes, str, Path]):
+    async def _upload_image(self, name: str, image_data: bytes | str | Path):
         """Upload une image vers ComfyUI"""
         try:
             if isinstance(image_data, Path):
@@ -446,14 +452,20 @@ class ComfyUIClient:
             raise
 
     async def wait_for_completion(
-        self, workflow_id: str, timeout: Optional[int] = None
+        self,
+        workflow_id: str,
+        timeout: int | None = None,
+        progress_callback: Callable[[WorkflowProgress], None] | None = None,
     ) -> WorkflowProgress:
         """
-        Attend la completion d'un workflow
+        Attend la completion d'un workflow avec relais de progression optionnel
 
         Args:
             workflow_id: ID du workflow à surveiller
             timeout: Timeout en secondes (optionnel)
+            progress_callback: Fonction appelée à chaque changement de progression.
+                Reçoit l'objet WorkflowProgress mis à jour par le monitoring WebSocket.
+                Permet au caller de synchroniser la progression en temps réel.
 
         Returns:
             WorkflowProgress: État final du workflow
@@ -476,7 +488,16 @@ class ComfyUIClient:
                 logger.info(
                     f"Workflow {workflow_id[:8]} terminé avec statut: {workflow.status}"
                 )
+                if progress_callback:
+                    progress_callback(workflow)
                 return workflow
+
+            # Appel régulier du callback (toutes les 2s) pour permettre :
+            # - le relais de progression en temps réel
+            # - la détection des phases silencieuses (nodes sans progression)
+            # - l'estimation temporelle pendant ces phases
+            if progress_callback:
+                progress_callback(workflow)
 
             # Vérifier le timeout
             elapsed = (datetime.now() - start_time).total_seconds()
@@ -486,10 +507,9 @@ class ComfyUIClient:
                 logger.error(f"Timeout pour workflow {workflow_id[:8]}")
                 raise ComfyUIError(f"Timeout workflow {workflow_id}")
 
-            # Attendre un peu avant de revérifier
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(2.0)
 
-    async def get_output_images(self, workflow_id: str) -> List[Dict[str, Any]]:
+    async def get_output_images(self, workflow_id: str) -> list[dict[str, Any]]:
         """
         Récupère les images/vidéos de sortie d'un workflow terminé
 
@@ -497,7 +517,7 @@ class ComfyUIClient:
             workflow_id: ID du workflow
 
         Returns:
-            List[Dict]: Liste des images/vidéos de sortie
+            list[dict]: Liste des images/vidéos de sortie
         """
         try:
             url = f"{self.config.base_url}/history/{workflow_id}"
@@ -576,7 +596,7 @@ class ComfyUIClient:
             logger.error(f"Erreur téléchargement image {filename}: {e}")
             raise
 
-    async def get_queue_status(self) -> Dict[str, Any]:
+    async def get_queue_status(self) -> dict[str, Any]:
         """Récupère le statut de la file d'attente"""
         try:
             url = f"{self.config.base_url}/queue"
@@ -610,11 +630,11 @@ class ComfyUIClient:
             logger.error(f"Erreur lors de l'interruption: {e}")
             return False
 
-    def get_workflow_progress(self, workflow_id: str) -> Optional[WorkflowProgress]:
+    def get_workflow_progress(self, workflow_id: str) -> WorkflowProgress | None:
         """Récupère l'état de progression d'un workflow"""
         return self.active_workflows.get(workflow_id)
 
-    def list_active_workflows(self) -> List[WorkflowProgress]:
+    def list_active_workflows(self) -> list[WorkflowProgress]:
         """Liste tous les workflows actifs"""
         return list(self.active_workflows.values())
 
@@ -623,7 +643,7 @@ class ComfyUIClient:
 class ComfyUISession:
     """Gestionnaire de contexte pour les sessions ComfyUI"""
 
-    def __init__(self, config: Optional[ComfyUIConfig] = None):
+    def __init__(self, config: ComfyUIConfig | None = None):
         self.client = ComfyUIClient(config)
 
     async def __aenter__(self):
@@ -641,7 +661,7 @@ class ComfyUISession:
 
 
 # Fonctions utilitaires
-async def test_comfyui_connection(config: Optional[ComfyUIConfig] = None) -> bool:
+async def test_comfyui_connection(config: ComfyUIConfig | None = None) -> bool:
     """
     Test rapide de connexion à ComfyUI
 
@@ -661,77 +681,6 @@ async def test_comfyui_connection(config: Optional[ComfyUIConfig] = None) -> boo
     except Exception as e:
         logger.error(f"❌ ComfyUI inaccessible: {e}")
         return False
-
-
-# Fonction pour créer un workflow WAN 2.2 de base
-def create_wan22_workflow(
-    input_image: str,
-    prompt: str = "",
-    steps: int = 20,
-    cfg_scale: float = 7.5,
-    seed: Optional[int] = None,
-) -> Dict[str, Any]:
-    """
-    Crée un workflow WAN 2.2 pour la génération image-to-video
-
-    Args:
-        input_image: Nom du fichier image d'entrée
-        prompt: Prompt textuel (optionnel)
-        steps: Nombre de steps de dénoising
-        cfg_scale: Échelle de guidance
-        seed: Seed pour la génération (aléatoire si None)
-
-    Returns:
-        Dict: Workflow ComfyUI pour WAN 2.2
-    """
-    if seed is None:
-        import random
-
-        seed = random.randint(0, 2**32 - 1)
-
-    workflow = {
-        "1": {"class_type": "LoadImage", "inputs": {"image": input_image}},
-        "2": {
-            "class_type": "WAN22_DiffusionModelLoader",
-            "inputs": {
-                "model_path": "models/wan2.2-i2v-a14b/high_noise_model/diffusion_pytorch_model-00001-of-00006.safetensors"
-            },
-        },
-        "3": {
-            "class_type": "WAN22_VAELoader",
-            "inputs": {"vae_path": "models/wan2.2-i2v-a14b/Wan2.1_VAE.pth"},
-        },
-        "4": {
-            "class_type": "WAN22_TextEncoder",
-            "inputs": {
-                "text_encoder_path": "models/wan2.2-i2v-a14b/models_t5_umt5-xxl-enc-bf16.pth",
-                "prompt": prompt,
-            },
-        },
-        "5": {
-            "class_type": "WAN22_I2V_Sampler",
-            "inputs": {
-                "model": ["2", 0],
-                "vae": ["3", 0],
-                "text_encoder": ["4", 0],
-                "image": ["1", 0],
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "seed": seed,
-                "frames": 16,
-                "fps": 8,
-            },
-        },
-        "6": {
-            "class_type": "SaveVideo",
-            "inputs": {"video": ["5", 0], "filename_prefix": "wan22_cinemagraph"},
-        },
-    }
-
-    logger.info(
-        f"Workflow WAN 2.2 créé - Image: {input_image}, Steps: {steps}, Seed: {seed}"
-    )
-    return workflow
 
 
 if __name__ == "__main__":

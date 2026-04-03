@@ -8,10 +8,9 @@ import requests
 import yaml
 import subprocess
 from pathlib import Path
-from typing import Dict, Tuple
+
 
 # Import du système de logging centralisé
-sys.path.append(str(Path(__file__).parent.parent))
 from src.logger import get_logger, setup_logger
 
 # Configuration du logger pour ce script avec output console
@@ -19,7 +18,7 @@ setup_logger(level="INFO")
 logger = get_logger("url_validation")
 
 
-def load_model_config(config_path: str = "config/model_versions.yaml") -> Dict:
+def load_model_config(config_path: str = "config/model_versions.yaml") -> dict:
     """Charge la configuration des modèles"""
     try:
         with open(config_path, "r") as f:
@@ -39,7 +38,7 @@ def load_model_config(config_path: str = "config/model_versions.yaml") -> Dict:
         return {}
 
 
-def validate_repository_url(repo_url: str) -> Tuple[bool, str]:
+def validate_repository_url(repo_url: str) -> tuple[bool, str]:
     """Valide un repository Git"""
     try:
         if repo_url.endswith(".git"):
@@ -70,7 +69,7 @@ def validate_repository_url(repo_url: str) -> Tuple[bool, str]:
         return False, str(e)
 
 
-def validate_huggingface_repo(repo_id: str) -> Tuple[bool, str]:
+def validate_huggingface_repo(repo_id: str) -> tuple[bool, str]:
     """Valide un repository HuggingFace"""
     try:
         url = f"https://huggingface.co/{repo_id}"
@@ -98,7 +97,7 @@ def validate_huggingface_repo(repo_id: str) -> Tuple[bool, str]:
         return False, str(e)
 
 
-def check_huggingface_cli() -> Tuple[bool, str]:
+def check_huggingface_cli() -> tuple[bool, str]:
     """Vérifie que huggingface-cli est installé"""
     try:
         logger.debug("Vérification de huggingface-cli...")

@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """
-Vérifie la disponibilité et la version des fichiers upstream
-Détecte les nouvelles versions en comparant les tailles de fichiers
+Vérifie la disponibilité et la version des fichiers upstream sur HuggingFace.
+
+Utilise le registre central (config/model_registry.yaml) comme source de vérité.
+Détecte les nouvelles versions en comparant les tailles de fichiers via HEAD requests.
 """
 
 import sys
-import json
 import argparse
-import requests
-from pathlib import Path
-from typing import Dict, Tuple
 
-# Ajouter le répertoire parent au path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import requests
 
 from src.logger import get_logger
+from src.model_registry import get_registry, ModelConfig
 
 logger = get_logger("upstream_health")
 
@@ -22,46 +20,38 @@ logger = get_logger("upstream_health")
 SIZE_TOLERANCE = 0.01
 
 
-def load_metadata() -> Dict:
-    """Charge le fichier models_metadata.json"""
-    metadata_path = Path(__file__).parent.parent / "models_metadata.json"
-
-    if not metadata_path.exists():
-        logger.error(f"❌ Fichier metadata non trouvé: {metadata_path}")
-        sys.exit(1)
-
-    with open(metadata_path, "r") as f:
-        return json.load(f)
-
-
-def check_file_size(url: str, expected_size: int, filename: str) -> Tuple[bool, int]:
+def check_file_availability(
+    url: str, expected_size: int, filename: str
+) -> tuple[bool, int]:
     """
-    Vérifie la taille d'un fichier via HEAD request
+    Vérifie la disponibilité et la taille d'un fichier via HEAD request.
 
     Args:
-        url: URL du fichier
-        expected_size: Taille attendue en bytes
-        filename: Nom du fichier (pour logs)
+        url: URL directe du fichier.
+        expected_size: Taille attendue en bytes (0 = vérification accessibilité seule).
+        filename: Nom du fichier pour les logs.
 
     Returns:
-        (is_valid, actual_size): True si taille OK, False sinon + taille réelle
+        (is_valid, actual_size) — True si accessible et taille cohérente.
     """
     try:
-        # HEAD request pour obtenir la taille sans télécharger
-        response = requests.head(url, allow_redirects=True, timeout=10)
+        response = requests.head(url, allow_redirects=True, timeout=15)
 
         if response.status_code != 200:
             logger.error(f"   ❌ {filename}: HTTP {response.status_code}")
             return False, 0
 
-        # Récupérer la taille
         actual_size = int(response.headers.get("Content-Length", 0))
 
+        # Pas de taille attendue → simple vérification d'accessibilité
+        if expected_size == 0:
+            logger.success(f"   ✅ {filename}: accessible")
+            return True, actual_size
+
         if actual_size == 0:
-            logger.warning(f"   ⚠️  {filename}: Taille non disponible dans headers")
+            logger.warning(f"   ⚠️  {filename}: taille non disponible dans headers")
             return False, 0
 
-        # Calculer la tolérance
         min_size = expected_size * (1 - SIZE_TOLERANCE)
         max_size = expected_size * (1 + SIZE_TOLERANCE)
 
@@ -72,124 +62,122 @@ def check_file_size(url: str, expected_size: int, filename: str) -> Tuple[bool, 
                 f"   ✅ {filename}: {size_mb:.0f} MB (attendu: {expected_mb:.0f} MB)"
             )
             return True, actual_size
-        else:
-            size_mb = actual_size / (1024**2)
-            expected_mb = expected_size / (1024**2)
-            diff_percent = ((actual_size - expected_size) / expected_size) * 100
-            logger.warning(
-                f"   ⚠️  {filename}: {size_mb:.0f} MB (attendu: {expected_mb:.0f} MB, différence: {diff_percent:+.1f}%)"
-            )
-            logger.warning("   → Nouvelle version détectée ou fichier modifié")
-            return False, actual_size
+
+        size_mb = actual_size / (1024**2)
+        expected_mb = expected_size / (1024**2)
+        diff_pct = ((actual_size - expected_size) / expected_size) * 100
+        logger.warning(
+            f"   ⚠️  {filename}: {size_mb:.0f} MB "
+            f"(attendu: {expected_mb:.0f} MB, diff: {diff_pct:+.1f}%)"
+        )
+        logger.warning("   → Nouvelle version détectée ou fichier modifié")
+        return False, actual_size
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"   ❌ {filename}: Erreur réseau - {e}")
-        return False, 0
-    except Exception as e:
-        logger.error(f"   ❌ {filename}: Erreur - {e}")
+        logger.error(f"   ❌ {filename}: erreur réseau — {e}")
         return False, 0
 
 
-def check_huggingface_repo_file(
-    repo: str, path: str, expected_size: int, filename: str
-) -> Tuple[bool, int]:
-    """Vérifie un fichier sur HuggingFace"""
-    url = f"https://huggingface.co/{repo}/resolve/main/{path}"
-    return check_file_size(url, expected_size, filename)
+def check_hf_file(
+    repo: str, hf_path: str, expected_size: int, filename: str
+) -> tuple[bool, int]:
+    """Vérifie un fichier sur HuggingFace via son repo et chemin."""
+    url = f"https://huggingface.co/{repo}/resolve/main/{hf_path}"
+    return check_file_availability(url, expected_size, filename)
 
 
-def check_model_health(model_name: str, metadata: Dict) -> bool:
+def check_model_health(model: ModelConfig) -> bool:
     """
-    Vérifie la santé d'un modèle upstream
+    Vérifie l'accessibilité et la cohérence de tous les fichiers upstream d'un modèle.
 
     Args:
-        model_name: Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)
-        metadata: Données models_metadata.json
+        model: Configuration du modèle depuis le registre.
 
     Returns:
-        True si tous les fichiers CRITIQUES OK, False sinon
-        (Les composants optionnels n'affectent pas le résultat)
+        True si tous les fichiers critiques sont disponibles et cohérents.
     """
-    logger.info(f"🔍 Vérification upstream pour {model_name}...")
+    registry = get_registry()
+    logger.info(f"🔍 Vérification upstream pour {model.name}...")
+    all_valid = True
 
-    if model_name not in metadata["models"]:
-        logger.error(f"❌ Modèle inconnu: {model_name}")
-        return False
+    # 1. Fichiers de diffusion (critiques)
+    logger.info("📦 Fichiers de diffusion...")
+    for df in model.diffusion_files:
+        ok, _ = check_hf_file(model.hf_repo, df.hf_path, df.size_bytes, df.filename)
+        if not ok:
+            all_valid = False
 
-    model_data = metadata["models"][model_name]
-    all_critical_valid = True
-    optional_failed = []
+    # 2. VAE (critique si séparé)
+    if model.vae.filename != "integrated":
+        logger.info("📦 VAE...")
+        # Pas de size_bytes dans VaeConfig → vérification d'accessibilité
+        ok, _ = check_hf_file(model.hf_repo, model.vae.hf_path, 0, model.vae.filename)
+        if not ok:
+            all_valid = False
+    else:
+        logger.info("   ℹ️  VAE intégré dans le checkpoint")
 
-    # Vérifier les fichiers du modèle (TOUS critiques)
-    logger.info("📦 Vérification des fichiers du modèle...")
-    for filename, file_data in model_data["files"].items():
-        repo = file_data["repo"]
-        path = file_data["path"]
-        expected_size = file_data["size"]
-
-        is_valid, _ = check_huggingface_repo_file(repo, path, expected_size, filename)
-        if not is_valid:
-            all_critical_valid = False
-
-    # Vérifier les composants partagés (CLIP, upscalers)
-    logger.info("🔧 Vérification des composants partagés...")
-    for filename, file_data in metadata["shared_components"].items():
-        # Vérifier si ce composant est requis pour ce modèle
-        if model_name in file_data["required_for"]:
-            url = file_data["url"]
-            expected_size = file_data["size"]
-            is_optional = file_data.get("optional", False)
-
-            is_valid, _ = check_file_size(url, expected_size, filename)
-            if not is_valid:
-                if is_optional:
-                    # Composant optionnel : logger mais ne pas bloquer
-                    optional_failed.append(filename)
-                    logger.warning(
-                        f"   ⚠️  {filename} indisponible (optionnel, sera téléchargé plus tard)"
-                    )
-                else:
-                    # Composant critique : bloquer
-                    all_critical_valid = False
-
-    # Logger les composants optionnels échoués
-    if optional_failed:
-        logger.info(
-            f"ℹ️  Composants optionnels indisponibles: {', '.join(optional_failed)}"
+    # 3. Text encoder (critique)
+    if model.text_encoder:
+        # Text encoder propre au modèle (Gemma pour LTX)
+        te = model.text_encoder
+        logger.info(f"📦 Text encoder ({te.filename})...")
+        ok, _ = check_hf_file(te.hf_repo, te.hf_path, te.size_bytes, te.filename)
+        if not ok:
+            all_valid = False
+    else:
+        # T5 partagé (WAN)
+        shared_te = registry.get_shared_components().text_encoder
+        logger.info(f"📦 Text encoder partagé ({shared_te.filename})...")
+        ok, _ = check_hf_file(
+            shared_te.hf_repo, shared_te.hf_path, shared_te.size_bytes,
+            shared_te.filename,
         )
-        logger.info("   → Seront téléchargés pendant le setup si disponibles")
+        if not ok:
+            all_valid = False
 
-    return all_critical_valid
+    # 4. Composants partagés (non bloquants)
+    shared = registry.get_shared_components()
+    logger.info("🔧 Composants partagés (upscalers)...")
+    for up in shared.upscalers:
+        ok, _ = check_file_availability(up.url, 0, up.filename)
+        if not ok and not up.optional:
+            all_valid = False
+        elif not ok:
+            logger.warning(
+                f"   ⚠️  {up.filename} indisponible (optionnel)"
+            )
+
+    return all_valid
 
 
-def main():
+def main() -> None:
+    """Point d'entrée CLI — vérifie la santé upstream d'un modèle du registre."""
     parser = argparse.ArgumentParser(
-        description="Vérifie la disponibilité et la version des fichiers upstream"
+        description="Vérifie la disponibilité des fichiers upstream via le registre"
     )
-    parser.add_argument(
-        "model_name",
-        help="Nom du modèle (wan2.2-ti2v-5b ou wan2.2-i2v-a14b)",
-    )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Affichage détaillé",
-    )
+    parser.add_argument("model_name", help="Nom du modèle (ex: ltx-2.3-i2v-dev)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Logs détaillés")
     args = parser.parse_args()
 
-    # Charger les métadonnées
-    metadata = load_metadata()
-    logger.info(f"📋 Métadonnées chargées (version {metadata['version']})")
+    registry = get_registry()
+    model = registry.get_model(args.model_name)
 
-    # Vérifier le modèle
-    is_healthy = check_model_health(args.model_name, metadata)
+    if not model:
+        logger.error(f"❌ Modèle inconnu du registre: {args.model_name}")
+        available = ", ".join(registry.list_models())
+        logger.error(f"   Modèles disponibles: {available}")
+        sys.exit(1)
+
+    logger.info(f"📋 Registre chargé — {model.display_name} ({model.architecture})")
+
+    is_healthy = check_model_health(model)
 
     if is_healthy:
         logger.success("")
         logger.success("=" * 70)
         logger.success("✅ UPSTREAM DISPONIBLE ET À JOUR")
-        logger.success(f"   Modèle: {args.model_name}")
+        logger.success(f"   Modèle: {args.model_name} ({model.display_name})")
         logger.success("   Tous les fichiers correspondent aux versions attendues")
         logger.success("   Téléchargement upstream recommandé")
         logger.success("=" * 70)
@@ -199,7 +187,7 @@ def main():
         logger.warning("")
         logger.warning("=" * 70)
         logger.warning("⚠️  UPSTREAM NON DISPONIBLE OU VERSION DIFFÉRENTE")
-        logger.warning(f"   Modèle: {args.model_name}")
+        logger.warning(f"   Modèle: {args.model_name} ({model.display_name})")
         logger.warning("   Raisons possibles:")
         logger.warning("   - Nouvelle version upstream disponible")
         logger.warning("   - Fichiers temporairement indisponibles")

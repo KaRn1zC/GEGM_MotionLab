@@ -3,11 +3,8 @@
 Tests unitaires pour le système de logging
 """
 
-import sys
 from pathlib import Path
 
-# Ajouter le projet au path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.logger import (
     get_logger,

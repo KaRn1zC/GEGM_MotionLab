@@ -1,0 +1,272 @@
+# =============================================================================
+# Registre central des modèles — source de vérité unique
+# Version: 1.0.0
+# Date: 2026-03-16
+#
+# Ajouter un nouveau modèle = 1 entrée ici + 1 template workflow JSON.
+# Zéro modification Python/bash/Makefile.
+# =============================================================================
+
+models:
+  wan2.2-ti2v-5b:
+    display_name: "WAN 2.2 5B"
+    model_type: "5b"
+    architecture: "dense"
+    hf_repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+    vram_requirement: "48GB+"
+    estimated_time: "~10 min"
+
+    runtime:
+      timeout_seconds: 5400
+      max_frames: 240
+      max_fps: 60
+
+    diffusion_files:
+      - filename: "wan2.2_ti2v_5B_fp16.safetensors"
+        hf_path: "split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors"
+        comfyui_subdir: "diffusion_models"
+        size_bytes: 9999658848
+        min_size_gb: 8.0
+        max_size_gb: 11.0
+        role: null
+
+    vae:
+      filename: "wan2.2_vae.safetensors"
+      hf_path: "split_files/vae/wan2.2_vae.safetensors"
+      expected_channels: 48
+      min_size_gb: 0.5
+      max_size_gb: 2.0
+      version: "2.2"
+
+    checkpoint_detection:
+      primary_files:
+        - "wan2.2_ti2v_5B_fp16.safetensors"
+      fallback_files:
+        - "diffusion_pytorch_model.safetensors"
+      return_type: "single"
+
+    resolution:
+      max_width: 1280
+      max_height: 736
+      dimension_stride: 32
+      upscale_trigger_ratio: 1.5
+      supersampling_max_ratio: 4.0
+      vae_tiling_pixel_threshold: 2073600   # 1920×1080
+      vae_tiling_upscale_threshold: 4.0
+
+    workflow_template: "wan22_5b_i2v"
+    workflow_template_upscale: "wan22_5b_with_upscale"
+
+    verification:
+      diffusion_keys:
+        - "blocks.0.ffn.0.weight"
+        - "blocks.14.ffn.0.weight"
+        - "blocks.23.ffn.0.weight"
+      vae_keys:
+        - "conv1.bias"
+        - "conv2.bias"
+        - "conv2.weight"
+        - "decoder.conv1.bias"
+        - "decoder.conv1.weight"
+        - "encoder.conv1.bias"
+        - "encoder.conv1.weight"
+
+    symlinks:
+      - source: "../diffusion_models/wan2.2_ti2v_5B_fp16.safetensors"
+        target: "wan2.2_ti2v_5B_fp16.safetensors"
+      - source: "../text_encoders/umt5_xxl_fp16.safetensors"
+        target: "umt5_xxl_fp16.safetensors"
+      - source: "../vae/wan2.2_vae.safetensors"
+        target: "wan2.2_vae.safetensors"
+
+  wan2.2-i2v-a14b:
+    display_name: "WAN 2.2 14B"
+    model_type: "14b"
+    architecture: "moe"
+    hf_repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+    vram_requirement: "80GB+"
+    estimated_time: "~28 min"
+
+    runtime:
+      timeout_seconds: 10800
+      max_frames: 240
+      max_fps: 60
+
+    diffusion_files:
+      - filename: "wan2.2_i2v_high_noise_14B_fp16.safetensors"
+        hf_path: "split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors"
+        comfyui_subdir: "diffusion_models"
+        size_bytes: 30706966480
+        min_size_gb: 25.0
+        max_size_gb: 32.0
+        role: "high_noise"
+      - filename: "wan2.2_i2v_low_noise_14B_fp16.safetensors"
+        hf_path: "split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors"
+        comfyui_subdir: "diffusion_models"
+        size_bytes: 30706966480
+        min_size_gb: 25.0
+        max_size_gb: 32.0
+        role: "low_noise"
+
+    vae:
+      filename: "wan_2.1_vae.safetensors"
+      hf_path: "split_files/vae/wan_2.1_vae.safetensors"
+      expected_channels: 16
+      min_size_gb: 0.2
+      max_size_gb: 0.4
+      version: "2.1"
+
+    checkpoint_detection:
+      primary_files:
+        - "wan2.2_i2v_high_noise_14B_fp16.safetensors"
+        - "wan2.2_i2v_low_noise_14B_fp16.safetensors"
+      fallback_files:
+        - "diffusion_pytorch_model.safetensors"
+      return_type: "moe_pair"
+
+    resolution:
+      max_width: 1280
+      max_height: 736
+      dimension_stride: 32
+      upscale_trigger_ratio: 1.5
+      supersampling_max_ratio: 4.0
+      vae_tiling_pixel_threshold: 2073600   # 1920×1080
+      vae_tiling_upscale_threshold: 4.0
+
+    workflow_template: "wan22_14b_i2v"
+    workflow_template_upscale: "wan22_14b_with_upscale"
+
+    verification:
+      diffusion_keys:
+        - "blocks.0.ffn.0.weight"
+        - "blocks.14.ffn.0.weight"
+        - "blocks.23.ffn.0.weight"
+      vae_keys:
+        - "conv1.bias"
+        - "conv2.bias"
+        - "conv2.weight"
+        - "decoder.conv1.bias"
+        - "decoder.conv1.weight"
+        - "encoder.conv1.bias"
+        - "encoder.conv1.weight"
+
+    symlinks:
+      - source: "../diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors"
+        target: "wan2.2_i2v_high_noise_14B_fp16.safetensors"
+      - source: "../diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors"
+        target: "wan2.2_i2v_low_noise_14B_fp16.safetensors"
+      - source: "../text_encoders/umt5_xxl_fp16.safetensors"
+        target: "umt5_xxl_fp16.safetensors"
+      - source: "../vae/wan_2.1_vae.safetensors"
+        target: "wan_2.1_vae.safetensors"
+
+  # =========================================================================
+  # LTX 2.3 — DiT 22B, Gemma 3 12B encoder, boucle native LTXVLoopingSampler
+  # =========================================================================
+
+  ltx-2.3-i2v-dev:
+    display_name: "LTX 2.3 22B"
+    model_type: "dev"
+    architecture: "dit"
+    hf_repo: "Lightricks/LTX-2.3"
+    vram_requirement: "80GB+"
+    estimated_time: "~13 min"
+
+    runtime:
+      timeout_seconds: 7200
+      max_frames: 241
+      max_fps: 50
+
+    resolution:
+      max_width: 1280
+      max_height: 736
+      dimension_stride: 32
+      upscale_trigger_ratio: 1.3
+      supersampling_max_ratio: 4.0
+      vae_tiling_pixel_threshold: 2073600   # 1920×1080
+      vae_tiling_upscale_threshold: 4.0
+
+    diffusion_files:
+      - filename: "ltx-2.3-22b-dev.safetensors"
+        hf_path: "ltx-2.3-22b-dev.safetensors"
+        comfyui_subdir: "checkpoints"
+        size_bytes: 46150000000   # ~43 GB (vérifié via HF HEAD 2026-03-19: 44011 MB)
+        min_size_gb: 40.0
+        max_size_gb: 48.0
+        role: null
+
+    text_encoder:
+      # Chemin imbriqué requis par LTXVGemmaCLIPModelLoader (path.parents[1] = model_root)
+      filename: "gemma_3_12B_it/text_encoder/model.safetensors"
+      hf_repo: "Comfy-Org/ltx-2"
+      hf_path: "split_files/text_encoders/gemma_3_12B_it.safetensors"
+      comfyui_subdir: "text_encoders"
+      size_bytes: 24381218816   # ~22.7 GB (vérifié via HF HEAD 2026-03-19: 23250 MB)
+
+    vae:
+      filename: "integrated"
+      hf_path: ""
+      expected_channels: 128
+      min_size_gb: 0
+      max_size_gb: 0
+      version: "2.3"
+
+    checkpoint_detection:
+      primary_files:
+        - "ltx-2.3-22b-dev.safetensors"
+      fallback_files: []
+      return_type: "single"
+
+    workflow_template: "ltx23_i2v"
+    workflow_template_upscale: "ltx23_i2v_with_upscale"
+
+    verification:
+      diffusion_keys: []
+      vae_keys: []
+
+    symlinks: []
+
+# Composants partagés entre tous les modèles
+shared_components:
+  text_encoder:
+    filename: "umt5_xxl_fp16.safetensors"
+    hf_repo: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+    hf_path: "split_files/text_encoders/umt5_xxl_fp16.safetensors"
+    comfyui_subdir: "text_encoders"
+    size_bytes: 12243436880
+    min_size_gb: 10.0
+    max_size_gb: 13.0
+    critical_keys:
+      - "shared.weight"
+      - "encoder.block.0.layer.0.SelfAttention.q.weight"
+      - "encoder.block.0.layer.1.DenseReluDense.wi_0.weight"
+      - "encoder.block.0.layer.1.DenseReluDense.wi_1.weight"
+      - "encoder.block.0.layer.1.DenseReluDense.wo.weight"
+      - "encoder.block.11.layer.1.DenseReluDense.wi_0.weight"
+      - "encoder.block.23.layer.0.SelfAttention.q.weight"
+      - "encoder.block.23.layer.1.DenseReluDense.wo.weight"
+      - "encoder.final_layer_norm.weight"
+
+  clip_vision:
+    filename: "clip-vit-large-patch14-336.safetensors"
+    url: "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors"
+    comfyui_subdir: "clip_vision"
+    size_bytes: 2528373760
+
+  upscalers:
+    - filename: "HAT-L_SRx4_ImageNet-pretrain.pth"
+      url: "https://huggingface.co/jaideepsingh/upscale_models/resolve/main/HAT/HAT-L_SRx4_ImageNet-pretrain.pth"
+      comfyui_subdir: "upscale_models"
+      optional: false
+      role: "postgen"
+    - filename: "HAT_SRx2.pth"
+      url: "https://huggingface.co/jaideepsingh/upscale_models/resolve/main/HAT/HAT_SRx2.pth"
+      comfyui_subdir: "upscale_models"
+      optional: false
+      role: "pregen"
+
+# Ordre de priorité pour la détection automatique (LTX dev > WAN 14B > WAN 5B)
+detection_priority:
+  - "ltx-2.3-i2v-dev"
+  - "wan2.2-i2v-a14b"
+  - "wan2.2-ti2v-5b"
