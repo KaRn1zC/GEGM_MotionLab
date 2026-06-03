@@ -2,7 +2,7 @@
 # Ce fichier override docker-compose.yml automatiquement
 
 services:
-  comfy_img_to_loop:
+  gegm-motionlab:
     # Mode debug activé
     environment:
       - FLASK_DEBUG=true

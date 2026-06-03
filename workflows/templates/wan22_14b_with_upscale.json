@@ -2,7 +2,7 @@
   "name": "WAN 2.2 14B + HAT-L 4x Upscale (MoE)",
   "description": "Pipeline 14B MoE: high_noise + low_noise experts + upscaling HAT-L 4x",
   "version": "2.0.5",
-  "author": "Comfy_Img_to_Loop",
+  "author": "GEGM MotionLab",
   "tags": ["pipeline", "cinemagraph", "upscale", "14B", "moe"],
 
   "parameters": {

@@ -1,5 +1,5 @@
 """
-Application Flask principale pour Comfy_Img_to_Loop
+Application Flask principale pour GEGM MotionLab
 Interface web pour la génération de cinemagraphs avec WAN 2.2
 """
 
@@ -210,7 +210,7 @@ def create_app(config_name="default"):
 app = create_app()
 
 if __name__ == "__main__":
-    logger.info("🚀 Démarrage de Comfy_Img_to_Loop Web Interface")
+    logger.info("🚀 Démarrage de GEGM MotionLab Web Interface")
 
     # Configuration depuis variables d'environnement
     host = os.getenv("FLASK_HOST", "0.0.0.0")

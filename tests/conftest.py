@@ -1,5 +1,5 @@
 """
-Configuration des tests pour Comfy_Img_to_Loop
+Configuration des tests pour GEGM MotionLab
 """
 
 import pytest

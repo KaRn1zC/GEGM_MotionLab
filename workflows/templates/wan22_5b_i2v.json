@@ -2,7 +2,7 @@
   "name": "WAN 2.2 Image-to-Video",
   "description": "Génération de cinemagraphs avec WAN 2.2 5B - Version corrigée compatible wrapper récent",
   "version": "4.5.1",
-  "author": "Comfy_Img_to_Loop",
+  "author": "GEGM MotionLab",
   "tags": ["cinemagraph", "i2v", "wan2.2", "animation"],
 
   "parameters": {

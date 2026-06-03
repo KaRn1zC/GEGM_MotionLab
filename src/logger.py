@@ -1,5 +1,5 @@
 """
-Configuration du logger pour Comfy_Img_to_Loop
+Configuration du logger pour GEGM MotionLab
 Utilise loguru pour un logging avancé avec rotation et niveaux configurables
 """
 
@@ -12,7 +12,7 @@ from typing import Any
 
 class ComfyLogger:
     """
-    Gestionnaire de logging centralisé pour Comfy_Img_to_Loop
+    Gestionnaire de logging centralisé pour GEGM MotionLab
     Basé sur loguru avec configuration flexible
     """
 
@@ -67,7 +67,7 @@ class ComfyLogger:
         # Handler fichier principal
         if self.default_config["file"]["enabled"]:
             logger.add(
-                self.logs_dir / "comfy_img_to_loop.log",
+                self.logs_dir / "gegm-motionlab.log",
                 level=self.default_config["file"]["level"],
                 format=self.default_config["file"]["format"],
                 rotation=self.default_config["file"]["rotation"],
@@ -181,7 +181,7 @@ def setup_logger(
 
     _comfy_logger.set_level(level)
 
-    logger.info("🎬 Comfy_Img_to_Loop - Système de logging initialisé")
+    logger.info("🎬 GEGM MotionLab - Système de logging initialisé")
     logger.info(f"📂 Logs sauvegardés dans: {_comfy_logger.logs_dir}")
 
     return _comfy_logger
@@ -350,7 +350,7 @@ def auto_configure():
 
 if __name__ == "__main__":
     # Test du système de logging
-    print("🧪 Test du système de logging Comfy_Img_to_Loop")
+    print("🧪 Test du système de logging GEGM MotionLab")
 
     # Configuration pour test
     test_logger = setup_logger(level="DEBUG")

@@ -59,7 +59,7 @@ async def demo_metadata():
 
 
 async def main():
-    logger.info("🎬 Démonstration OwnCloud - Comfy_Img_to_Loop")
+    logger.info("🎬 Démonstration OwnCloud - GEGM MotionLab")
     logger.info("=" * 60)
 
     await demo_config()

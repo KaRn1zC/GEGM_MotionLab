@@ -1,5 +1,5 @@
 """
-Client ComfyUI pour Comfy_Img_to_Loop
+Client ComfyUI pour GEGM MotionLab
 Interface WebSocket pour la communication avec ComfyUI et gestion des workflows
 """
 

@@ -2,7 +2,7 @@
   "name": "WAN 2.2 14B Image-to-Video (MoE)",
   "description": "Pipeline 14B MoE: utilise high_noise + low_noise experts pour qualité optimale",
   "version": "2.0.5",
-  "author": "Comfy_Img_to_Loop",
+  "author": "GEGM MotionLab",
   "tags": ["pipeline", "cinemagraph", "14B", "i2v", "moe"],
 
   "parameters": {

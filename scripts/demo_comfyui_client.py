@@ -117,7 +117,7 @@ async def demo_full_workflow(workflow):
 
 async def main():
     """Fonction principale de démonstration"""
-    logger.info("🎬 Démonstration du Client ComfyUI - Comfy_Img_to_Loop")
+    logger.info("🎬 Démonstration du Client ComfyUI - GEGM MotionLab")
     logger.info("=" * 60)
 
     # 1. Test de connexion

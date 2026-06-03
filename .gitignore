@@ -1,5 +1,5 @@
 # =============================================================================
-# Comfy_Img_to_Loop - GitIgnore Configuration (MODÈLES EXCLUS)
+# GEGM MotionLab - GitIgnore Configuration (MODÈLES EXCLUS)
 # =============================================================================
 
 # Python
@@ -166,5 +166,3 @@ nohup.out
 # Seuls les 3 README de la racine sont versionnés
 *.md
 !/README.md
-!/README_DOCKER.md
-!/README_RUNPOD.md

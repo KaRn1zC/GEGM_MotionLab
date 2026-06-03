@@ -70,7 +70,7 @@ class TestComfyLogger:
         assert logs_dir.exists(), "Le dossier logs n'a pas été créé"
 
         # Vérifier que le fichier principal existe
-        main_log = logs_dir / "comfy_img_to_loop.log"
+        main_log = logs_dir / "gegm-motionlab.log"
         assert main_log.exists(), "Le fichier de log principal n'a pas été créé"
 
 

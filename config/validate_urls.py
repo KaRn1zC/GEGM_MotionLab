@@ -125,7 +125,7 @@ def check_huggingface_cli() -> tuple[bool, str]:
 
 def main():
     """Fonction principale de validation adaptée"""
-    logger.info("🔍 Validation ComfyUI Native + HuggingFace - Comfy_Img_to_Loop")
+    logger.info("🔍 Validation ComfyUI Native + HuggingFace - GEGM MotionLab")
     logger.info("=" * 65)
 
     config = load_model_config()

@@ -30,7 +30,7 @@ GEGM MotionLab transforme vos images statiques en **cinemagraphs professionnels*
 ### Docker Compose (Local)
 
 ```bash
-git clone <repo>
+git clone https://github.com/KaRn1zC/GEGM_MotionLab.git
 cd GEGM_MotionLab
 cp .env.example .env
 docker-compose up -d
@@ -38,18 +38,6 @@ open http://localhost:5000
 ```
 
 **Prérequis :** Docker 20.10+, GPU NVIDIA 48GB+ VRAM
-
-### RunPod (Cloud)
-
-```bash
-# Préparer modèles
-make workflow MODEL=wan2.2-ti2v-5b
-
-# Déployer
-make runpod-deploy
-```
-
-Voir [README_RUNPOD.md](README_RUNPOD.md) pour le guide complet.
 
 ---
 
@@ -151,12 +139,6 @@ make workflow-ltx           # Alias LTX 2.3 22B
 # Workflows séquentiels
 make workflow-wan-all      # WAN 14B puis 5B
 make workflow-all          # Tous les modèles (3)
-
-# Déploiement
-make runpod-deploy              # Build + push → :latest
-make runpod-deploy-test         # Build + push → :test
-make runpod-deploy-nocache      # Idem sans cache (rebuild complet)
-make runpod-deploy-test-nocache # Idem sans cache
 ```
 
 ---
@@ -168,13 +150,6 @@ make runpod-deploy-test-nocache # Idem sans cache
 | CUDA out of memory     | Réduire résolution ou steps      |
 | VAE 48/96/128 channels | Vérifier VAE correct pour modèle |
 | ComfyUI timeout        | Vérifier modèles présents        |
-
----
-
-## Documentation
-
-- [README_DOCKER.md](README_DOCKER.md) - Guide Docker
-- [README_RUNPOD.md](README_RUNPOD.md) - Guide RunPod
 
 ---
 

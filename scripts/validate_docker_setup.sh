@@ -35,8 +35,6 @@ echo "📁 Fichiers obligatoires:"
 check_file "Dockerfile"
 check_file ".dockerignore"
 check_file "docker-compose.yml"
-check_file "README_DOCKER.md"
-check_file "README_RUNPOD.md"
 
 echo ""
 echo "📜 Scripts:"
@@ -46,7 +44,6 @@ check_executable "install-comfyui.sh"
 echo ""
 echo "🔧 Fichiers optionnels:"
 check_file "docker-compose.override.yml"
-check_file "docker-compose.runpod.yml"
 check_file "Makefile"
 
 # Vérifier qu'il n'y a PAS de dossier docker/

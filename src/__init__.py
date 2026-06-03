@@ -1,5 +1,5 @@
 """
-Module principal Comfy_Img_to_Loop
+Module principal GEGM MotionLab
 Système de génération de cinemagraphs avec WAN 2.2
 """
 
@@ -7,7 +7,7 @@ from .logger import get_logger, setup_logger, auto_configure
 
 # Version du projet
 __version__ = "1.0.0"
-__author__ = "Comfy_Img_to_Loop Team"
+__author__ = "GEGM MotionLab Team"
 __description__ = "Générateur de cinemagraphs professionnel avec ComfyUI et WAN 2.2"
 
 # Pas d'auto-configuration à l'import pour éviter les effets de bord

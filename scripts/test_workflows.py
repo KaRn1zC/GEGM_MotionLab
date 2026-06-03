@@ -177,7 +177,7 @@ def test_tags():
 
 def main():
     """Fonction principale"""
-    logger.info("🎬 Test des workflows ComfyUI - Comfy_Img_to_Loop")
+    logger.info("🎬 Test des workflows ComfyUI - GEGM MotionLab")
 
     # Tests
     all_valid = test_all_workflows()

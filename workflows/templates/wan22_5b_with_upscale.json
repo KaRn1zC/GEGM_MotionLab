@@ -2,7 +2,7 @@
   "name": "WAN 2.2 + HAT-L 4x Upscale",
   "description": "Pipeline complet : génération optimale + upscaling adaptatif HAT-L 4x + resize précis",
   "version": "3.5.1",
-  "author": "Comfy_Img_to_Loop",
+  "author": "GEGM MotionLab",
   "tags": ["pipeline", "cinemagraph", "upscale", "complete"],
 
   "parameters": {

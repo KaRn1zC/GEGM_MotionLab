@@ -2,7 +2,7 @@
   "name": "LTX 2.3 22B + HAT-L 4x Upscale",
   "description": "Full path officiel LTX 2.3 22B — Pipeline AV + MultimodalGuider + ClownSampler_Beta + upscaling HAT-L 4x",
   "version": "12.0.0",
-  "author": "Comfy_Img_to_Loop",
+  "author": "GEGM MotionLab",
   "tags": ["pipeline", "cinemagraph", "upscale", "ltx2.3", "complete"],
   "model_family": "ltx23",
 

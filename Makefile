@@ -2,8 +2,9 @@
 
 # Variables
 DOCKER_COMPOSE = docker-compose
-IMAGE_NAME = comfy_img_to_loop
-CONTAINER_NAME = comfy_img_to_loop
+IMAGE_NAME = gegm-motionlab
+CONTAINER_NAME = gegm-motionlab
+
 
 help: ## Afficher cette aide
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-35s\033[0m %s\n", $$1, $$2}'
@@ -26,16 +27,16 @@ logs: ## Voir les logs
 	$(DOCKER_COMPOSE) logs -f
 
 logs-app: ## Voir les logs de l'application uniquement
-	$(DOCKER_COMPOSE) logs -f comfy_img_to_loop
+	$(DOCKER_COMPOSE) logs -f gegm-motionlab
 
 shell: ## Ouvrir un shell dans le conteneur
-	$(DOCKER_COMPOSE) exec comfy_img_to_loop /bin/bash
+	$(DOCKER_COMPOSE) exec gegm-motionlab /bin/bash
 
 test: ## Exécuter les tests dans le conteneur
-	$(DOCKER_COMPOSE) exec comfy_img_to_loop pytest tests/ -v
+	$(DOCKER_COMPOSE) exec gegm-motionlab pytest tests/ -v
 
 test-workflows: ## Tester les workflows
-	$(DOCKER_COMPOSE) exec comfy_img_to_loop python scripts/test_workflows.py
+	$(DOCKER_COMPOSE) exec gegm-motionlab python scripts/test_workflows.py
 
 health: ## Vérifier le health status
 	@echo "🏥 Health check..."
@@ -297,11 +298,6 @@ workflow-all: ## Workflow séquentiel TOUS les modèles (LTX → WAN, deep clean
 
 # ==================== RunPod Commands ====================
 
-runpod-login: ## Login Docker Hub
-	@echo "🔐 Docker Hub Login..."
-	docker login
-	@echo "✅ Logged in successfully"
-
 runpod-verify-owncloud: ## Vérifier la connexion OwnCloud
 	@echo "🔍 Vérification OwnCloud..."
 	@python -c "\
@@ -313,59 +309,3 @@ print(f'   Utilisateur: {config.username}'); \
 print(f'   Dossier: {config.upload_folder}')" || \
 	(echo "❌ Erreur connexion OwnCloud"; exit 1)
 
-_runpod-setup-buildx:
-	@docker buildx create --name multiarch --use 2>/dev/null || true
-	@docker buildx inspect --bootstrap > /dev/null 2>&1
-
-runpod-deploy: _runpod-setup-buildx ## Build et push image prod (:latest) vers Docker Hub
-	@echo "🚀 Build + push image production (AMD64)..."
-	docker buildx build \
-		--platform linux/amd64 \
-		-t arnaudboy/comfy_img_to_loop:runpod \
-		-t arnaudboy/comfy_img_to_loop:latest \
-		--push \
-		.
-	@echo ""
-	@echo "✅ Image prod pushed"
-	@echo "📍 https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
-
-runpod-deploy-nocache: _runpod-setup-buildx ## Build SANS CACHE et push image prod (:latest)
-	@echo "🚀 Build + push image production (AMD64, sans cache)..."
-	docker buildx build \
-		--platform linux/amd64 \
-		--no-cache \
-		-t arnaudboy/comfy_img_to_loop:runpod \
-		-t arnaudboy/comfy_img_to_loop:latest \
-		--push \
-		.
-	@echo ""
-	@echo "✅ Image prod pushed (no-cache)"
-	@echo "📍 https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"
-
-runpod-deploy-test: _runpod-setup-buildx ## Build et push image test (:test) vers Docker Hub
-	@echo "🧪 Build + push image test (AMD64)..."
-	docker buildx build \
-		--platform linux/amd64 \
-		-t arnaudboy/comfy_img_to_loop:test \
-		--push \
-		.
-	@echo ""
-	@echo "✅ Image test pushed"
-	@echo "📍 arnaudboy/comfy_img_to_loop:test"
-
-runpod-deploy-test-nocache: _runpod-setup-buildx ## Build SANS CACHE et push image test (:test)
-	@echo "🧪 Build + push image test (AMD64, sans cache)..."
-	docker buildx build \
-		--platform linux/amd64 \
-		--no-cache \
-		-t arnaudboy/comfy_img_to_loop:test \
-		--push \
-		.
-	@echo ""
-	@echo "✅ Image test pushed (no-cache)"
-	@echo "📍 arnaudboy/comfy_img_to_loop:test"
-
-runpod-info: ## Afficher les informations RunPod
-	@echo "📦 Prod:  arnaudboy/comfy_img_to_loop:latest"
-	@echo "🧪 Test:  arnaudboy/comfy_img_to_loop:test"
-	@echo "🔗 https://hub.docker.com/r/arnaudboy/comfy_img_to_loop"

@@ -1,4 +1,4 @@
-# Configuration du système de logging pour Comfy_Img_to_Loop
+# Configuration du système de logging pour GEGM MotionLab
 # REFERENCE UNIQUEMENT - Ce fichier n'est pas chargé par l'application.
 # La configuration effective est hardcodée dans src/logger.py
 # Ce fichier documente la structure attendue pour référence.
@@ -17,7 +17,7 @@ logging:
   # Configuration fichier principal
   file:
     enabled: true
-    path: "logs/comfy_img_to_loop.log"
+    path: "logs/gegm-motionlab.log"
     level: "DEBUG"
     format: "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name} | {function} | {line} | {message}"
     rotation: "10 MB"

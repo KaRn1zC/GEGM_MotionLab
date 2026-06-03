@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting Comfy_Img_to_Loop on RunPod..."
+echo "🚀 Starting GEGM MotionLab on RunPod..."
 echo "======================================================="
 
 # Détecter le GPU
@@ -798,7 +798,7 @@ else
 fi
 
 echo ""
-echo "🎬 Comfy_Img_to_Loop ready on RunPod!"
+echo "🎬 GEGM MotionLab ready on RunPod!"
 echo "   Web Interface: Port 5000"
 echo "   ComfyUI API: http://localhost:8188"
 echo "======================================================="

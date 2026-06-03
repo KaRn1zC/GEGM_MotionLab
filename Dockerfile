@@ -4,7 +4,7 @@ FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
 # Métadonnées
 LABEL maintainer="GEGM <arnaud.boy@gegmgroup.com>"
-LABEL description="Comfy_Img_to_Loop pour RunPod - Modèles OwnCloud"
+LABEL description="GEGM MotionLab pour RunPod - Modèles OwnCloud"
 LABEL version="2.0.0-runpod-owncloud"
 LABEL cuda.version="12.8.1"
 

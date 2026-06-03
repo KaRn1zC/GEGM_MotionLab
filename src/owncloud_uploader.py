@@ -1,5 +1,5 @@
 """
-Module de sauvegarde OwnCloud pour Comfy_Img_to_Loop
+Module de sauvegarde OwnCloud pour GEGM MotionLab
 Upload sécurisé des cinemagraphs générés avec métadonnées et liens de partage
 """
 

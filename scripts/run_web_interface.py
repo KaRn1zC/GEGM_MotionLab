@@ -12,7 +12,7 @@ setup_logger(level="INFO")
 logger = get_logger("web_start")
 
 if __name__ == "__main__":
-    logger.info("🚀 Démarrage de Comfy_Img_to_Loop Web Interface")
+    logger.info("🚀 Démarrage de GEGM MotionLab Web Interface")
     logger.info("=" * 60)
 
     # Afficher les configurations

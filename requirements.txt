@@ -1,5 +1,5 @@
 # ============================================
-# Comfy_Img_to_Loop - Dépendances SANS PyTorch
+# GEGM MotionLab - Dépendances SANS PyTorch
 # Usage: Docker (PyTorch installé séparément avec CUDA)
 # ============================================
 

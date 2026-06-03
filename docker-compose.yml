@@ -1,10 +1,9 @@
 services:
-  comfy_img_to_loop:
+  gegm-motionlab:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: comfy_img_to_loop
-    image: arnaudboy/comfy_img_to_loop:latest
+    container_name: gegm-motionlab
 
     # Ports
     ports:

@@ -45,7 +45,7 @@ metadata:
   include_prompt: true
   save_separate_json: true
   custom_fields:
-    project: "Comfy_Img_to_Loop"
+    project: "GEGM MotionLab"
     generator: "WAN 2.2"
     type: "Cinemagraph"
     company: "GEGM"
