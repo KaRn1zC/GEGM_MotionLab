@@ -166,3 +166,7 @@ make workflow-all          # Tous les modèles (3)
 ---
 
 **Version:** 5.1.0 | **Status:** Production Ready | **Date:** 2026-03-17
+
+---
+
+Développé par Arnaud 'KaRn1zC' BOY
