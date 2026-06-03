@@ -75,7 +75,6 @@ tmp/
 # ========================================
 models/
 !models/.gitkeep
-!models/README.md
 
 # Tous les formats de modèles (patterns étendus)
 *.safetensors
@@ -102,6 +101,7 @@ uploads/
 # ========================================
 config/local_config.yaml
 config/secrets.yaml
+settings.local.json
 .env.local
 .env.production
 
@@ -161,5 +161,10 @@ nohup.out
 .env.*.local
 .env.production
 
-#  Code
-.md
+# Documentation Markdown
+# ========================================
+# Seuls les 3 README de la racine sont versionnés
+*.md
+!/README.md
+!/README_DOCKER.md
+!/README_RUNPOD.md
