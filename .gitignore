@@ -73,8 +73,8 @@ tmp/
 # ========================================
 # MODÈLES AI - EXCLUSION COMPLÈTE (CRITIQUE)
 # ========================================
-models/
-!models/.gitkeep
+/models/
+!/models/.gitkeep
 
 # Tous les formats de modèles (patterns étendus)
 *.safetensors
@@ -107,7 +107,6 @@ settings.local.json
 
 # Docker
 # ========================================
-.dockerignore
 
 # Cache et fichiers temporaires
 # ========================================

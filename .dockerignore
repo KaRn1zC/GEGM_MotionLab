@@ -1,0 +1,47 @@
+# Exclusions du contexte de build Docker (Kaniko en CI + buildx en local).
+# Remplace l'ancien `COPY --exclude=models` (non supporté par Kaniko).
+
+# Git
+.git/
+.gitignore
+.dockerignore
+
+# Modèles IA — téléchargés depuis OwnCloud au démarrage, jamais dans l'image
+models/
+
+# ComfyUI — cloné pendant le build par install-comfyui.sh
+comfyui/
+
+# Environnements Python & caches
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Données runtime
+outputs/
+uploads/
+web_interface/uploads/
+logs/
+*.log
+tmp/
+temp/
+
+# Secrets & réglages locaux
+.env
+.env.*
+settings.local.json
+
+# Documentation (non requise dans l'image)
+*.md
+docs/
+
+# Système / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp

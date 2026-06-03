@@ -728,6 +728,35 @@ cd /workspace/comfyui/ComfyUI
 # Créer le dossier de logs
 mkdir -p /workspace/logs
 
+# Self-test PyTorch / CUDA / kornia — diagnostic visible dans les logs téléchargeables
+# même si ComfyUI crash juste après. `python -u` + flush=True pour que la sortie
+# survive à un éventuel segfault (on voit alors la dernière ligne atteinte).
+echo "🔬 Self-test PyTorch/CUDA/kornia..."
+python -u - <<'PYEOF' 2>&1 | tee /workspace/logs/selftest.log
+import faulthandler; faulthandler.enable()   # dump complet de la stack si segfault
+import sys
+print("python:", sys.version, flush=True)
+import numpy; print("numpy:", numpy.__version__, flush=True)
+import torch
+print("torch:", torch.__version__, "| cap", torch.cuda.get_device_capability(0),
+      "| archs", torch.cuda.get_arch_list(), flush=True)
+# Isoler l'extension compilée kornia_rs (suspect n°1 du segfault à l'import)
+print(">> import kornia_rs (extension compilee)...", flush=True)
+try:
+    import kornia_rs
+    print("kornia_rs OK:", getattr(kornia_rs, "__version__", "?"), flush=True)
+except Exception as e:
+    print("kornia_rs ERROR:", repr(e), flush=True)
+print(">> import kornia ...", flush=True)
+try:
+    import kornia
+    print("kornia OK:", kornia.__version__, flush=True)
+except Exception as e:
+    print("kornia ERROR:", repr(e), flush=True)
+print("self-test done.", flush=True)
+PYEOF
+echo "🔬 Self-test terminé"
+
 nohup python main.py \
     --listen 0.0.0.0 \
     --port 8188 \

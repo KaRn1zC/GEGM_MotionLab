@@ -18,6 +18,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/usr/local/cuda/bin:$PATH \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
+# torch 2.11 : torch.jit.script (TorchScript) segfault à l'import de kornia
+# (kornia/geometry/epipolar/essential.py:90). On désactive le JIT TorchScript :
+# non requis par le pipeline LTX/WAN, exécution eager équivalente, sans impact sur torch.compile.
+ENV PYTORCH_JIT=0
+
 # Installer Python 3.11 et dépendances système
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
@@ -53,9 +58,13 @@ RUN mkdir -p /workspace /runpod-volume
 # Définir le workspace comme répertoire de travail
 WORKDIR /workspace
 
-# Installer PyTorch AVANT les autres dépendances
-RUN pip install --upgrade --pre torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/nightly/cu128
+# Installer PyTorch AVANT les autres dépendances.
+# STABLE cu128 (supporte Blackwell sm_120). Le nightly cu128 provoquait un segfault
+# à l'import de kornia (incompatibilité ABI du nightly bleeding-edge). Le channel
+# stable expose une ABI standard attendue par kornia & co.
+# TODO: pinner la version exacte une fois validée sur le GPU cible (builds reproductibles).
+RUN pip install --upgrade torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu128
 
 # Copier et installer les dépendances (sans PyTorch, déjà installé ci-dessus)
 COPY requirements.txt .
@@ -69,8 +78,9 @@ RUN pip cache purge && \
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + || true
 
-# Copier le code de l'application (SANS les modèles)
-COPY --exclude=models . /workspace/
+# Copier le code de l'application (les exclusions sont gérées par .dockerignore :
+# models/, comfyui/, .venv/, etc. — compatible Kaniko, contrairement à COPY --exclude)
+COPY . /workspace/
 
 # ============================================
 # Installation de ComfyUI (sans modèles)
